@@ -4,81 +4,19 @@ import 'package:go_router/go_router.dart';
 
 import '../../../theme/app_theme.dart';
 import '../../../routes/app_routes.dart';
+import '../../../services/memories_repository.dart';
 import '../../../widgets/loading_skeleton_widget.dart';
 import '../../../widgets/status_badge_widget.dart';
 import '../../memories_screen/widgets/memories_grid_widget.dart' hide MemoryPrivacy;
 
-// ── Map-first mock data aligned with allMemories ids ─────────────────────────
-final List<Map<String, dynamic>> _recentMemoryMaps = [
-  {
-    'id': 'mem_001',
-    'memoryId': 'm01',
-    'title': 'Sunrise hike at Mullayanagiri',
-    'date': '2026-08-26',
-    'imageUrl': 'https://images.unsplash.com/photo-1598464703239-a0b246133231',
-    'semanticLabel':
-        'Golden sunrise light breaking over misty mountain peaks, hikers silhouetted in foreground',
-    'circle': 'Adventure Crew',
-    'circleColor': 0xFF39FF8C,
-    'privacy': 'circle',
-    'reactionCount': 12,
-    'commentCount': 4,
-  },
-  {
-    'id': 'mem_002',
-    'memoryId': 'm02',
-    'title': 'Grandma\'s 80th birthday',
-    'date': '2026-08-22',
-    'imageUrl':
-        'https://images.pexels.com/photos/1729931/pexels-photo-1729931.jpeg?w=600',
-    'semanticLabel':
-        'Elderly woman blowing out candles on a decorated birthday cake surrounded by family',
-    'circle': 'Family',
-    'circleColor': 0xFFFF8C39,
-    'privacy': 'circle',
-    'reactionCount': 28,
-    'commentCount': 11,
-  },
-  {
-    'id': 'mem_003',
-    'memoryId': 'm03',
-    'title': 'Late night chai at Irani Café',
-    'date': '2026-08-20',
-    'imageUrl':
-        'https://img.rocket.new/generatedImages/rocket_gen_img_1fc8f9897-1784582440087.png',
-    'semanticLabel':
-        'Two ceramic cups of chai on a wooden café table with warm ambient lighting',
-    'circle': 'College Friends',
-    'circleColor': 0xFF00E5FF,
-    'privacy': 'public',
-    'reactionCount': 7,
-    'commentCount': 2,
-  },
-  {
-    'id': 'mem_004',
-    'memoryId': 'm04',
-    'title': 'Monsoon drive to Coorg',
-    'date': '2026-08-15',
-    'imageUrl': 'https://images.unsplash.com/photo-1527703345282-8d097cb9a05f',
-    'semanticLabel':
-        'Winding road through dense green coffee plantations in heavy monsoon rain',
-    'circle': 'Best Friends',
-    'circleColor': 0xFFB839FF,
-    'privacy': 'circle',
-    'reactionCount': 19,
-    'commentCount': 6,
-  },
-];
-
 class _MemoryCard {
-  final String id, memoryId, title, date, imageUrl, semanticLabel, circle;
+  final String id, title, date, imageUrl, semanticLabel, circle;
   final Color circleColor;
   final MemoryPrivacy privacy;
   final int reactionCount, commentCount;
 
   const _MemoryCard({
     required this.id,
-    required this.memoryId,
     required this.title,
     required this.date,
     required this.imageUrl,
@@ -90,30 +28,29 @@ class _MemoryCard {
     required this.commentCount,
   });
 
-  static MemoryPrivacy _privacyFromString(String v) {
-    switch (v) {
-      case 'public':
-        return MemoryPrivacy.public;
-      case 'circle':
-        return MemoryPrivacy.circle;
-      default:
-        return MemoryPrivacy.private;
-    }
-  }
+  static const _palette = [
+    Color(0xFF39FF8C),
+    Color(0xFFFF8C39),
+    Color(0xFF00E5FF),
+    Color(0xFFB839FF),
+  ];
 
-  factory _MemoryCard.fromMap(Map<String, dynamic> map) {
+  factory _MemoryCard.fromMemory(Memory m, int index) {
     return _MemoryCard(
-      id: map['id'] as String,
-      memoryId: map['memoryId'] as String,
-      title: map['title'] as String,
-      date: map['date'] as String,
-      imageUrl: map['imageUrl'] as String,
-      semanticLabel: map['semanticLabel'] as String,
-      circle: map['circle'] as String,
-      circleColor: Color(map['circleColor'] as int),
-      privacy: _privacyFromString(map['privacy'] as String),
-      reactionCount: map['reactionCount'] as int,
-      commentCount: map['commentCount'] as int,
+      id: m.id,
+      title: m.caption?.isNotEmpty == true ? m.caption! : 'A shared memory',
+      date: m.createdAt.toIso8601String(),
+      imageUrl: m.imageUrl,
+      semanticLabel: 'Shared memory photo',
+      circle: m.circleName ?? 'Circle',
+      circleColor: _palette[index % _palette.length],
+      // All memories are circle-scoped for now — there's no "public"
+      // sharing concept in the schema yet.
+      privacy: MemoryPrivacy.circle,
+      // Reactions/comments aren't tracked yet — showing 0 rather than
+      // a fake number.
+      reactionCount: 0,
+      commentCount: 0,
     );
   }
 }
@@ -129,17 +66,35 @@ class HomeRecentMemoriesWidget extends StatefulWidget {
 
 class _HomeRecentMemoriesWidgetState extends State<HomeRecentMemoriesWidget>
     with SingleTickerProviderStateMixin {
-  late List<_MemoryCard> _memories;
+  List<_MemoryCard> _memories = [];
+  bool _isLoading = true;
   late AnimationController _entranceController;
 
   @override
   void initState() {
     super.initState();
-    _memories = _recentMemoryMaps.map(_MemoryCard.fromMap).toList();
     _entranceController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 600),
     )..forward();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final memories = await MemoriesRepository.fetchAllForUser();
+      if (!mounted) return;
+      setState(() {
+        _memories = [
+          for (var i = 0; i < memories.length && i < 8; i++)
+            _MemoryCard.fromMemory(memories[i], i),
+        ];
+        _isLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -188,16 +143,43 @@ class _HomeRecentMemoriesWidgetState extends State<HomeRecentMemoriesWidget>
           ),
         ),
         const SizedBox(height: 14),
-        SizedBox(
-          height: 240,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            physics: const BouncingScrollPhysics(),
+        if (_isLoading)
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+            child: SizedBox(
+              height: 18,
+              width: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppTheme.primaryGreen,
+              ),
+            ),
+          )
+        else if (_memories.isEmpty)
+          Padding(
             padding: EdgeInsets.symmetric(
               horizontal: widget.isTablet ? 32 : 20,
             ),
-            itemCount: _memories.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 14),
+            child: const Text(
+              'No memories yet.',
+              style: TextStyle(
+                fontFamily: 'Manrope',
+                fontSize: 13,
+                color: AppTheme.textMuted,
+              ),
+            ),
+          )
+        else
+          SizedBox(
+            height: 240,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              padding: EdgeInsets.symmetric(
+                horizontal: widget.isTablet ? 32 : 20,
+              ),
+              itemCount: _memories.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 14),
             itemBuilder: (context, index) {
               final delay = index * 80;
               final anim = CurvedAnimation(
@@ -246,9 +228,16 @@ class _MemoryCardWidgetState extends State<_MemoryCardWidget> {
       onTapUp: (_) => setState(() => _pressed = false),
       onTapCancel: () => setState(() => _pressed = false),
       onTap: () {
-        final memory = allMemories.firstWhere(
-          (item) => item.id == m.memoryId,
-          orElse: () => allMemories[0],
+        final memory = MemoryItem(
+          id: m.id,
+          title: m.title,
+          date: _formatFullDate(m.date),
+          imageUrl: m.imageUrl,
+          semanticLabel: m.semanticLabel,
+          circle: m.circle,
+          circleColor: m.circleColor,
+          privacy: m.privacy,
+          type: MemoryType.photo,
         );
         context.push(AppRoutes.memoryDetailScreen, extra: memory);
       },
@@ -393,5 +382,15 @@ class _MemoryCardWidgetState extends State<_MemoryCardWidget> {
       'Dec',
     ];
     return '${months[dt.month - 1]} ${dt.day}';
+  }
+
+  String _formatFullDate(String iso) {
+    final dt = DateTime.tryParse(iso);
+    if (dt == null) return iso;
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    return '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
   }
 }

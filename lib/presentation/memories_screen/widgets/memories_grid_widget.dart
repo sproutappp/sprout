@@ -34,8 +34,11 @@ class MemoryItem {
   });
 }
 
+// ── Legacy mock data ─────────────────────────────────────────────────────
+// Still used by home_recent_memories_widget, home_discover_teaser_widget,
+// and notifications_screen — those aren't wired to real Supabase data yet.
+// The real feed (MemoriesScreen) no longer uses this.
 final List<MemoryItem> allMemories = [
-  // August 2026
   MemoryItem(
     id: 'm01',
     title: 'Sunrise at Mullayanagiri',
@@ -58,141 +61,21 @@ final List<MemoryItem> allMemories = [
     semanticLabel:
         'Elderly woman smiling warmly surrounded by family at birthday celebration',
     circle: 'Family',
-    circleColor: const Color(0xFFFF8C39),
+    circleColor: const Color(0xFFFFB84D),
     privacy: MemoryPrivacy.circle,
     type: MemoryType.photo,
   ),
   MemoryItem(
     id: 'm03',
-    title: 'Late night chai',
-    date: 'Aug 20, 2026',
-    imageUrl:
-        'https://images.pexels.com/photos/1638280/pexels-photo-1638280.jpeg?w=600',
-    semanticLabel:
-        'Two ceramic cups of chai on a wooden café table with warm amber lighting',
-    circle: 'College Friends',
-    circleColor: AppTheme.cyanAccent,
-    privacy: MemoryPrivacy.public,
-    type: MemoryType.story,
-  ),
-  MemoryItem(
-    id: 'm04',
-    title: 'Monsoon drive to Coorg',
-    date: 'Aug 15, 2026',
-    imageUrl:
-        'https://images.pexels.com/photos/1287145/pexels-photo-1287145.jpeg?w=600',
-    semanticLabel:
-        'Winding road through lush green coffee plantations in heavy monsoon rain',
-    circle: 'Best Friends',
-    circleColor: const Color(0xFFB839FF),
-    privacy: MemoryPrivacy.circle,
-    type: MemoryType.video,
-  ),
-  MemoryItem(
-    id: 'm05',
-    title: 'Rooftop dinner',
+    title: 'Late night café talks',
     date: 'Aug 10, 2026',
     imageUrl:
-        'https://images.pexels.com/photos/696218/pexels-photo-696218.jpeg?w=600',
-    semanticLabel:
-        'Candlelit rooftop dinner table with city lights glowing in the background',
-    circle: 'Best Friends',
-    circleColor: const Color(0xFFB839FF),
-    privacy: MemoryPrivacy.private,
-    type: MemoryType.photo,
-  ),
-  MemoryItem(
-    id: 'm06',
-    title: 'Beach volleyball',
-    date: 'Aug 5, 2026',
-    imageUrl:
-        'https://images.pexels.com/photos/1263348/pexels-photo-1263348.jpeg?w=600',
-    semanticLabel:
-        'Group of young people playing beach volleyball at sunset with orange sky',
+        'https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?w=600',
+    semanticLabel: 'Friends gathered around a table at a dimly lit café',
     circle: 'College Friends',
     circleColor: AppTheme.cyanAccent,
-    privacy: MemoryPrivacy.public,
-    type: MemoryType.video,
-  ),
-  // July 2026
-  MemoryItem(
-    id: 'm07',
-    title: 'Hampi ruins at dusk',
-    date: 'Jul 28, 2026',
-    imageUrl:
-        'https://images.pexels.com/photos/3581368/pexels-photo-3581368.jpeg?w=600',
-    semanticLabel:
-        'Ancient stone ruins of Hampi bathed in warm golden dusk light',
-    circle: 'Adventure Crew',
-    circleColor: AppTheme.primaryGreen,
-    privacy: MemoryPrivacy.public,
-    type: MemoryType.photo,
-  ),
-  MemoryItem(
-    id: 'm08',
-    title: 'Dad\'s retirement party',
-    date: 'Jul 20, 2026',
-    imageUrl:
-        'https://images.pexels.com/photos/1543793/pexels-photo-1543793.jpeg?w=600',
-    semanticLabel:
-        'Man in formal attire smiling at a celebration party with balloons and family',
-    circle: 'Family',
-    circleColor: const Color(0xFFFF8C39),
     privacy: MemoryPrivacy.circle,
     type: MemoryType.photo,
-  ),
-  MemoryItem(
-    id: 'm09',
-    title: 'Midnight stargazing',
-    date: 'Jul 14, 2026',
-    imageUrl:
-        'https://images.pexels.com/photos/1252890/pexels-photo-1252890.jpeg?w=600',
-    semanticLabel:
-        'Milky Way galaxy visible over a dark field with a lone figure looking up',
-    circle: 'Best Friends',
-    circleColor: const Color(0xFFB839FF),
-    privacy: MemoryPrivacy.private,
-    type: MemoryType.story,
-  ),
-  MemoryItem(
-    id: 'm10',
-    title: 'Street food crawl',
-    date: 'Jul 8, 2026',
-    imageUrl:
-        'https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?w=600',
-    semanticLabel:
-        'Colorful array of street food dishes on a busy night market stall',
-    circle: 'College Friends',
-    circleColor: AppTheme.cyanAccent,
-    privacy: MemoryPrivacy.public,
-    type: MemoryType.photo,
-  ),
-  // June 2026
-  MemoryItem(
-    id: 'm11',
-    title: 'Graduation day',
-    date: 'Jun 25, 2026',
-    imageUrl:
-        'https://images.pexels.com/photos/267885/pexels-photo-267885.jpeg?w=600',
-    semanticLabel:
-        'Young graduate in cap and gown holding diploma with proud smile',
-    circle: 'College Friends',
-    circleColor: AppTheme.cyanAccent,
-    privacy: MemoryPrivacy.public,
-    type: MemoryType.photo,
-  ),
-  MemoryItem(
-    id: 'm12',
-    title: 'First solo trip',
-    date: 'Jun 12, 2026',
-    imageUrl:
-        'https://images.pexels.com/photos/1051073/pexels-photo-1051073.jpeg?w=600',
-    semanticLabel:
-        'Backpacker standing at mountain viewpoint overlooking vast valley landscape',
-    circle: 'Adventure Crew',
-    circleColor: AppTheme.primaryGreen,
-    privacy: MemoryPrivacy.public,
-    type: MemoryType.story,
   ),
 ];
 

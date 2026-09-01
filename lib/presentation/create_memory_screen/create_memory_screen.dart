@@ -1,33 +1,50 @@
+import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
 
+import '../../models/circle.dart';
+import '../../services/circles_repository.dart';
+import '../../services/memories_repository.dart';
 import '../../theme/app_theme.dart';
 
-// ── Mock Circles ──────────────────────────────────────────────────────────────
+// ── Circle option view-model (populated from the user's real circles) ──────
 
 class _CircleOption {
+  final String id;
   final String name;
   final Color color;
   final String emoji;
 
   const _CircleOption({
+    required this.id,
     required this.name,
     required this.color,
     required this.emoji,
   });
+
+  static const _palette = [
+    Color(0xFFFF8C39),
+    Color(0xFF00E5FF),
+    Color(0xFF39FF8C),
+    Color(0xFFB839FF),
+  ];
+  static const _emojis = ['🏡', '🎓', '🏕️', '✨', '🎉', '🌿'];
+
+  factory _CircleOption.fromCircle(Circle circle, int index) {
+    return _CircleOption(
+      id: circle.id,
+      name: circle.name,
+      color: _palette[index % _palette.length],
+      emoji: _emojis[index % _emojis.length],
+    );
+  }
 }
 
-const List<_CircleOption> _mockCircles = [
-  _CircleOption(name: 'Family', color: Color(0xFFFF8C39), emoji: '🏡'),
-  _CircleOption(name: 'College Friends', color: Color(0xFF00E5FF), emoji: '🎓'),
-  _CircleOption(name: 'Adventure Crew', color: Color(0xFF39FF8C), emoji: '🏕️'),
-  _CircleOption(name: 'Best Friends', color: Color(0xFFB839FF), emoji: '✨'),
-];
-
-// ── Mock People ───────────────────────────────────────────────────────────────
+// ── Mock People (tagging isn't persisted yet — visual only for now) ────────
 
 class _PersonOption {
   final String name;
@@ -71,7 +88,9 @@ enum _Privacy { circle, public, private }
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 class CreateMemoryScreen extends StatefulWidget {
-  const CreateMemoryScreen({super.key});
+  final String? initialCircleId;
+
+  const CreateMemoryScreen({super.key, this.initialCircleId});
 
   @override
   State<CreateMemoryScreen> createState() => _CreateMemoryScreenState();
@@ -80,8 +99,9 @@ class CreateMemoryScreen extends StatefulWidget {
 class _CreateMemoryScreenState extends State<CreateMemoryScreen>
     with SingleTickerProviderStateMixin {
   // Media
-  bool _hasMedia = false;
+  File? _pickedImage;
   bool _isSaving = false;
+  String? _errorMessage;
 
   // Form
   final TextEditingController _titleController = TextEditingController();
@@ -92,7 +112,9 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen>
   _Privacy _selectedPrivacy = _Privacy.circle;
 
   // Circle
-  String? _selectedCircle;
+  List<_CircleOption> _circleOptions = [];
+  bool _isLoadingCircles = true;
+  String? _selectedCircleId;
 
   // People
   final Set<String> _taggedPeople = {};
@@ -104,6 +126,8 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen>
   // Save button pulse
   late AnimationController _saveController;
   late Animation<double> _saveScale;
+
+  final ImagePicker _imagePicker = ImagePicker();
 
   @override
   void initState() {
@@ -119,6 +143,31 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen>
     _saveScale = Tween<double>(begin: 1.0, end: 0.96).animate(
       CurvedAnimation(parent: _saveController, curve: Curves.easeOutCubic),
     );
+    _selectedCircleId = widget.initialCircleId;
+    _loadCircles();
+  }
+
+  Future<void> _loadCircles() async {
+    setState(() => _isLoadingCircles = true);
+    try {
+      final circles = await CirclesRepository.fetchMyCircles();
+      if (!mounted) return;
+      setState(() {
+        _circleOptions = [
+          for (var i = 0; i < circles.length; i++)
+            _CircleOption.fromCircle(circles[i], i),
+        ];
+        // Keep the preselected circle if it's still valid; otherwise
+        // default to the first circle so the picker isn't empty.
+        if (_selectedCircleId == null && _circleOptions.isNotEmpty) {
+          _selectedCircleId = _circleOptions.first.id;
+        }
+        _isLoadingCircles = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isLoadingCircles = false);
+    }
   }
 
   @override
@@ -131,18 +180,60 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen>
     super.dispose();
   }
 
-  void _simulateMediaPick() {
-    setState(() => _hasMedia = true);
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final picked = await _imagePicker.pickImage(
+        source: source,
+        maxWidth: 2048,
+        imageQuality: 85,
+      );
+      if (picked == null) return;
+      setState(() => _pickedImage = File(picked.path));
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _errorMessage = "Couldn't access that — try again.");
+    }
   }
 
   void _handleSave() async {
+    setState(() => _errorMessage = null);
+
+    if (_pickedImage == null) {
+      setState(() => _errorMessage = 'Add a photo before saving.');
+      return;
+    }
+    if (_selectedPrivacy == _Privacy.circle && _selectedCircleId == null) {
+      setState(() => _errorMessage = 'Choose a circle to share this with.');
+      return;
+    }
+
     await _saveController.forward();
     await _saveController.reverse();
     setState(() => _isSaving = true);
-    await Future.delayed(const Duration(milliseconds: 1200));
-    if (mounted) {
+
+    try {
+      final title = _titleController.text.trim();
+      final captionText = _captionController.text.trim();
+      final caption = [
+        title,
+        captionText,
+      ].where((s) => s.isNotEmpty).join(' — ');
+
+      await MemoriesRepository.addMemory(
+        circleId: _selectedCircleId!,
+        file: _pickedImage!,
+        caption: caption.isEmpty ? null : caption,
+      );
+
+      if (!mounted) return;
       setState(() => _isSaving = false);
-      Navigator.of(context).pop();
+      Navigator.of(context).pop(true);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isSaving = false;
+        _errorMessage = "Couldn't save this memory — try again.";
+      });
     }
   }
 
@@ -179,10 +270,10 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen>
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: _MediaSection(
-                    hasMedia: _hasMedia,
-                    onPickCamera: _simulateMediaPick,
-                    onPickGallery: _simulateMediaPick,
-                    onRemove: () => setState(() => _hasMedia = false),
+                    pickedImage: _pickedImage,
+                    onPickCamera: () => _pickImage(ImageSource.camera),
+                    onPickGallery: () => _pickImage(ImageSource.gallery),
+                    onRemove: () => setState(() => _pickedImage = null),
                   ),
                 ),
               ),
@@ -258,7 +349,7 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen>
                     selected: _selectedPrivacy,
                     onChanged: (p) => setState(() {
                       _selectedPrivacy = p;
-                      if (p != _Privacy.circle) _selectedCircle = null;
+                      if (p != _Privacy.circle) _selectedCircleId = null;
                     }),
                   ),
                 ),
@@ -267,16 +358,45 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen>
               // ── Circle Selector (conditional) ──────────────────────────
               if (_selectedPrivacy == _Privacy.circle) ...[
                 const SliverToBoxAdapter(child: SizedBox(height: 16)),
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: _CircleSelector(
-                      circles: _mockCircles,
-                      selected: _selectedCircle,
-                      onChanged: (c) => setState(() => _selectedCircle = c),
+                if (_isLoadingCircles)
+                  const SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 20),
+                      child: SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppTheme.primaryGreen,
+                        ),
+                      ),
+                    ),
+                  )
+                else if (_circleOptions.isEmpty)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Text(
+                        "You don't have any circles yet — create one first.",
+                        style: GoogleFonts.manrope(
+                          fontSize: 13,
+                          color: AppTheme.textMuted,
+                        ),
+                      ),
+                    ),
+                  )
+                else
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: _CircleSelector(
+                        circles: _circleOptions,
+                        selected: _selectedCircleId,
+                        onChanged: (id) =>
+                            setState(() => _selectedCircleId = id),
+                      ),
                     ),
                   ),
-                ),
               ],
 
               const SliverToBoxAdapter(child: SizedBox(height: 28)),
@@ -312,11 +432,31 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen>
             bottom: 0,
             left: 0,
             right: 0,
-            child: _SaveMemoryBar(
-              isSaving: _isSaving,
-              scaleAnimation: _saveScale,
-              onSave: _handleSave,
-              bottomPadding: bottomPadding,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_errorMessage != null)
+                  Container(
+                    width: double.infinity,
+                    color: AppTheme.backgroundDark,
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                    child: Text(
+                      _errorMessage!,
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.manrope(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.error,
+                      ),
+                    ),
+                  ),
+                _SaveMemoryBar(
+                  isSaving: _isSaving,
+                  scaleAnimation: _saveScale,
+                  onSave: _handleSave,
+                  bottomPadding: bottomPadding,
+                ),
+              ],
             ),
           ),
         ],
@@ -398,13 +538,13 @@ class _TopBar extends StatelessWidget {
 // ── Media Section ─────────────────────────────────────────────────────────────
 
 class _MediaSection extends StatelessWidget {
-  final bool hasMedia;
+  final File? pickedImage;
   final VoidCallback onPickCamera;
   final VoidCallback onPickGallery;
   final VoidCallback onRemove;
 
   const _MediaSection({
-    required this.hasMedia,
+    required this.pickedImage,
     required this.onPickCamera,
     required this.onPickGallery,
     required this.onRemove,
@@ -412,8 +552,8 @@ class _MediaSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (hasMedia) {
-      return _MediaPreview(onRemove: onRemove);
+    if (pickedImage != null) {
+      return _MediaPreview(image: pickedImage!, onRemove: onRemove);
     }
     return _MediaUploadArea(
       onPickCamera: onPickCamera,
@@ -545,9 +685,10 @@ class _MediaPickButton extends StatelessWidget {
 }
 
 class _MediaPreview extends StatelessWidget {
+  final File image;
   final VoidCallback onRemove;
 
-  const _MediaPreview({required this.onRemove});
+  const _MediaPreview({required this.image, required this.onRemove});
 
   @override
   Widget build(BuildContext context) {
@@ -555,13 +696,11 @@ class _MediaPreview extends StatelessWidget {
       children: [
         ClipRRect(
           borderRadius: BorderRadius.circular(20.0),
-          child: Image.network(
-            'https://images.pexels.com/photos/1261728/pexels-photo-1261728.jpeg?w=800',
+          child: Image.file(
+            image,
             height: 260,
             width: double.infinity,
             fit: BoxFit.cover,
-            semanticLabel:
-                'Golden sunrise breaking over misty mountain peaks with silhouetted trees',
           ),
         ),
         // Gradient overlay
@@ -944,9 +1083,9 @@ class _CircleSelector extends StatelessWidget {
           spacing: 10,
           runSpacing: 10,
           children: circles.map((circle) {
-            final isSelected = selected == circle.name;
+            final isSelected = selected == circle.id;
             return GestureDetector(
-              onTap: () => onChanged(circle.name),
+              onTap: () => onChanged(circle.id),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 curve: Curves.easeOutCubic,

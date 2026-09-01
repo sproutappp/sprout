@@ -107,26 +107,29 @@ final GoRouter appRouter = GoRouter(
     // ── Create Memory (outside shell — full screen modal feel) ────────────
     GoRoute(
       path: AppRoutes.createMemoryScreen,
-      pageBuilder: (context, state) => CustomTransitionPage(
-        key: state.pageKey,
-        child: const CreateMemoryScreen(),
-        transitionDuration: const Duration(milliseconds: 320),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          return SlideTransition(
-            position:
-                Tween<Offset>(
-                  begin: const Offset(0, 1.0),
-                  end: Offset.zero,
-                ).animate(
-                  CurvedAnimation(
-                    parent: animation,
-                    curve: Curves.easeOutCubic,
+      pageBuilder: (context, state) {
+        final circleId = state.extra as String?;
+        return CustomTransitionPage(
+          key: state.pageKey,
+          child: CreateMemoryScreen(initialCircleId: circleId),
+          transitionDuration: const Duration(milliseconds: 320),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            return SlideTransition(
+              position:
+                  Tween<Offset>(
+                    begin: const Offset(0, 1.0),
+                    end: Offset.zero,
+                  ).animate(
+                    CurvedAnimation(
+                      parent: animation,
+                      curve: Curves.easeOutCubic,
+                    ),
                   ),
-                ),
-            child: child,
-          );
-        },
-      ),
+              child: child,
+            );
+          },
+        );
+      },
     ),
 
     // ── Memory Detail (outside shell — full screen immersive) ─────────────

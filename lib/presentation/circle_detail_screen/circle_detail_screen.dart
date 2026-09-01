@@ -5,9 +5,11 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../theme/app_theme.dart';
 import '../../routes/app_routes.dart';
+import '../../services/circles_repository.dart';
+import '../../services/memories_repository.dart';
 import '../memories_screen/widgets/memories_grid_widget.dart';
 
-// ── Sample Data ───────────────────────────────────────────────────────────────
+// ── View-model shapes (populated from real Supabase data) ──────────────────
 
 class CircleDetailData {
   final String id;
@@ -69,131 +71,6 @@ class _CircleMemory {
   });
 }
 
-final CircleDetailData _familyCircle = CircleDetailData(
-  id: 'c01',
-  name: 'Family',
-  subtitle: 'The people who feel like home.',
-  memberCount: 8,
-  memoryCount: 42,
-  coverUrl:
-      'https://images.pexels.com/photos/1128318/pexels-photo-1128318.jpeg?w=800',
-  coverSemanticLabel:
-      'Happy family group sitting together outdoors in warm golden sunlight',
-  accentColor: const Color(0xFFFFB84D),
-  members: const [
-    _MemberData(
-      name: 'Mom',
-      avatarUrl:
-          'https://images.pexels.com/photos/1181686/pexels-photo-1181686.jpeg?w=200',
-      semanticLabel: 'Middle-aged woman smiling warmly with short dark hair',
-    ),
-    _MemberData(
-      name: 'Dad',
-      avatarUrl:
-          'https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg?w=200',
-      semanticLabel: 'Mature man with grey temples smiling in casual attire',
-    ),
-    _MemberData(
-      name: 'Grandma',
-      avatarUrl:
-          'https://images.pexels.com/photos/1729931/pexels-photo-1729931.jpeg?w=200',
-      semanticLabel: 'Elderly woman with white hair smiling at birthday party',
-    ),
-    _MemberData(
-      name: 'Priya',
-      avatarUrl:
-          'https://images.pexels.com/photos/415829/pexels-photo-415829.jpeg?w=200',
-      semanticLabel: 'Young woman with long dark hair smiling outdoors',
-    ),
-    _MemberData(
-      name: 'Arjun',
-      avatarUrl:
-          'https://images.pexels.com/photos/1222271/pexels-photo-1222271.jpeg?w=200',
-      semanticLabel: 'Young man in casual shirt smiling confidently',
-    ),
-    _MemberData(
-      name: 'Nani',
-      avatarUrl:
-          'https://images.pexels.com/photos/1181424/pexels-photo-1181424.jpeg?w=200',
-      semanticLabel: 'Older woman with glasses smiling gently indoors',
-    ),
-    _MemberData(
-      name: 'Rohan',
-      avatarUrl:
-          'https://images.pexels.com/photos/614810/pexels-photo-614810.jpeg?w=200',
-      semanticLabel: 'Young man with short hair and friendly smile',
-    ),
-    _MemberData(
-      name: 'Meera',
-      avatarUrl:
-          'https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?w=200',
-      semanticLabel: 'Young woman with curly hair smiling in natural light',
-    ),
-  ],
-  recentMemories: const [
-    _CircleMemory(
-      id: 'fm01',
-      title: "Grandma's 80th Birthday",
-      date: 'Aug 22, 2026',
-      contributor: 'Priya',
-      thumbnailUrl:
-          'https://images.pexels.com/photos/1729931/pexels-photo-1729931.jpeg?w=300',
-      semanticLabel:
-          'Elderly woman smiling surrounded by family at birthday celebration',
-      reactions: 14,
-      comments: 7,
-    ),
-    _CircleMemory(
-      id: 'fm02',
-      title: 'Sunday Lunch at Home',
-      date: 'Aug 10, 2026',
-      contributor: 'Mom',
-      thumbnailUrl:
-          'https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?w=300',
-      semanticLabel:
-          'Colorful home-cooked meal spread on a wooden dining table',
-      reactions: 9,
-      comments: 3,
-    ),
-    _CircleMemory(
-      id: 'fm03',
-      title: 'Monsoon Evening on the Terrace',
-      date: 'Jul 28, 2026',
-      contributor: 'Arjun',
-      thumbnailUrl:
-          'https://images.pexels.com/photos/1118873/pexels-photo-1118873.jpeg?w=300',
-      semanticLabel:
-          'Rainy evening view from a rooftop terrace with city lights below',
-      reactions: 11,
-      comments: 5,
-    ),
-    _CircleMemory(
-      id: 'fm04',
-      title: "Dad's Retirement Celebration",
-      date: 'Jul 15, 2026',
-      contributor: 'Rohan',
-      thumbnailUrl:
-          'https://images.pexels.com/photos/3171837/pexels-photo-3171837.jpeg?w=300',
-      semanticLabel:
-          'Family gathered around a man holding a retirement gift with big smiles',
-      reactions: 22,
-      comments: 12,
-    ),
-    _CircleMemory(
-      id: 'fm05',
-      title: 'Diwali Night Lights',
-      date: 'Jun 30, 2026',
-      contributor: 'Meera',
-      thumbnailUrl:
-          'https://images.pexels.com/photos/1405528/pexels-photo-1405528.jpeg?w=300',
-      semanticLabel:
-          'Rows of glowing diyas and colorful rangoli on a dark floor at night',
-      reactions: 18,
-      comments: 8,
-    ),
-  ],
-);
-
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 class CircleDetailScreen extends StatefulWidget {
@@ -206,39 +83,144 @@ class CircleDetailScreen extends StatefulWidget {
 }
 
 class _CircleDetailScreenState extends State<CircleDetailScreen> {
-  final CircleDetailData _circle = _familyCircle;
+  CircleDetailData? _circle;
+  bool _isLoading = true;
+  String? _error;
+
+  static const _palette = [
+    Color(0xFFFFB84D),
+    Color(0xFF39FF8C),
+    Color(0xFF00E5FF),
+    Color(0xFFFF7EB3),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final circleId = widget.circleId;
+    if (circleId == null) {
+      setState(() {
+        _error = 'No circle selected.';
+        _isLoading = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      final detail = await CirclesRepository.fetchCircleDetail(circleId);
+      final memories = await MemoriesRepository.fetchForCircle(circleId);
+
+      final accent = _palette[circleId.hashCode.abs() % _palette.length];
+
+      if (!mounted) return;
+      setState(() {
+        _circle = CircleDetailData(
+          id: detail.circle.id,
+          name: detail.circle.name,
+          subtitle: detail.circle.description?.isNotEmpty == true
+              ? detail.circle.description!
+              : 'A private space for your circle.',
+          memberCount: detail.members.length,
+          memoryCount: memories.length,
+          coverUrl: detail.circle.coverImageUrl ??
+              'https://images.pexels.com/photos/1128318/pexels-photo-1128318.jpeg?w=800',
+          coverSemanticLabel: '${detail.circle.name} circle cover photo',
+          accentColor: accent,
+          members: [
+            for (final m in detail.members)
+              _MemberData(
+                name: m.displayName,
+                avatarUrl: m.avatarUrl ??
+                    'https://images.pexels.com/photos/3763188/pexels-photo-3763188.jpeg?w=200',
+                semanticLabel: '${m.displayName} profile photo',
+              ),
+          ],
+          recentMemories: [
+            for (final mem in memories)
+              _CircleMemory(
+                id: mem.id,
+                title: mem.caption?.isNotEmpty == true
+                    ? mem.caption!
+                    : 'A shared memory',
+                date: _formatDate(mem.createdAt),
+                contributor: mem.contributor?.displayName ?? 'Someone',
+                thumbnailUrl: mem.imageUrl,
+                semanticLabel: 'Shared memory photo',
+                reactions: 0,
+                comments: 0,
+              ),
+          ],
+        );
+        _isLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _error = "Couldn't load this circle. Pull to refresh to try again.";
+        _isLoading = false;
+      });
+    }
+  }
+
+  static String _formatDate(DateTime date) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    return '${months[date.month - 1]} ${date.day}, ${date.year}';
+  }
 
   void _openInviteSheet() {
+    final circle = _circle;
+    if (circle == null) return;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _InviteSheet(circleName: _circle.name),
+      builder: (_) => _InviteSheet(circleName: circle.name),
     );
   }
 
   void _openSettingsMenu() {
+    final circle = _circle;
+    if (circle == null) return;
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (_) => _CircleSettingsSheet(circleName: _circle.name),
+      builder: (_) => _CircleSettingsSheet(circleName: circle.name),
     );
   }
 
-  void _openCaptureMemory() {
-    context.push(AppRoutes.createMemoryScreen);
+  Future<void> _openCaptureMemory() async {
+    final circle = _circle;
+    if (circle == null) return;
+    final saved = await context.push<bool>(
+      AppRoutes.createMemoryScreen,
+      extra: circle.id,
+    );
+    if (saved == true) _load();
   }
 
   void _openMemoryDetail(_CircleMemory memory) {
-    // Map to MemoryItem for the existing detail screen
+    final circle = _circle;
+    if (circle == null) return;
     final item = MemoryItem(
       id: memory.id,
       title: memory.title,
       date: memory.date,
       imageUrl: memory.thumbnailUrl,
       semanticLabel: memory.semanticLabel,
-      circle: _circle.name,
-      circleColor: _circle.accentColor,
+      circle: circle.name,
+      circleColor: circle.accentColor,
       privacy: MemoryPrivacy.circle,
       type: MemoryType.photo,
     );
@@ -248,6 +230,46 @@ class _CircleDetailScreenState extends State<CircleDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final topPadding = MediaQuery.of(context).padding.top;
+
+    if (_isLoading) {
+      return Scaffold(
+        backgroundColor: AppTheme.backgroundDark,
+        body: const Center(
+          child: CircularProgressIndicator(
+            color: AppTheme.primaryGreen,
+            strokeWidth: 2,
+          ),
+        ),
+      );
+    }
+
+    if (_error != null || _circle == null) {
+      return Scaffold(
+        backgroundColor: AppTheme.backgroundDark,
+        appBar: AppBar(
+          backgroundColor: AppTheme.backgroundDark,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+            onPressed: () => context.pop(),
+          ),
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Text(
+              _error ?? 'Circle not found.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.manrope(
+                fontSize: 14,
+                color: AppTheme.textMuted,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final circle = _circle!;
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundDark,
@@ -261,7 +283,7 @@ class _CircleDetailScreenState extends State<CircleDetailScreen> {
               // ── Cover + Header ──────────────────────────────────────────
               SliverToBoxAdapter(
                 child: _CoverHeader(
-                  circle: _circle,
+                  circle: circle,
                   topPadding: topPadding,
                   onBack: () => context.pop(),
                   onInvite: _openInviteSheet,
@@ -273,7 +295,7 @@ class _CircleDetailScreenState extends State<CircleDetailScreen> {
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-                  child: _StatsRow(circle: _circle),
+                  child: _StatsRow(circle: circle),
                 ),
               ),
 
@@ -287,22 +309,39 @@ class _CircleDetailScreenState extends State<CircleDetailScreen> {
                 ),
               ),
               const SliverToBoxAdapter(child: SizedBox(height: 12)),
-              SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate((context, index) {
-                    final m = _circle.recentMemories[index];
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: _MemoryRow(
-                        memory: m,
-                        accentColor: _circle.accentColor,
-                        onTap: () => _openMemoryDetail(m),
+              if (circle.recentMemories.isEmpty)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 24,
+                    ),
+                    child: Text(
+                      'No memories yet — tap + to add the first one.',
+                      style: GoogleFonts.manrope(
+                        fontSize: 13,
+                        color: AppTheme.textMuted,
                       ),
-                    );
-                  }, childCount: _circle.recentMemories.length),
+                    ),
+                  ),
+                )
+              else
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate((context, index) {
+                      final m = circle.recentMemories[index];
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: _MemoryRow(
+                          memory: m,
+                          accentColor: circle.accentColor,
+                          onTap: () => _openMemoryDetail(m),
+                        ),
+                      );
+                    }, childCount: circle.recentMemories.length),
+                  ),
                 ),
-              ),
 
               const SliverToBoxAdapter(child: SizedBox(height: 28)),
 
@@ -327,7 +366,7 @@ class _CircleDetailScreenState extends State<CircleDetailScreen> {
                 ),
               ),
               const SliverToBoxAdapter(child: SizedBox(height: 14)),
-              SliverToBoxAdapter(child: _PeopleRow(members: _circle.members)),
+              SliverToBoxAdapter(child: _PeopleRow(members: circle.members)),
 
               const SliverToBoxAdapter(child: SizedBox(height: 28)),
 

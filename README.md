@@ -8,6 +8,26 @@ A modern Flutter-based mobile application utilizing the latest mobile developmen
 - Dart SDK
 - Android Studio / VS Code with Flutter extensions
 - Android SDK / Xcode (for iOS development)
+- A free [Supabase](https://supabase.com) project
+
+## 🗄️ Backend setup (Supabase)
+
+1. Create a project at [supabase.com](https://supabase.com).
+2. In the Supabase Dashboard, open **SQL Editor** and run the contents of
+   `supabase/schema.sql` — this creates the `profiles`, `circles`,
+   `circle_members`, `memories` tables, all RLS policies, and the
+   `memories` storage bucket.
+3. In **Project Settings > API**, copy your Project URL and `anon` public key.
+4. Fill them into `env.json` at the repo root:
+   ```json
+   {
+       "SUPABASE_URL": "https://your-project.supabase.co",
+       "SUPABASE_ANON_KEY": "your-anon-key"
+   }
+   ```
+   `env.json` is git-ignored — never commit real keys.
+5. (Optional, for Google sign-in) In **Authentication > Providers**, enable
+   Google and configure the redirect URL.
 
 ## 🛠️ Installation
 
@@ -16,9 +36,11 @@ A modern Flutter-based mobile application utilizing the latest mobile developmen
 flutter pub get
 ```
 
-2. Run the application:
+2. Run the application (note the `--dart-define-from-file` flag — this is
+   how `env.json` gets loaded; the app throws a clear error on startup if
+   it's missing):
 ```bash
-flutter run
+flutter run --dart-define-from-file=env.json
 ```
 
 ## 📁 Project Structure
@@ -98,10 +120,10 @@ Build the application for production:
 
 ```bash
 # For Android
-flutter build apk --release
+flutter build apk --release --dart-define-from-file=env.json
 
 # For iOS
-flutter build ios --release
+flutter build ios --release --dart-define-from-file=env.json
 ```
 
 ## 🙏 Acknowledgments

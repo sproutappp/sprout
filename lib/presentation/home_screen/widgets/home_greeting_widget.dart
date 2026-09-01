@@ -1,9 +1,39 @@
 import 'package:flutter/material.dart';
 
 import '../../../theme/app_theme.dart';
+import '../../../services/profiles_repository.dart';
 
-class HomeGreetingWidget extends StatelessWidget {
+class HomeGreetingWidget extends StatefulWidget {
   const HomeGreetingWidget({super.key});
+
+  @override
+  State<HomeGreetingWidget> createState() => _HomeGreetingWidgetState();
+}
+
+class _HomeGreetingWidgetState extends State<HomeGreetingWidget> {
+  String? _name;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadName();
+  }
+
+  Future<void> _loadName() async {
+    try {
+      final profile = await ProfilesRepository.fetchCurrentUser();
+      if (!mounted) return;
+      setState(() {
+        final full = profile?.fullName;
+        _name = (full != null && full.trim().isNotEmpty)
+            ? full.trim().split(' ').first
+            : null;
+      });
+    } catch (_) {
+      // Greeting degrades gracefully to no name — not worth surfacing
+      // an error for a cosmetic header.
+    }
+  }
 
   String _getGreeting() {
     final hour = DateTime.now().hour;
@@ -14,13 +44,14 @@ class HomeGreetingWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final greetingName = _name != null ? ', $_name' : '';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
             Text(
-              '${_getGreeting()}, Maya ✦',
+              '${_getGreeting()}$greetingName ✦',
               style: const TextStyle(
                 fontFamily: 'Manrope',
                 fontSize: 26,
@@ -28,29 +59,6 @@ class HomeGreetingWidget extends StatelessWidget {
                 color: AppTheme.textPrimary,
                 letterSpacing: -0.5,
                 height: 1.2,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        Row(
-          children: [
-            Container(
-              width: 6,
-              height: 6,
-              decoration: const BoxDecoration(
-                color: AppTheme.primaryGreen,
-                shape: BoxShape.circle,
-              ),
-            ),
-            const SizedBox(width: 8),
-            const Text(
-              '3 new memories in your circles',
-              style: TextStyle(
-                fontFamily: 'Manrope',
-                fontSize: 14,
-                color: AppTheme.textMuted,
-                fontWeight: FontWeight.w500,
               ),
             ),
           ],

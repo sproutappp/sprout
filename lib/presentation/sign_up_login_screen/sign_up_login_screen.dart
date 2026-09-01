@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../routes/app_routes.dart';
+import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
 import '../onboarding_screen/widgets/onboarding_background_widget.dart';
-import './widgets/auth_demo_credentials_widget.dart';
 import './widgets/auth_form_widget.dart';
 import './widgets/auth_header_widget.dart';
 
@@ -27,8 +28,8 @@ class _SignUpLoginScreenState extends State<SignUpLoginScreen>
   late Animation<Offset> _slideAnim;
   late Animation<double> _fadeAnim;
 
-  final _loginEmailController = TextEditingController(text: 'maya@sprout.app');
-  final _loginPasswordController = TextEditingController(text: 'Sprout2026!');
+  final _loginEmailController = TextEditingController();
+  final _loginPasswordController = TextEditingController();
   final _signupNameController = TextEditingController();
   final _signupEmailController = TextEditingController();
   final _signupPasswordController = TextEditingController();
@@ -86,42 +87,54 @@ class _SignUpLoginScreenState extends State<SignUpLoginScreen>
       _errorMessage = null;
     });
 
-    // TODO: Replace with real auth API call
-    await Future.delayed(const Duration(milliseconds: 1200));
+    try {
+      if (_isLogin) {
+        await AuthService.signIn(
+          email: _loginEmailController.text.trim(),
+          password: _loginPasswordController.text,
+        );
+      } else {
+        if (_signupPasswordController.text != _signupConfirmController.text) {
+          throw const AuthException('Passwords do not match');
+        }
+        await AuthService.signUp(
+          email: _signupEmailController.text.trim(),
+          password: _signupPasswordController.text,
+          fullName: _signupNameController.text.trim(),
+        );
+      }
 
-    if (!mounted) return;
-
-    // Mock credential check
-    final email = _isLogin
-        ? _loginEmailController.text.trim()
-        : _signupEmailController.text.trim();
-    final password = _isLogin
-        ? _loginPasswordController.text
-        : _signupPasswordController.text;
-
-    if (_isLogin && (email != 'maya@sprout.app' || password != 'Sprout2026!')) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      context.go(AppRoutes.homeScreen);
+    } on AuthException catch (e) {
+      if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _errorMessage =
-            'Invalid credentials — use the demo account below to sign in';
+        _errorMessage = e.message;
       });
-      return;
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Something went wrong. Please try again.';
+      });
     }
-
-    setState(() => _isLoading = false);
-    context.go(AppRoutes.homeScreen);
   }
 
-  void _onGoogleSignIn() {
-    // TODO: Replace with real Google Sign-In
-    context.go(AppRoutes.homeScreen);
-  }
-
-  void _fillDemoCredentials(String email, String password) {
-    setState(() {
-      _loginEmailController.text = email;
-      _loginPasswordController.text = password;
-    });
+  Future<void> _onGoogleSignIn() async {
+    setState(() => _errorMessage = null);
+    try {
+      await AuthService.signInWithGoogle();
+      // Supabase OAuth completes via deep link redirect; the
+      // onAuthStateChange listener (wired at the router/app level)
+      // should handle navigation once the session lands. If this
+      // screen is still mounted after the redirect flow returns
+      // control here, fall through without forcing navigation.
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      setState(() => _errorMessage = e.message);
+    }
   }
 
   @override
@@ -216,12 +229,6 @@ class _SignUpLoginScreenState extends State<SignUpLoginScreen>
                           ),
                         ),
                       ),
-
-                      const SizedBox(height: 28),
-
-                      // Demo credentials (login mode only)
-                      if (_isLogin)
-                        AuthDemoCredentialsWidget(onUse: _fillDemoCredentials),
 
                       const SizedBox(height: 24),
 

@@ -5,8 +5,12 @@ import 'package:go_router/go_router.dart';
 
 import '../../theme/app_theme.dart';
 import '../../routes/app_routes.dart';
+import '../../models/circle.dart';
+import '../../services/circles_repository.dart';
 
-// ── Sample Circle Data ────────────────────────────────────────────────────────
+// ── Circle card view-model ──────────────────────────────────────────────────
+// Wraps the real `Circle` model with a few presentation-only touches
+// (accent color, fallback cover image) that don't belong in the data model.
 
 class _CircleData {
   final String id;
@@ -16,8 +20,6 @@ class _CircleData {
   final String imageUrl;
   final String imageSemanticLabel;
   final Color accentColor;
-  final bool hasNewMemories;
-  final int? newMemoryCount;
 
   const _CircleData({
     required this.id,
@@ -26,64 +28,48 @@ class _CircleData {
     required this.activityLabel,
     required this.imageUrl,
     required this.imageSemanticLabel,
+  }) : accentColor = AppTheme.primaryGreen;
+
+  factory _CircleData.fromCircle(Circle circle, int paletteIndex) {
+    const palette = [
+      Color(0xFFFFB84D),
+      Color(0xFF39FF8C),
+      Color(0xFF00E5FF),
+      Color(0xFFFF7EB3),
+    ];
+    return _CircleData(
+      id: circle.id,
+      name: circle.name,
+      memberCount: circle.memberCount,
+      activityLabel: circle.description?.isNotEmpty == true
+          ? circle.description!
+          : '${circle.memberCount} member${circle.memberCount == 1 ? '' : 's'}',
+      imageUrl: circle.coverImageUrl ??
+          'https://images.pexels.com/photos/1128318/pexels-photo-1128318.jpeg?w=400',
+      imageSemanticLabel: '${circle.name} circle cover photo',
+    )._withAccent(palette[paletteIndex % palette.length]);
+  }
+
+  _CircleData _withAccent(Color color) => _CircleData._(
+        id: id,
+        name: name,
+        memberCount: memberCount,
+        activityLabel: activityLabel,
+        imageUrl: imageUrl,
+        imageSemanticLabel: imageSemanticLabel,
+        accentColor: color,
+      );
+
+  const _CircleData._({
+    required this.id,
+    required this.name,
+    required this.memberCount,
+    required this.activityLabel,
+    required this.imageUrl,
+    required this.imageSemanticLabel,
     required this.accentColor,
-    this.hasNewMemories = false,
-    this.newMemoryCount,
   });
 }
-
-final List<_CircleData> _sampleCircles = [
-  _CircleData(
-    id: 'c01',
-    name: 'Family',
-    memberCount: 8,
-    activityLabel: '2 new memories',
-    imageUrl:
-        'https://images.pexels.com/photos/1128318/pexels-photo-1128318.jpeg?w=400',
-    imageSemanticLabel:
-        'Happy family group sitting together outdoors in warm sunlight',
-    accentColor: const Color(0xFFFFB84D),
-    hasNewMemories: true,
-    newMemoryCount: 2,
-  ),
-  _CircleData(
-    id: 'c02',
-    name: 'College Friends',
-    memberCount: 14,
-    activityLabel: '1 new memory',
-    imageUrl:
-        'https://images.pexels.com/photos/1438072/pexels-photo-1438072.jpeg?w=400',
-    imageSemanticLabel:
-        'Group of young college students laughing together on campus',
-    accentColor: const Color(0xFF39FF8C),
-    hasNewMemories: true,
-    newMemoryCount: 1,
-  ),
-  _CircleData(
-    id: 'c03',
-    name: 'Adventure Crew',
-    memberCount: 5,
-    activityLabel: 'Active today',
-    imageUrl:
-        'https://images.pexels.com/photos/1365425/pexels-photo-1365425.jpeg?w=400',
-    imageSemanticLabel:
-        'Group of hikers standing on a mountain peak at sunrise',
-    accentColor: const Color(0xFF00E5FF),
-    hasNewMemories: false,
-  ),
-  _CircleData(
-    id: 'c04',
-    name: 'Best Friends',
-    memberCount: 4,
-    activityLabel: '3 days ago',
-    imageUrl:
-        'https://images.pexels.com/photos/1024960/pexels-photo-1024960.jpeg?w=400',
-    imageSemanticLabel:
-        'Four close friends smiling and hugging in a casual outdoor setting',
-    accentColor: const Color(0xFFFF7EB3),
-    hasNewMemories: false,
-  ),
-];
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
@@ -95,13 +81,50 @@ class CirclesScreen extends StatefulWidget {
 }
 
 class _CirclesScreenState extends State<CirclesScreen> {
-  void _openCreateCircle() {
-    showModalBottomSheet(
+  List<_CircleData> _circles = [];
+  bool _isLoading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCircles();
+  }
+
+  Future<void> _loadCircles() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    try {
+      final circles = await CirclesRepository.fetchMyCircles();
+      if (!mounted) return;
+      setState(() {
+        _circles = [
+          for (var i = 0; i < circles.length; i++)
+            _CircleData.fromCircle(circles[i], i),
+        ];
+        _isLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _error = "Couldn't load your circles. Pull down to try again.";
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _openCreateCircle() async {
+    final created = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => const _CreateCircleSheet(),
     );
+    if (created == true) {
+      _loadCircles();
+    }
   }
 
   void _openCircleDetail(_CircleData circle) {
@@ -274,21 +297,72 @@ class _CirclesScreenState extends State<CirclesScreen> {
             const SliverToBoxAdapter(child: SizedBox(height: 20)),
 
             // ── Circle cards list ────────────────────────────────────────
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate((context, index) {
-                  final circle = _sampleCircles[index];
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 14),
-                    child: _CircleCard(
-                      circle: circle,
-                      onTap: () => _openCircleDetail(circle),
+            if (_isLoading)
+              const SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.only(top: 60),
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      color: AppTheme.primaryGreen,
+                      strokeWidth: 2,
                     ),
-                  );
-                }, childCount: _sampleCircles.length),
+                  ),
+                ),
+              )
+            else if (_error != null)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 60,
+                  ),
+                  child: Center(
+                    child: Text(
+                      _error!,
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.manrope(
+                        fontSize: 13,
+                        color: AppTheme.textMuted,
+                      ),
+                    ),
+                  ),
+                ),
+              )
+            else if (_circles.isEmpty)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 60,
+                  ),
+                  child: Center(
+                    child: Text(
+                      'No circles yet — create one to start sharing memories.',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.manrope(
+                        fontSize: 13,
+                        color: AppTheme.textMuted,
+                      ),
+                    ),
+                  ),
+                ),
+              )
+            else
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate((context, index) {
+                    final circle = _circles[index];
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 14),
+                      child: _CircleCard(
+                        circle: circle,
+                        onTap: () => _openCircleDetail(circle),
+                      ),
+                    );
+                  }, childCount: _circles.length),
+                ),
               ),
-            ),
 
             // ── Create Circle CTA ────────────────────────────────────────
             SliverToBoxAdapter(
@@ -443,30 +517,6 @@ class _CircleCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                  // New memory dot indicator
-                  if (circle.hasNewMemories)
-                    Positioned(
-                      top: 4,
-                      right: 4,
-                      child: Container(
-                        width: 12,
-                        height: 12,
-                        decoration: BoxDecoration(
-                          color: circle.accentColor,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: AppTheme.cardDark,
-                            width: 2,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: circle.accentColor.withAlpha(120),
-                              blurRadius: 6,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
                 ],
               ),
 
@@ -623,15 +673,23 @@ class _CreateCircleSheetState extends State<_CreateCircleSheet> {
   }
 
   void _create() async {
-    if (_nameController.text.trim().isEmpty) return;
+    final name = _nameController.text.trim();
+    if (name.isEmpty) return;
     setState(() => _isCreating = true);
-    await Future.delayed(const Duration(milliseconds: 800));
-    if (mounted) {
-      Navigator.pop(context);
+
+    try {
+      await CirclesRepository.createCircle(
+        name: name,
+        description: _descController.text.trim().isEmpty
+            ? null
+            : _descController.text.trim(),
+      );
+      if (!mounted) return;
+      Navigator.pop(context, true);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '"${_nameController.text.trim()}" circle created!',
+            '"$name" circle created!',
             style: GoogleFonts.manrope(
               fontSize: 13,
               fontWeight: FontWeight.w600,
@@ -645,6 +703,23 @@ class _CreateCircleSheetState extends State<_CreateCircleSheet> {
           ),
           margin: const EdgeInsets.all(16),
           duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isCreating = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            "Couldn't create circle — try again.",
+            style: GoogleFonts.manrope(fontSize: 13, color: Colors.white),
+          ),
+          backgroundColor: AppTheme.error,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          margin: const EdgeInsets.all(16),
         ),
       );
     }

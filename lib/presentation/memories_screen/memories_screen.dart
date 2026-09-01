@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../theme/app_theme.dart';
+import '../../services/memories_repository.dart';
 import './widgets/memories_app_bar_widget.dart';
 import './widgets/memories_grid_widget.dart';
 import './widgets/memories_search_filter_widget.dart';
@@ -20,6 +21,17 @@ class _MemoriesScreenState extends State<MemoriesScreen> {
   String _searchQuery = '';
   String _activeFilter = 'All';
 
+  List<MemoryItem> _allMemories = [];
+  bool _isLoading = true;
+  String? _error;
+
+  static const _palette = [
+    Color(0xFFFFB84D),
+    Color(0xFF39FF8C),
+    Color(0xFF00E5FF),
+    Color(0xFFFF7EB3),
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -27,6 +39,49 @@ class _MemoriesScreenState extends State<MemoriesScreen> {
     _scrollController.addListener(() {
       setState(() => _scrollOffset = _scrollController.offset);
     });
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    try {
+      final memories = await MemoriesRepository.fetchAllForUser();
+      if (!mounted) return;
+      setState(() {
+        _allMemories = [
+          for (final m in memories)
+            MemoryItem(
+              id: m.id,
+              title: m.caption?.isNotEmpty == true ? m.caption! : 'A memory',
+              date: _formatDate(m.createdAt),
+              imageUrl: m.imageUrl,
+              semanticLabel: 'Shared memory photo',
+              circle: m.circleName ?? 'Circle',
+              circleColor: _palette[m.circleId.hashCode.abs() % _palette.length],
+              privacy: MemoryPrivacy.circle,
+              type: MemoryType.photo,
+            ),
+        ];
+        _isLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _error = "Couldn't load memories. Pull down to try again.";
+        _isLoading = false;
+      });
+    }
+  }
+
+  static String _formatDate(DateTime date) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    return '${months[date.month - 1]} ${date.day}, ${date.year}';
   }
 
   @override
@@ -36,7 +91,7 @@ class _MemoriesScreenState extends State<MemoriesScreen> {
   }
 
   List<MemoryItem> get _filteredMemories {
-    return allMemories.where((m) {
+    return _allMemories.where((m) {
       // Filter by type
       final matchesFilter =
           _activeFilter == 'All' ||
@@ -103,12 +158,61 @@ class _MemoriesScreenState extends State<MemoriesScreen> {
               const SliverToBoxAdapter(child: SizedBox(height: 24)),
 
               // Memories grid with month groupings
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: isTablet ? 32 : 20),
-                  child: MemoriesGridWidget(memories: filtered),
+              if (_isLoading)
+                const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.only(top: 60),
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        color: AppTheme.primaryGreen,
+                        strokeWidth: 2,
+                      ),
+                    ),
+                  ),
+                )
+              else if (_error != null)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 60,
+                    ),
+                    child: Center(
+                      child: Text(
+                        _error!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: AppTheme.textMuted),
+                      ),
+                    ),
+                  ),
+                )
+              else if (filtered.isEmpty)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 60,
+                    ),
+                    child: Center(
+                      child: Text(
+                        _allMemories.isEmpty
+                            ? 'No memories yet — add your first one.'
+                            : 'No memories match your search.',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: AppTheme.textMuted),
+                      ),
+                    ),
+                  ),
+                )
+              else
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isTablet ? 32 : 20,
+                    ),
+                    child: MemoriesGridWidget(memories: filtered),
+                  ),
                 ),
-              ),
 
               // Bottom padding for nav bar
               SliverToBoxAdapter(child: SizedBox(height: bottomPadding + 100)),
@@ -119,7 +223,7 @@ class _MemoriesScreenState extends State<MemoriesScreen> {
           Positioned(
             bottom: bottomPadding + 88,
             right: 20,
-            child: const _CaptureMemoryFab(),
+            child: _CaptureMemoryFab(onSaved: _load),
           ),
         ],
       ),
@@ -128,7 +232,9 @@ class _MemoriesScreenState extends State<MemoriesScreen> {
 }
 
 class _CaptureMemoryFab extends StatefulWidget {
-  const _CaptureMemoryFab();
+  final VoidCallback onSaved;
+
+  const _CaptureMemoryFab({required this.onSaved});
 
   @override
   State<_CaptureMemoryFab> createState() => _CaptureMemoryFabState();
@@ -164,8 +270,9 @@ class _CaptureMemoryFabState extends State<_CaptureMemoryFab>
       onTapDown: (_) => _controller.forward(),
       onTapUp: (_) => _controller.reverse(),
       onTapCancel: () => _controller.reverse(),
-      onTap: () {
-        context.push('/create-memory-screen');
+      onTap: () async {
+        final saved = await context.push<bool>('/create-memory-screen');
+        if (saved == true) widget.onSaved();
       },
       child: ScaleTransition(
         scale: _scaleAnim,
