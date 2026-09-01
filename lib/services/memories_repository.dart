@@ -4,11 +4,21 @@ import '../core/supabase/supabase_service.dart';
 import '../models/memory.dart';
 
 /// All memory reads/writes and photo uploads go through here.
+///
+/// The `memories` storage bucket is PRIVATE. The `image_url` column in
+/// the DB actually stores the storage *path* (e.g. "circleId/123_uid.jpg"),
+/// not a usable link — every fetch method here resolves paths to
+/// short-lived signed URLs before handing Memory objects back to the UI.
 class MemoriesRepository {
   MemoriesRepository._();
 
   static final _client = SupabaseService.client;
   static const _bucket = 'memories';
+
+  // 7 days — long enough that the same signed URL stays stable across
+  // app opens within that window (so CachedNetworkImage's URL-keyed
+  // cache actually helps), short enough to rotate regularly.
+  static const _signedUrlExpirySeconds = 60 * 60 * 24 * 7;
 
   static Future<List<Memory>> fetchForCircle(String circleId) async {
     final rows = await _client
@@ -17,9 +27,7 @@ class MemoriesRepository {
         .eq('circle_id', circleId)
         .order('created_at', ascending: false);
 
-    return (rows as List)
-        .map((row) => Memory.fromMap(Map<String, dynamic>.from(row)))
-        .toList();
+    return _toMemoriesWithSignedUrls(rows as List);
   }
 
   /// Memories across every circle the current user belongs to (RLS scopes
@@ -32,14 +40,36 @@ class MemoriesRepository {
         .select('*, profiles(id, full_name, avatar_url), circles(id, name)')
         .order('created_at', ascending: false);
 
-    return (rows as List)
-        .map((row) => Memory.fromMap(Map<String, dynamic>.from(row)))
-        .toList();
+    return _toMemoriesWithSignedUrls(rows as List);
+  }
+
+  /// Converts raw rows (image_url = storage path) into Memory objects
+  /// with a real, usable signed URL swapped in.
+  static Future<List<Memory>> _toMemoriesWithSignedUrls(List rows) async {
+    if (rows.isEmpty) return [];
+
+    final maps = rows.map((r) => Map<String, dynamic>.from(r)).toList();
+    final paths = maps.map((m) => m['image_url'] as String).toList();
+
+    final signed = await _client.storage
+        .from(_bucket)
+        .createSignedUrls(paths, _signedUrlExpirySeconds);
+
+    for (var i = 0; i < maps.length; i++) {
+      // Fall back to the raw path (will just fail to load) rather than
+      // throwing, so one bad/missing file doesn't break the whole list.
+      maps[i]['image_url'] = signed[i].signedUrl.isNotEmpty
+          ? signed[i].signedUrl
+          : maps[i]['image_url'];
+    }
+
+    return maps.map(Memory.fromMap).toList();
   }
 
   /// Uploads [file] to Supabase Storage, then writes the memory row.
   /// Storage path is namespaced by circle so RLS policies can scope
-  /// access per-circle (see supabase/schema.sql).
+  /// access per-circle (see supabase/schema.sql). The DB stores the raw
+  /// path, not a URL — the bucket is private.
   static Future<Memory> addMemory({
     required String circleId,
     required File file,
@@ -55,19 +85,19 @@ class MemoriesRepository {
         '$circleId/${DateTime.now().millisecondsSinceEpoch}_$userId.$ext';
 
     await _client.storage.from(_bucket).upload(path, file);
-    final imageUrl = _client.storage.from(_bucket).getPublicUrl(path);
 
     final row = await _client
         .from('memories')
         .insert({
           'circle_id': circleId,
           'uploaded_by': userId,
-          'image_url': imageUrl,
+          'image_url': path,
           'caption': caption,
         })
-        .select()
+        .select('*, profiles(id, full_name, avatar_url)')
         .single();
 
-    return Memory.fromMap(row);
+    final resolved = await _toMemoriesWithSignedUrls([row]);
+    return resolved.first;
   }
 }

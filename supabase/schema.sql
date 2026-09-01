@@ -128,13 +128,13 @@ create policy "members can add memories to their circles"
   with check (is_circle_member(circle_id) and uploaded_by = auth.uid());
 
 -- ─── storage ─────────────────────────────────────────────────────────────
--- Create the bucket first (Dashboard > Storage > New bucket, name: "memories",
--- Public: ON — we serve images via public URL and gate access at upload time
--- via RLS below; switch to signed URLs later if you want private-by-default).
+-- Bucket is PRIVATE — photos are only ever served via short-lived signed
+-- URLs generated in the app (see MemoriesRepository), never a public link.
+-- RLS below still governs who's even allowed to request a signed URL.
 
 insert into storage.buckets (id, name, public)
-values ('memories', 'memories', true)
-on conflict (id) do nothing;
+values ('memories', 'memories', false)
+on conflict (id) do update set public = false;
 
 create policy "circle members can upload to their circle's folder"
   on storage.objects for insert
