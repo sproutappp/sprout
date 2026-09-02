@@ -4,70 +4,25 @@ import 'package:go_router/go_router.dart';
 
 import '../../../theme/app_theme.dart';
 import '../../../routes/app_routes.dart';
-import '../../../widgets/loading_skeleton_widget.dart';
-import '../../memories_screen/widgets/memories_grid_widget.dart';
+import '../../../services/circles_repository.dart';
+import '../../../services/memories_repository.dart';
 
-final List<Map<String, dynamic>> _discoverMaps = [
-  {
-    'id': 'd_001',
-    'memoryId': 'm01',
-    'title': 'Cherry blossoms in full bloom',
-    'location': 'Shinjuku Gyoen, Tokyo',
-    'creator': 'Aiko Tanaka',
-    'imageUrl': 'https://images.unsplash.com/photo-1617290958007-8aacaa047d12',
-    'semanticLabel':
-        'Rows of pale pink cherry blossom trees in full bloom against a bright blue sky in a Japanese garden',
-    'reactionCount': 341,
-    'timeAgo': '2h ago',
-  },
-  {
-    'id': 'd_002',
-    'memoryId': 'm03',
-    'title': 'Street food evening in Oaxaca',
-    'location': 'Oaxaca, Mexico',
-    'creator': 'Carlos Mendez',
-    'imageUrl': 'https://images.unsplash.com/photo-1717778446442-3df92a7d54c8',
-    'semanticLabel':
-        'Colorful street food stalls lit by warm lanterns at dusk in a cobblestone Mexican town square',
-    'reactionCount': 188,
-    'timeAgo': '5h ago',
-  },
-];
+/// A small preview of "Your Experiences" (circles with memories in them),
+/// linking into the full Discover screen. Replaces an earlier version that
+/// showed fake public content ("From the World") from the old public-feed
+/// concept — there's no such feature in this app anymore.
+class _ExperiencePreview {
+  final String circleId;
+  final String circleName;
+  final String coverImageUrl;
+  final int memoryCount;
 
-class _DiscoverCard {
-  final String id,
-      memoryId,
-      title,
-      location,
-      creator,
-      imageUrl,
-      semanticLabel,
-      timeAgo;
-  final int reactionCount;
-
-  const _DiscoverCard({
-    required this.id,
-    required this.memoryId,
-    required this.title,
-    required this.location,
-    required this.creator,
-    required this.imageUrl,
-    required this.semanticLabel,
-    required this.timeAgo,
-    required this.reactionCount,
+  const _ExperiencePreview({
+    required this.circleId,
+    required this.circleName,
+    required this.coverImageUrl,
+    required this.memoryCount,
   });
-
-  factory _DiscoverCard.fromMap(Map<String, dynamic> map) => _DiscoverCard(
-    id: map['id'] as String,
-    memoryId: map['memoryId'] as String,
-    title: map['title'] as String,
-    location: map['location'] as String,
-    creator: map['creator'] as String,
-    imageUrl: map['imageUrl'] as String,
-    semanticLabel: map['semanticLabel'] as String,
-    timeAgo: map['timeAgo'] as String,
-    reactionCount: map['reactionCount'] as int,
-  );
 }
 
 class HomeDiscoverTeaserWidget extends StatefulWidget {
@@ -80,51 +35,70 @@ class HomeDiscoverTeaserWidget extends StatefulWidget {
 }
 
 class _HomeDiscoverTeaserWidgetState extends State<HomeDiscoverTeaserWidget> {
-  late List<_DiscoverCard> _cards;
+  List<_ExperiencePreview> _experiences = [];
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _cards = _discoverMaps.map(_DiscoverCard.fromMap).toList();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final circles = await CirclesRepository.fetchMyCircles();
+      final memories = await MemoriesRepository.fetchAllForUser();
+
+      final byCircle = <String, int>{};
+      final coverByCircle = <String, String>{};
+      for (final m in memories) {
+        byCircle[m.circleId] = (byCircle[m.circleId] ?? 0) + 1;
+        coverByCircle.putIfAbsent(m.circleId, () => m.imageUrl);
+      }
+
+      final experiences = [
+        for (final c in circles)
+          if (byCircle.containsKey(c.id))
+            _ExperiencePreview(
+              circleId: c.id,
+              circleName: c.name,
+              coverImageUrl: coverByCircle[c.id]!,
+              memoryCount: byCircle[c.id]!,
+            ),
+      ];
+      // Show at most 2 here — it's a teaser, not the full list.
+      experiences.length = experiences.length > 2 ? 2 : experiences.length;
+
+      if (!mounted) return;
+      setState(() {
+        _experiences = experiences;
+        _isLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (!_isLoading && _experiences.isEmpty) {
+      // Nothing to preview yet — don't show an empty/broken-looking section.
+      return const SizedBox.shrink();
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            ShaderMask(
-              shaderCallback: (bounds) =>
-                  AppTheme.primaryGradient.createShader(bounds),
-              blendMode: BlendMode.srcIn,
-              child: const Text(
-                'From the World',
-                style: TextStyle(
-                  fontFamily: 'Manrope',
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-            const SizedBox(width: 6),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-              decoration: BoxDecoration(
-                color: AppTheme.primaryGreenGlow,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: const Text(
-                'LIVE',
-                style: TextStyle(
-                  fontFamily: 'Manrope',
-                  fontSize: 10,
-                  fontWeight: FontWeight.w800,
-                  color: AppTheme.primaryGreen,
-                  letterSpacing: 0.8,
-                ),
+            const Text(
+              'Discover',
+              style: TextStyle(
+                fontFamily: 'Manrope',
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: AppTheme.textPrimary,
               ),
             ),
             const Spacer(),
@@ -148,23 +122,34 @@ class _HomeDiscoverTeaserWidgetState extends State<HomeDiscoverTeaserWidget> {
           ],
         ),
         const SizedBox(height: 14),
-        if (widget.isTablet)
+        if (_isLoading)
+          const SizedBox(
+            height: 20,
+            width: 20,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: AppTheme.primaryGreen,
+            ),
+          )
+        else if (widget.isTablet)
           Row(
-            children: _cards.map((card) {
+            children: _experiences.map((e) {
+              final isLast = e == _experiences.last;
               return Expanded(
                 child: Padding(
-                  padding: EdgeInsets.only(right: card == _cards.last ? 0 : 12),
-                  child: _DiscoverCardWidget(card: card),
+                  padding: EdgeInsets.only(right: isLast ? 0 : 12),
+                  child: _ExperiencePreviewCard(experience: e),
                 ),
               );
             }).toList(),
           )
         else
           Column(
-            children: _cards.map((card) {
+            children: _experiences.map((e) {
+              final isLast = e == _experiences.last;
               return Padding(
-                padding: EdgeInsets.only(bottom: card == _cards.last ? 0 : 12),
-                child: _DiscoverCardWidget(card: card),
+                padding: EdgeInsets.only(bottom: isLast ? 0 : 12),
+                child: _ExperiencePreviewCard(experience: e),
               );
             }).toList(),
           ),
@@ -173,38 +158,34 @@ class _HomeDiscoverTeaserWidgetState extends State<HomeDiscoverTeaserWidget> {
   }
 }
 
-class _DiscoverCardWidget extends StatefulWidget {
-  final _DiscoverCard card;
-  const _DiscoverCardWidget({required this.card});
+class _ExperiencePreviewCard extends StatefulWidget {
+  final _ExperiencePreview experience;
+  const _ExperiencePreviewCard({required this.experience});
 
   @override
-  State<_DiscoverCardWidget> createState() => _DiscoverCardWidgetState();
+  State<_ExperiencePreviewCard> createState() =>
+      _ExperiencePreviewCardState();
 }
 
-class _DiscoverCardWidgetState extends State<_DiscoverCardWidget> {
+class _ExperiencePreviewCardState extends State<_ExperiencePreviewCard> {
   bool _pressed = false;
-  bool _reacted = false;
 
   @override
   Widget build(BuildContext context) {
-    final c = widget.card;
+    final e = widget.experience;
 
     return GestureDetector(
       onTapDown: (_) => setState(() => _pressed = true),
       onTapUp: (_) => setState(() => _pressed = false),
       onTapCancel: () => setState(() => _pressed = false),
       onTap: () {
-        final memory = allMemories.firstWhere(
-          (m) => m.id == c.memoryId,
-          orElse: () => allMemories[0],
-        );
-        context.push(AppRoutes.memoryDetailScreen, extra: memory);
+        context.push(AppRoutes.circleDetailScreen, extra: e.circleId);
       },
       child: AnimatedScale(
         scale: _pressed ? 0.97 : 1.0,
         duration: const Duration(milliseconds: 120),
         child: Container(
-          height: 200,
+          height: 160,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(20),
             border: Border.all(color: AppTheme.outline, width: 0.5),
@@ -214,15 +195,11 @@ class _DiscoverCardWidgetState extends State<_DiscoverCardWidget> {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                // Background image
                 CachedNetworkImage(
-                  imageUrl: c.imageUrl,
+                  imageUrl: e.coverImageUrl,
                   fit: BoxFit.cover,
-                  placeholder: (_, __) => const LoadingSkeletonWidget(
-                    width: double.infinity,
-                    height: double.infinity,
-                    borderRadius: 0,
-                  ),
+                  placeholder: (_, __) =>
+                      Container(color: AppTheme.surfaceVariantDark),
                   errorWidget: (_, __, ___) => Container(
                     color: AppTheme.surfaceVariantDark,
                     child: const Icon(
@@ -232,172 +209,42 @@ class _DiscoverCardWidgetState extends State<_DiscoverCardWidget> {
                     ),
                   ),
                 ),
-
-                // Gradient overlay
                 const DecoratedBox(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [Colors.transparent, Color(0xE60A0F0D)],
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
-                      stops: [0.3, 1.0],
+                      stops: [0.4, 1.0],
                     ),
                   ),
                 ),
-
-                // Content
                 Padding(
                   padding: const EdgeInsets.all(14),
                   child: Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Creator row top
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withAlpha(115),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.person_rounded,
-                                  size: 11,
-                                  color: Colors.white.withAlpha(204),
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  c.creator,
-                                  style: TextStyle(
-                                    fontFamily: 'Manrope',
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.white.withAlpha(230),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const Spacer(),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withAlpha(115),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(
-                              c.timeAgo,
-                              style: TextStyle(
-                                fontFamily: 'Manrope',
-                                fontSize: 11,
-                                color: Colors.white.withAlpha(179),
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-
-                      const Spacer(),
-
-                      // Title
                       Text(
-                        c.title,
-                        maxLines: 2,
+                        e.circleName,
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           fontFamily: 'Manrope',
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
                           color: Colors.white,
-                          height: 1.3,
                         ),
                       ),
-
-                      const SizedBox(height: 6),
-
-                      // Location + reactions row
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.location_on_outlined,
-                            size: 12,
-                            color: Colors.white.withAlpha(153),
-                          ),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              c.location,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontFamily: 'Manrope',
-                                fontSize: 12,
-                                color: Colors.white.withAlpha(153),
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          // Reaction button
-                          GestureDetector(
-                            onTap: () => setState(() => _reacted = !_reacted),
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 5,
-                              ),
-                              decoration: BoxDecoration(
-                                color: _reacted
-                                    ? AppTheme.primaryGreen.withAlpha(51)
-                                    : Colors.black.withAlpha(102),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: _reacted
-                                      ? AppTheme.primaryGreen.withAlpha(102)
-                                      : Colors.white.withAlpha(38),
-                                  width: 0.5,
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    _reacted
-                                        ? Icons.favorite_rounded
-                                        : Icons.favorite_border_rounded,
-                                    size: 13,
-                                    color: _reacted
-                                        ? AppTheme.primaryGreen
-                                        : Colors.white.withAlpha(204),
-                                  ),
-                                  const SizedBox(width: 5),
-                                  Text(
-                                    '${c.reactionCount + (_reacted ? 1 : 0)}',
-                                    style: TextStyle(
-                                      fontFamily: 'Manrope',
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      color: _reacted
-                                          ? AppTheme.primaryGreen
-                                          : Colors.white.withAlpha(204),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
+                      const SizedBox(height: 2),
+                      Text(
+                        '${e.memoryCount} ${e.memoryCount == 1 ? 'memory' : 'memories'}',
+                        style: TextStyle(
+                          fontFamily: 'Manrope',
+                          fontSize: 12,
+                          color: Colors.white.withAlpha(179),
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ],
                   ),
