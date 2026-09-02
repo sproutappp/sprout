@@ -45,5 +45,9 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Sprout needs camera access so you can capture and add photos to your circles' memories.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Sprout needs photo library access so you can pick photos to share as memories with your circles.</string>
 </dict>
 </plist>

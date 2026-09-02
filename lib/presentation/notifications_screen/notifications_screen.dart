@@ -5,35 +5,29 @@ import 'package:go_router/go_router.dart';
 
 import '../../theme/app_theme.dart';
 import '../../routes/app_routes.dart';
+import '../../models/notification.dart';
+import '../../services/notifications_repository.dart';
+import '../../services/memories_repository.dart';
 import '../../presentation/memories_screen/widgets/memories_grid_widget.dart';
 
-// ── Notification types ────────────────────────────────────────────────────────
-
-enum _NotifType {
-  reaction,
-  comment,
-  circleMemory,
-  circleInvite,
-  circleJoin,
-  mention,
-}
+// ── Notification types ────────────────────────────────────────────────────
+// Only circleMemory and circleJoin are backed by real triggers right now.
+// Reaction/comment/mention notifications aren't buildable yet — there are
+// no reactions/comments tables — so they're intentionally not represented.
 
 enum _NotifGroup { today, earlier }
 
 class _NotifItem {
   final String id;
-  final _NotifType type;
+  final AppNotificationType type;
   final _NotifGroup group;
   final String personName;
-  final String personAvatarUrl;
+  final String? personAvatarUrl;
   final String message;
   final String timeAgo;
   bool isRead;
-
-  // Optional navigation targets
   final String? memoryId;
   final String? circleId;
-  final String? memberId;
 
   _NotifItem({
     required this.id,
@@ -46,129 +40,39 @@ class _NotifItem {
     this.isRead = false,
     this.memoryId,
     this.circleId,
-    this.memberId,
   });
-}
 
-final List<_NotifItem> _mockNotifications = [
-  _NotifItem(
-    id: 'n_001',
-    type: _NotifType.reaction,
-    group: _NotifGroup.today,
-    personName: 'Priya',
-    personAvatarUrl:
-        'https://images.pexels.com/photos/3763188/pexels-photo-3763188.jpeg?w=100',
-    message: 'Priya reacted ✨ to your memory "Sunrise at Mullayanagiri"',
-    timeAgo: '2 min ago',
-    isRead: false,
-    memoryId: 'm01',
-    memberId: 'priya',
-  ),
-  _NotifItem(
-    id: 'n_002',
-    type: _NotifType.comment,
-    group: _NotifGroup.today,
-    personName: 'Kiran',
-    personAvatarUrl:
-        'https://images.pexels.com/photos/2379005/pexels-photo-2379005.jpeg?w=100',
-    message: 'Kiran commented on "Sunrise at Mullayanagiri"',
-    timeAgo: '1 hour ago',
-    isRead: false,
-    memoryId: 'm01',
-    memberId: 'kiran',
-  ),
-  _NotifItem(
-    id: 'n_003',
-    type: _NotifType.circleMemory,
-    group: _NotifGroup.today,
-    personName: 'Arjun',
-    personAvatarUrl:
-        'https://images.pexels.com/photos/1222271/pexels-photo-1222271.jpeg?w=100',
-    message: 'Arjun added a new memory to Adventure Crew',
-    timeAgo: '3 hours ago',
-    isRead: false,
-    circleId: 'c_003',
-    memberId: 'arjun',
-  ),
-  _NotifItem(
-    id: 'n_004',
-    type: _NotifType.circleInvite,
-    group: _NotifGroup.today,
-    personName: 'Priya',
-    personAvatarUrl:
-        'https://images.pexels.com/photos/3763188/pexels-photo-3763188.jpeg?w=100',
-    message: 'Priya invited you to join "College Friends"',
-    timeAgo: '5 hours ago',
-    isRead: true,
-    circleId: 'c_002',
-    memberId: 'priya',
-  ),
-  _NotifItem(
-    id: 'n_005',
-    type: _NotifType.reaction,
-    group: _NotifGroup.today,
-    personName: 'Meera',
-    personAvatarUrl:
-        'https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?w=100',
-    message: 'Meera reacted 🌿 to your memory "Late night chai"',
-    timeAgo: '8 hours ago',
-    isRead: true,
-    memoryId: 'm03',
-    memberId: 'meera',
-  ),
-  _NotifItem(
-    id: 'n_006',
-    type: _NotifType.circleJoin,
-    group: _NotifGroup.earlier,
-    personName: 'Rohan',
-    personAvatarUrl:
-        'https://images.pexels.com/photos/614810/pexels-photo-614810.jpeg?w=100',
-    message: 'Rohan joined your Circle "Adventure Crew"',
-    timeAgo: '1 day ago',
-    isRead: true,
-    circleId: 'c_003',
-    memberId: 'rohan',
-  ),
-  _NotifItem(
-    id: 'n_007',
-    type: _NotifType.mention,
-    group: _NotifGroup.earlier,
-    personName: 'Kiran',
-    personAvatarUrl:
-        'https://images.pexels.com/photos/2379005/pexels-photo-2379005.jpeg?w=100',
-    message: 'Kiran mentioned you in a comment on "Monsoon drive to Coorg"',
-    timeAgo: '1 day ago',
-    isRead: true,
-    memoryId: 'm04',
-    memberId: 'kiran',
-  ),
-  _NotifItem(
-    id: 'n_008',
-    type: _NotifType.comment,
-    group: _NotifGroup.earlier,
-    personName: 'Arjun',
-    personAvatarUrl:
-        'https://images.pexels.com/photos/1222271/pexels-photo-1222271.jpeg?w=100',
-    message: 'Arjun commented on "Grandma\'s 80th birthday"',
-    timeAgo: '2 days ago',
-    isRead: true,
-    memoryId: 'm02',
-    memberId: 'arjun',
-  ),
-  _NotifItem(
-    id: 'n_009',
-    type: _NotifType.circleMemory,
-    group: _NotifGroup.earlier,
-    personName: 'Priya',
-    personAvatarUrl:
-        'https://images.pexels.com/photos/3763188/pexels-photo-3763188.jpeg?w=100',
-    message: 'Priya added a new memory to Family',
-    timeAgo: '3 days ago',
-    isRead: true,
-    circleId: 'c_001',
-    memberId: 'priya',
-  ),
-];
+  static _NotifGroup _groupFor(DateTime dt) {
+    final now = DateTime.now();
+    final isToday =
+        dt.year == now.year && dt.month == now.month && dt.day == now.day;
+    return isToday ? _NotifGroup.today : _NotifGroup.earlier;
+  }
+
+  static String _timeAgoFor(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 1) return 'just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes} min ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    return '${dt.day}/${dt.month}/${dt.year}';
+  }
+
+  factory _NotifItem.fromAppNotification(AppNotification n) {
+    return _NotifItem(
+      id: n.id,
+      type: n.type,
+      group: _groupFor(n.createdAt),
+      personName: n.actor.displayName,
+      personAvatarUrl: n.actor.avatarUrl,
+      message: n.message,
+      timeAgo: _timeAgoFor(n.createdAt),
+      isRead: n.isRead,
+      memoryId: n.memoryId,
+      circleId: n.circleId,
+    );
+  }
+}
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
@@ -180,104 +84,86 @@ class NotificationsScreen extends StatefulWidget {
 }
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
-  late List<_NotifItem> _notifications;
+  List<_NotifItem> _notifications = [];
+  bool _isLoading = true;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
     SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.light);
-    _notifications = _mockNotifications
-        .map(
-          (n) => _NotifItem(
-            id: n.id,
-            type: n.type,
-            group: n.group,
-            personName: n.personName,
-            personAvatarUrl: n.personAvatarUrl,
-            message: n.message,
-            timeAgo: n.timeAgo,
-            isRead: n.isRead,
-            memoryId: n.memoryId,
-            circleId: n.circleId,
-            memberId: n.memberId,
-          ),
-        )
-        .toList();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    try {
+      final notifs = await NotificationsRepository.fetchForUser();
+      if (!mounted) return;
+      setState(() {
+        _notifications = notifs.map(_NotifItem.fromAppNotification).toList();
+        _isLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _error = "Couldn't load notifications.";
+        _isLoading = false;
+      });
+    }
   }
 
   void _markRead(String id) {
-    setState(() {
-      final idx = _notifications.indexWhere((n) => n.id == id);
-      if (idx != -1) _notifications[idx].isRead = true;
-    });
+    final idx = _notifications.indexWhere((n) => n.id == id);
+    if (idx == -1 || _notifications[idx].isRead) return;
+    setState(() => _notifications[idx].isRead = true);
+    NotificationsRepository.markAsRead(id); // fire-and-forget, UI already updated
   }
 
-  void _handleTap(_NotifItem notif) {
+  Future<void> _handleTap(_NotifItem notif) async {
     _markRead(notif.id);
 
     if (notif.memoryId != null) {
-      final memory = allMemories.firstWhere(
-        (m) => m.id == notif.memoryId,
-        orElse: () => allMemories[0],
+      final memory = await MemoriesRepository.fetchById(notif.memoryId!);
+      if (!mounted) return;
+      if (memory == null) return; // deleted since the notification fired
+      final item = MemoryItem(
+        id: memory.id,
+        title: memory.caption?.isNotEmpty == true
+            ? memory.caption!
+            : 'A shared memory',
+        date: '${memory.createdAt.day}/${memory.createdAt.month}/${memory.createdAt.year}',
+        imageUrl: memory.imageUrl,
+        semanticLabel: 'Shared memory photo',
+        circle: memory.circleName ?? 'Circle',
+        circleColor: AppTheme.primaryGreen,
+        privacy: MemoryPrivacy.circle,
+        type: MemoryType.photo,
       );
-      context.push(AppRoutes.memoryDetailScreen, extra: memory);
+      context.push(AppRoutes.memoryDetailScreen, extra: item);
     } else if (notif.circleId != null) {
       context.push(AppRoutes.circleDetailScreen, extra: notif.circleId);
-    } else if (notif.memberId != null) {
-      context.push(
-        AppRoutes.memberProfileScreen,
-        extra: {
-          'memberId': notif.memberId,
-          'memberName': notif.personName,
-          'memberAvatarUrl': notif.personAvatarUrl,
-        },
-      );
     }
   }
 
-  void _handleAvatarTap(_NotifItem notif) {
-    _markRead(notif.id);
-    context.push(
-      AppRoutes.memberProfileScreen,
-      extra: {
-        'memberId': notif.memberId,
-        'memberName': notif.personName,
-        'memberAvatarUrl': notif.personAvatarUrl,
-      },
-    );
-  }
-
-  IconData _iconForType(_NotifType type) {
+  IconData _iconForType(AppNotificationType type) {
     switch (type) {
-      case _NotifType.reaction:
-        return Icons.favorite_rounded;
-      case _NotifType.comment:
-        return Icons.chat_bubble_rounded;
-      case _NotifType.circleMemory:
+      case AppNotificationType.circleMemory:
         return Icons.photo_rounded;
-      case _NotifType.circleInvite:
-        return Icons.group_add_rounded;
-      case _NotifType.circleJoin:
+      case AppNotificationType.circleJoin:
         return Icons.group_rounded;
-      case _NotifType.mention:
-        return Icons.alternate_email_rounded;
     }
   }
 
-  Color _colorForType(_NotifType type) {
+  Color _colorForType(AppNotificationType type) {
     switch (type) {
-      case _NotifType.reaction:
-        return const Color(0xFFFF6B8A);
-      case _NotifType.comment:
-        return AppTheme.cyanAccent;
-      case _NotifType.circleMemory:
+      case AppNotificationType.circleMemory:
         return AppTheme.primaryGreen;
-      case _NotifType.circleInvite:
-        return const Color(0xFFB839FF);
-      case _NotifType.circleJoin:
+      case AppNotificationType.circleJoin:
         return const Color(0xFFFF8C39);
-      case _NotifType.mention:
-        return AppTheme.cyanAccent;
     }
   }
 
@@ -375,6 +261,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                 n.isRead = true;
                               }
                             });
+                            NotificationsRepository.markAllAsRead();
                           },
                           child: Container(
                             padding: const EdgeInsets.symmetric(
@@ -407,6 +294,46 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
               const SliverToBoxAdapter(child: SizedBox(height: 20)),
 
+              if (_isLoading)
+                const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.only(top: 40),
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        color: AppTheme.primaryGreen,
+                        strokeWidth: 2,
+                      ),
+                    ),
+                  ),
+                )
+              else if (_error != null)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 40,
+                    ),
+                    child: Center(
+                      child: Text(
+                        _error!,
+                        style: const TextStyle(color: AppTheme.textMuted),
+                      ),
+                    ),
+                  ),
+                )
+              else if (_notifications.isEmpty)
+                const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 20, vertical: 40),
+                    child: Center(
+                      child: Text(
+                        'No notifications yet.',
+                        style: TextStyle(color: AppTheme.textMuted),
+                      ),
+                    ),
+                  ),
+                )
+              else ...[
               // ── Today group ──────────────────────────────────────────────
               if (todayNotifs.isNotEmpty) ...[
                 SliverToBoxAdapter(
@@ -432,7 +359,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       iconData: _iconForType(notif.type),
                       iconColor: _colorForType(notif.type),
                       onTap: () => _handleTap(notif),
-                      onAvatarTap: () => _handleAvatarTap(notif),
+                      onAvatarTap: () => _handleTap(notif),
                     );
                   }, childCount: todayNotifs.length),
                 ),
@@ -463,10 +390,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       iconData: _iconForType(notif.type),
                       iconColor: _colorForType(notif.type),
                       onTap: () => _handleTap(notif),
-                      onAvatarTap: () => _handleAvatarTap(notif),
+                      onAvatarTap: () => _handleTap(notif),
                     );
                   }, childCount: earlierNotifs.length),
                 ),
+              ],
               ],
 
               const SliverToBoxAdapter(child: SizedBox(height: 40)),
@@ -551,20 +479,29 @@ class _NotifRowState extends State<_NotifRow> {
                       ),
                     ),
                     child: ClipOval(
-                      child: CachedNetworkImage(
-                        imageUrl: n.personAvatarUrl,
-                        fit: BoxFit.cover,
-                        placeholder: (_, __) =>
-                            Container(color: AppTheme.surfaceVariantDark),
-                        errorWidget: (_, __, ___) => Container(
-                          color: AppTheme.surfaceVariantDark,
-                          child: const Icon(
-                            Icons.person_rounded,
-                            size: 22,
-                            color: AppTheme.textMuted,
-                          ),
-                        ),
-                      ),
+                      child: n.personAvatarUrl != null
+                          ? CachedNetworkImage(
+                              imageUrl: n.personAvatarUrl!,
+                              fit: BoxFit.cover,
+                              placeholder: (_, __) =>
+                                  Container(color: AppTheme.surfaceVariantDark),
+                              errorWidget: (_, __, ___) => Container(
+                                color: AppTheme.surfaceVariantDark,
+                                child: const Icon(
+                                  Icons.person_rounded,
+                                  size: 22,
+                                  color: AppTheme.textMuted,
+                                ),
+                              ),
+                            )
+                          : Container(
+                              color: AppTheme.surfaceVariantDark,
+                              child: const Icon(
+                                Icons.person_rounded,
+                                size: 22,
+                                color: AppTheme.textMuted,
+                              ),
+                            ),
                     ),
                   ),
                   // Type icon badge

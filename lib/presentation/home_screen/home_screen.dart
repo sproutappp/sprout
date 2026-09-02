@@ -22,6 +22,11 @@ class _HomeScreenState extends State<HomeScreen> {
   final ScrollController _scrollController = ScrollController();
   double _scrollOffset = 0;
 
+  // Bumping this forces HomeRecentMemoriesWidget and HomeCirclesStripWidget
+  // to fully rebuild (new key -> new State -> initState re-runs -> re-fetch)
+  // after something changes elsewhere (e.g. a new memory was captured).
+  int _refreshKey = 0;
+
   @override
   void initState() {
     super.initState();
@@ -36,6 +41,8 @@ class _HomeScreenState extends State<HomeScreen> {
     _scrollController.dispose();
     super.dispose();
   }
+
+  void _refresh() => setState(() => _refreshKey++);
 
   @override
   Widget build(BuildContext context) {
@@ -86,7 +93,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
               // Recent memories — horizontal scroll
               SliverToBoxAdapter(
-                child: HomeRecentMemoriesWidget(isTablet: isTablet),
+                child: HomeRecentMemoriesWidget(
+                  key: ValueKey('recent_memories_$_refreshKey'),
+                  isTablet: isTablet,
+                ),
               ),
 
               const SliverToBoxAdapter(child: SizedBox(height: 28)),
@@ -95,7 +105,9 @@ class _HomeScreenState extends State<HomeScreen> {
               SliverToBoxAdapter(
                 child: Padding(
                   padding: EdgeInsets.symmetric(horizontal: isTablet ? 32 : 20),
-                  child: const HomeCirclesStripWidget(),
+                  child: HomeCirclesStripWidget(
+                    key: ValueKey('circles_strip_$_refreshKey'),
+                  ),
                 ),
               ),
 
@@ -118,7 +130,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Positioned(
             bottom: bottomPadding + 88,
             right: 20,
-            child: _CaptureMemoryFab(),
+            child: _CaptureMemoryFab(onSaved: _refresh),
           ),
         ],
       ),
@@ -127,6 +139,10 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class _CaptureMemoryFab extends StatefulWidget {
+  final VoidCallback onSaved;
+
+  const _CaptureMemoryFab({required this.onSaved});
+
   @override
   State<_CaptureMemoryFab> createState() => _CaptureMemoryFabState();
 }
@@ -161,8 +177,9 @@ class _CaptureMemoryFabState extends State<_CaptureMemoryFab>
       onTapDown: (_) => _controller.forward(),
       onTapUp: (_) => _controller.reverse(),
       onTapCancel: () => _controller.reverse(),
-      onTap: () {
-        context.push(AppRoutes.createMemoryScreen);
+      onTap: () async {
+        final saved = await context.push<bool>(AppRoutes.createMemoryScreen);
+        if (saved == true) widget.onSaved();
       },
       child: ScaleTransition(
         scale: _scaleAnim,

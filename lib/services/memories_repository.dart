@@ -30,6 +30,21 @@ class MemoriesRepository {
     return _toMemoriesWithSignedUrls(rows as List);
   }
 
+  /// A single memory by id, with its signed URL resolved. Used when
+  /// navigating to a memory from somewhere that only has its id (e.g.
+  /// a notification) rather than the full object already in hand.
+  static Future<Memory?> fetchById(String memoryId) async {
+    final row = await _client
+        .from('memories')
+        .select('*, profiles(id, full_name, avatar_url), circles(id, name)')
+        .eq('id', memoryId)
+        .maybeSingle();
+
+    if (row == null) return null;
+    final resolved = await _toMemoriesWithSignedUrls([row]);
+    return resolved.isEmpty ? null : resolved.first;
+  }
+
   /// Memories across every circle the current user belongs to (RLS scopes
   /// this automatically — no explicit circle_id filter needed). Also
   /// embeds the parent circle's name so the feed can show "Family",

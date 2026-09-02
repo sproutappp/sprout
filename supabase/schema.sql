@@ -171,3 +171,83 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function handle_new_user();
+
+-- ─── notifications ───────────────────────────────────────────────────────
+-- Only two event types are generated for now — new memory in a circle you're
+-- in, and someone joining a circle you're in. Reactions/comments/mentions
+-- aren't tracked yet (no tables for them), so those notification types
+-- don't exist here even though the UI has icons ready for them.
+create table if not exists notifications (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null,   -- recipient
+  actor_id uuid not null,  -- who triggered it
+  type text not null check (type in ('circle_memory', 'circle_join')),
+  circle_id uuid references circles(id) on delete cascade,
+  memory_id uuid references memories(id) on delete cascade,
+  is_read boolean not null default false,
+  created_at timestamptz not null default now(),
+  constraint notifications_user_id_fkey
+    foreign key (user_id) references profiles(id) on delete cascade,
+  constraint notifications_actor_id_fkey
+    foreign key (actor_id) references profiles(id) on delete cascade
+);
+
+alter table notifications enable row level security;
+
+create policy "users can view their own notifications"
+  on notifications for select
+  to authenticated
+  using (user_id = auth.uid());
+
+create policy "users can mark their own notifications read"
+  on notifications for update
+  to authenticated
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid());
+
+-- Deliberately no insert policy for `authenticated` — notifications are
+-- only ever created by the security-definer trigger functions below,
+-- which bypass RLS. This stops a client from inserting fake notifications
+-- into someone else's feed.
+
+create or replace function notify_on_new_memory()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into notifications (user_id, actor_id, type, circle_id, memory_id)
+  select cm.user_id, new.uploaded_by, 'circle_memory', new.circle_id, new.id
+  from circle_members cm
+  where cm.circle_id = new.circle_id
+    and cm.user_id != new.uploaded_by;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_memory_created on memories;
+create trigger on_memory_created
+  after insert on memories
+  for each row execute function notify_on_new_memory();
+
+create or replace function notify_on_circle_join()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into notifications (user_id, actor_id, type, circle_id)
+  select cm.user_id, new.user_id, 'circle_join', new.circle_id
+  from circle_members cm
+  where cm.circle_id = new.circle_id
+    and cm.user_id != new.user_id;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_circle_member_added on circle_members;
+create trigger on_circle_member_added
+  after insert on circle_members
+  for each row execute function notify_on_circle_join();
