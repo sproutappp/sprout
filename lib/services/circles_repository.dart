@@ -91,6 +91,24 @@ class CirclesRepository {
     return (circle: Circle.fromMap(circleRow), members: members);
   }
 
+  /// Circles shared between the current user and [otherUserId]. RLS on
+  /// circle_members already restricts every SELECT to circles the *current*
+  /// session user belongs to — so filtering by otherUserId's rows here
+  /// naturally returns only the overlap, never a circle the current user
+  /// isn't actually in. No manual privacy filtering needed beyond that.
+  static Future<List<Circle>> fetchSharedCircles(String otherUserId) async {
+    final rows = await _client
+        .from('circle_members')
+        .select('circles(*)')
+        .eq('user_id', otherUserId);
+
+    return (rows as List)
+        .map((row) => Circle.fromMap(
+              Map<String, dynamic>.from(row['circles'] as Map),
+            ))
+        .toList();
+  }
+
   /// Invite an existing user (by their profile id) into a circle.
   /// The inviter must already be a member (enforced by RLS).
   static Future<void> addMember({

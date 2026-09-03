@@ -6,40 +6,39 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../theme/app_theme.dart';
 import '../../routes/app_routes.dart';
+import '../../models/profile.dart';
+import '../../services/circles_repository.dart';
+import '../../services/memories_repository.dart';
+import '../../services/profiles_repository.dart';
 import '../memories_screen/widgets/memories_grid_widget.dart';
 
-// ── Member Data Model ─────────────────────────────────────────────────────────
+// ── Member Data Model ────────────────────────────────────────────────────
+// Everything here comes from real data: the viewed member's own profile,
+// circles they share with the CURRENT user (RLS on circle_members already
+// scopes this — see CirclesRepository.fetchSharedCircles), and memories
+// they added to those shared circles (same RLS guarantee on memories).
+// There's no bio/username field in `profiles`, and no "people in common"
+// count — those aren't invented here, just left out.
 
 class MemberData {
   final String id;
   final String name;
-  final String username;
-  final String bio;
   final String avatarUrl;
-  final String avatarSemanticLabel;
-  final String memberSince;
-  final int memoriesCount;
-  final int circlesCount;
-  final int peopleCount;
-  final bool isInCircle;
+  final String? memberSince;
   final List<_MemberMemory> memories;
   final List<_MemberCircle> circles;
 
   const MemberData({
     required this.id,
     required this.name,
-    required this.username,
-    required this.bio,
     required this.avatarUrl,
-    required this.avatarSemanticLabel,
-    required this.memberSince,
-    required this.memoriesCount,
-    required this.circlesCount,
-    required this.peopleCount,
-    required this.isInCircle,
+    this.memberSince,
     required this.memories,
     required this.circles,
   });
+
+  int get memoriesCount => memories.length;
+  int get circlesCount => circles.length;
 }
 
 class _MemberMemory {
@@ -82,274 +81,15 @@ class _MemberCircle {
   });
 }
 
-// ── Mock Member Profiles ──────────────────────────────────────────────────────
-
-final MemberData _priyaProfile = MemberData(
-  id: 'u_priya',
-  name: 'Priya Sharma',
-  username: '@priya',
-  bio: 'Chasing sunsets and saving memories. 🌅',
-  avatarUrl:
-      'https://images.pexels.com/photos/415829/pexels-photo-415829.jpeg?w=400',
-  avatarSemanticLabel:
-      'Young woman with long dark hair smiling warmly outdoors in natural light',
-  memberSince: 'Aug 2026',
-  memoriesCount: 38,
-  circlesCount: 3,
-  peopleCount: 22,
-  isInCircle: true,
-  memories: const [
-    _MemberMemory(
-      id: 'pm_p01',
-      title: 'Sunset by the Sea',
-      date: 'Aug 24, 2026',
-      imageUrl:
-          'https://images.pexels.com/photos/1007657/pexels-photo-1007657.jpeg?w=400',
-      semanticLabel:
-          'Golden sunset over the Arabian Sea in Goa with silhouettes of palm trees',
-      circle: 'Adventure Crew',
-      circleColor: AppTheme.primaryGreen,
-      privacy: MemoryPrivacy.public,
-    ),
-    _MemberMemory(
-      id: 'pm_p02',
-      title: "Grandma's 80th Birthday",
-      date: 'Aug 22, 2026',
-      imageUrl:
-          'https://images.pexels.com/photos/1729931/pexels-photo-1729931.jpeg?w=400',
-      semanticLabel:
-          'Elderly woman smiling surrounded by family at birthday celebration',
-      circle: 'Family',
-      circleColor: Color(0xFFFFB84D),
-      privacy: MemoryPrivacy.circle,
-    ),
-    _MemberMemory(
-      id: 'pm_p03',
-      title: 'Cherry Blossoms Walk',
-      date: 'Aug 10, 2026',
-      imageUrl:
-          'https://images.pexels.com/photos/2070485/pexels-photo-2070485.jpeg?w=400',
-      semanticLabel:
-          'Pink cherry blossom trees in full bloom lining a path with soft petals falling',
-      circle: 'College Friends',
-      circleColor: AppTheme.cyanAccent,
-      privacy: MemoryPrivacy.public,
-    ),
-    _MemberMemory(
-      id: 'pm_p04',
-      title: 'Monsoon Evening on the Terrace',
-      date: 'Jul 28, 2026',
-      imageUrl:
-          'https://images.pexels.com/photos/1118873/pexels-photo-1118873.jpeg?w=400',
-      semanticLabel:
-          'Rainy evening view from a rooftop terrace with city lights below',
-      circle: 'Family',
-      circleColor: Color(0xFFFFB84D),
-      privacy: MemoryPrivacy.circle,
-    ),
-  ],
-  circles: const [
-    _MemberCircle(
-      id: 'c01',
-      name: 'Family',
-      memberCount: 8,
-      imageUrl:
-          'https://images.pexels.com/photos/1128318/pexels-photo-1128318.jpeg?w=120',
-      semanticLabel: 'Happy family group sitting together outdoors',
-      accent: Color(0xFFFFB84D),
-    ),
-    _MemberCircle(
-      id: 'c03',
-      name: 'Adventure Crew',
-      memberCount: 5,
-      imageUrl:
-          'https://images.pexels.com/photos/1261728/pexels-photo-1261728.jpeg?w=120',
-      semanticLabel: 'Hikers on mountain trail at sunrise',
-      accent: AppTheme.primaryGreen,
-    ),
-    _MemberCircle(
-      id: 'c02',
-      name: 'College Friends',
-      memberCount: 14,
-      imageUrl:
-          'https://images.pexels.com/photos/1438072/pexels-photo-1438072.jpeg?w=120',
-      semanticLabel: 'Group of young college students laughing together',
-      accent: AppTheme.cyanAccent,
-    ),
-  ],
-);
-
-final MemberData _arjunProfile = MemberData(
-  id: 'u_arjun',
-  name: 'Arjun Mehta',
-  username: '@arjun',
-  bio: 'Mountains, monsoons, and midnight chai. ☕🏔️',
-  avatarUrl:
-      'https://images.pexels.com/photos/1222271/pexels-photo-1222271.jpeg?w=400',
-  avatarSemanticLabel:
-      'Young man in casual shirt smiling confidently in natural light',
-  memberSince: 'Aug 2026',
-  memoriesCount: 27,
-  circlesCount: 4,
-  peopleCount: 18,
-  isInCircle: true,
-  memories: const [
-    _MemberMemory(
-      id: 'pm_a01',
-      title: 'Sunrise at Mullayanagiri',
-      date: 'Aug 26, 2026',
-      imageUrl:
-          'https://images.pexels.com/photos/1261728/pexels-photo-1261728.jpeg?w=400',
-      semanticLabel:
-          'Golden sunrise breaking over misty mountain peaks with silhouetted trees',
-      circle: 'Adventure Crew',
-      circleColor: AppTheme.primaryGreen,
-      privacy: MemoryPrivacy.circle,
-    ),
-    _MemberMemory(
-      id: 'pm_a02',
-      title: 'Rainy Evening Walk',
-      date: 'Aug 18, 2026',
-      imageUrl:
-          'https://images.pexels.com/photos/1440476/pexels-photo-1440476.jpeg?w=400',
-      semanticLabel:
-          'Wet Mumbai street at night with reflections of orange and yellow lights on rain-soaked pavement',
-      circle: 'College Friends',
-      circleColor: AppTheme.cyanAccent,
-      privacy: MemoryPrivacy.public,
-    ),
-    _MemberMemory(
-      id: 'pm_a03',
-      title: 'Monsoon Drive to Coorg',
-      date: 'Aug 15, 2026',
-      imageUrl:
-          'https://images.pexels.com/photos/1287145/pexels-photo-1287145.jpeg?w=400',
-      semanticLabel:
-          'Winding road through lush green coffee plantations in heavy monsoon rain',
-      circle: 'Adventure Crew',
-      circleColor: AppTheme.primaryGreen,
-      privacy: MemoryPrivacy.circle,
-    ),
-    _MemberMemory(
-      id: 'pm_a04',
-      title: 'Late Night Chai',
-      date: 'Aug 12, 2026',
-      imageUrl:
-          'https://images.pexels.com/photos/1638280/pexels-photo-1638280.jpeg?w=400',
-      semanticLabel:
-          'Two ceramic cups of chai on a wooden café table with warm amber lighting',
-      circle: 'College Friends',
-      circleColor: AppTheme.cyanAccent,
-      privacy: MemoryPrivacy.public,
-    ),
-  ],
-  circles: const [
-    _MemberCircle(
-      id: 'c01',
-      name: 'Family',
-      memberCount: 8,
-      imageUrl:
-          'https://images.pexels.com/photos/1128318/pexels-photo-1128318.jpeg?w=120',
-      semanticLabel: 'Happy family group sitting together outdoors',
-      accent: Color(0xFFFFB84D),
-    ),
-    _MemberCircle(
-      id: 'c03',
-      name: 'Adventure Crew',
-      memberCount: 5,
-      imageUrl:
-          'https://images.pexels.com/photos/1261728/pexels-photo-1261728.jpeg?w=120',
-      semanticLabel: 'Hikers on mountain trail at sunrise',
-      accent: AppTheme.primaryGreen,
-    ),
-    _MemberCircle(
-      id: 'c02',
-      name: 'College Friends',
-      memberCount: 14,
-      imageUrl:
-          'https://images.pexels.com/photos/1438072/pexels-photo-1438072.jpeg?w=120',
-      semanticLabel: 'Group of young college students laughing together',
-      accent: AppTheme.cyanAccent,
-    ),
-    _MemberCircle(
-      id: 'c04',
-      name: 'Best Friends',
-      memberCount: 4,
-      imageUrl:
-          'https://images.pexels.com/photos/1024993/pexels-photo-1024993.jpeg?w=120',
-      semanticLabel: 'Close friends smiling together outdoors',
-      accent: Color(0xFFFF6B9D),
-    ),
-  ],
-);
-
-// Fallback generic profile for any unknown member id
-MemberData _buildFallbackMember(String name, String avatarUrl) => MemberData(
-  id: 'u_unknown',
-  name: name,
-  username: '@${name.toLowerCase().replaceAll(' ', '')}',
-  bio: 'Collecting little moments that matter.',
-  avatarUrl: avatarUrl,
-  avatarSemanticLabel: 'Person smiling in natural light',
-  memberSince: 'Aug 2026',
-  memoriesCount: 12,
-  circlesCount: 2,
-  peopleCount: 9,
-  isInCircle: false,
-  memories: const [
-    _MemberMemory(
-      id: 'pm_fb01',
-      title: 'A Quiet Morning',
-      date: 'Aug 20, 2026',
-      imageUrl:
-          'https://images.pexels.com/photos/1417945/pexels-photo-1417945.jpeg?w=400',
-      semanticLabel:
-          'Steaming cup of tea on a wooden table in warm morning light',
-      circle: 'Public',
-      circleColor: AppTheme.cyanAccent,
-      privacy: MemoryPrivacy.public,
-    ),
-  ],
-  circles: const [
-    _MemberCircle(
-      id: 'c01',
-      name: 'Family',
-      memberCount: 8,
-      imageUrl:
-          'https://images.pexels.com/photos/1128318/pexels-photo-1128318.jpeg?w=120',
-      semanticLabel: 'Happy family group sitting together outdoors',
-      accent: Color(0xFFFFB84D),
-    ),
-  ],
-);
-
-// Lookup map
-final Map<String, MemberData> _memberProfiles = {
-  'u_priya': _priyaProfile,
-  'priya': _priyaProfile,
-  'u_arjun': _arjunProfile,
-  'arjun': _arjunProfile,
-};
-
-MemberData resolveMemberProfile({
-  String? memberId,
-  String? name,
-  String? avatarUrl,
-}) {
-  if (memberId != null) {
-    final key = memberId.toLowerCase();
-    if (_memberProfiles.containsKey(key)) return _memberProfiles[key]!;
-  }
-  if (name != null) {
-    final key = name.toLowerCase();
-    if (_memberProfiles.containsKey(key)) return _memberProfiles[key]!;
-  }
-  return _buildFallbackMember(
-    name ?? 'Unknown',
-    avatarUrl ??
-        'https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?w=400',
-  );
+String _formatMemberSince(DateTime? dt) {
+  if (dt == null) return '';
+  const months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+  return '${months[dt.month - 1]} ${dt.year}';
 }
+
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
@@ -370,50 +110,114 @@ class MemberProfileScreen extends StatefulWidget {
 }
 
 class _MemberProfileScreenState extends State<MemberProfileScreen> {
-  late MemberData _member;
-  late bool _isInCircle;
+  MemberData? _member;
+  bool _isLoading = true;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
     SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.light);
-    _member = resolveMemberProfile(
-      memberId: widget.memberId,
-      name: widget.memberName,
-      avatarUrl: widget.memberAvatarUrl,
-    );
-    _isInCircle = _member.isInCircle;
+    _load();
   }
 
-  void _toggleCircle() {
-    HapticFeedback.lightImpact();
-    setState(() => _isInCircle = !_isInCircle);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          _isInCircle
-              ? '${_member.name} added to your Circle'
-              : '${_member.name} removed from your Circle',
-          style: GoogleFonts.manrope(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: Colors.black,
-          ),
-        ),
-        backgroundColor: AppTheme.primaryGreen,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.all(16),
-        duration: const Duration(seconds: 2),
-      ),
-    );
+  Future<void> _load() async {
+    final memberId = widget.memberId;
+    if (memberId == null) {
+      // No real account link (e.g. an untagged "person" chip) — nothing
+      // real to fetch. Show just the name/avatar we were given, no
+      // fabricated stats or lists.
+      setState(() {
+        _member = MemberData(
+          id: '',
+          name: widget.memberName ?? 'Unknown',
+          avatarUrl: widget.memberAvatarUrl ??
+              'https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?w=400',
+          memories: const [],
+          circles: const [],
+        );
+        _isLoading = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      final profile = await ProfilesRepository.fetchById(memberId);
+      if (profile == null) {
+        setState(() {
+          _error = "Couldn't find this person.";
+          _isLoading = false;
+        });
+        return;
+      }
+
+      final sharedCircles = await CirclesRepository.fetchSharedCircles(memberId);
+      final theirMemories = await MemoriesRepository.fetchByUploader(memberId);
+
+      const palette = [
+        Color(0xFFFF8C39),
+        Color(0xFF00E5FF),
+        Color(0xFF39FF8C),
+        Color(0xFFB839FF),
+      ];
+
+      if (!mounted) return;
+      setState(() {
+        _member = MemberData(
+          id: profile.id,
+          name: profile.displayName,
+          avatarUrl: profile.avatarUrl ??
+              'https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?w=400',
+          memberSince: _formatMemberSince(profile.createdAt),
+          circles: [
+            for (var i = 0; i < sharedCircles.length; i++)
+              _MemberCircle(
+                id: sharedCircles[i].id,
+                name: sharedCircles[i].name,
+                memberCount: sharedCircles[i].memberCount,
+                imageUrl: sharedCircles[i].coverImageUrl ??
+                    'https://images.pexels.com/photos/1128318/pexels-photo-1128318.jpeg?w=400',
+                semanticLabel: '${sharedCircles[i].name} circle cover photo',
+                accent: palette[i % palette.length],
+              ),
+          ],
+          memories: [
+            for (final m in theirMemories)
+              _MemberMemory(
+                id: m.id,
+                title: m.caption?.isNotEmpty == true ? m.caption! : 'A shared memory',
+                date: '${m.createdAt.day}/${m.createdAt.month}/${m.createdAt.year}',
+                imageUrl: m.imageUrl,
+                semanticLabel: 'Shared memory photo',
+                circle: m.circleName ?? 'Circle',
+                circleColor: AppTheme.primaryGreen,
+                privacy: MemoryPrivacy.circle,
+              ),
+          ],
+        );
+        _isLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _error = "Couldn't load this profile.";
+        _isLoading = false;
+      });
+    }
   }
 
   void _showThreeDotMenu() {
+    final member = _member;
+    if (member == null) return;
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (_) => _MemberMenuSheet(memberName: _member.name),
+      builder: (_) => _MemberMenuSheet(memberName: member.name),
     );
   }
 
@@ -440,6 +244,39 @@ class _MemberProfileScreenState extends State<MemberProfileScreen> {
   Widget build(BuildContext context) {
     final topPadding = MediaQuery.of(context).padding.top;
     final bottomPadding = MediaQuery.of(context).padding.bottom;
+
+    if (_isLoading) {
+      return const Scaffold(
+        backgroundColor: AppTheme.backgroundDark,
+        body: Center(
+          child: CircularProgressIndicator(
+            color: AppTheme.primaryGreen,
+            strokeWidth: 2,
+          ),
+        ),
+      );
+    }
+
+    if (_error != null || _member == null) {
+      return Scaffold(
+        backgroundColor: AppTheme.backgroundDark,
+        appBar: AppBar(
+          backgroundColor: AppTheme.backgroundDark,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+            onPressed: () => context.pop(),
+          ),
+        ),
+        body: Center(
+          child: Text(
+            _error ?? 'Profile not found.',
+            style: GoogleFonts.manrope(color: AppTheme.textMuted),
+          ),
+        ),
+      );
+    }
+
+    final member = _member!;
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundDark,
@@ -471,11 +308,7 @@ class _MemberProfileScreenState extends State<MemberProfileScreen> {
 
               // ── Profile Header ───────────────────────────────────────────
               SliverToBoxAdapter(
-                child: _ProfileHeader(
-                  member: _member,
-                  isInCircle: _isInCircle,
-                  onToggleCircle: _toggleCircle,
-                ),
+                child: _ProfileHeader(member: member),
               ),
 
               const SliverToBoxAdapter(child: SizedBox(height: 20)),
@@ -484,7 +317,7 @@ class _MemberProfileScreenState extends State<MemberProfileScreen> {
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: _StatsRow(member: _member),
+                  child: _StatsRow(member: member),
                 ),
               ),
 
@@ -496,7 +329,7 @@ class _MemberProfileScreenState extends State<MemberProfileScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: _SectionHeader(
                     title: 'Memories',
-                    trailing: _member.memories.length > 3
+                    trailing: member.memories.length > 3
                         ? GestureDetector(
                             onTap: () {},
                             child: Text(
@@ -518,7 +351,7 @@ class _MemberProfileScreenState extends State<MemberProfileScreen> {
                 sliver: SliverList(
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {
-                      final m = _member.memories[index];
+                      final m = member.memories[index];
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 10),
                         child: _MemoryRow(
@@ -527,9 +360,9 @@ class _MemberProfileScreenState extends State<MemberProfileScreen> {
                         ),
                       );
                     },
-                    childCount: _member.memories.length > 4
+                    childCount: member.memories.length > 4
                         ? 4
-                        : _member.memories.length,
+                        : member.memories.length,
                   ),
                 ),
               ),
@@ -542,7 +375,7 @@ class _MemberProfileScreenState extends State<MemberProfileScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: _SectionHeader(
                     title: 'Circles',
-                    trailing: _member.circles.length > 3
+                    trailing: member.circles.length > 3
                         ? GestureDetector(
                             onTap: () {},
                             child: Text(
@@ -564,7 +397,7 @@ class _MemberProfileScreenState extends State<MemberProfileScreen> {
                 sliver: SliverList(
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {
-                      final c = _member.circles[index];
+                      final c = member.circles[index];
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 10),
                         child: _CircleRow(
@@ -573,9 +406,9 @@ class _MemberProfileScreenState extends State<MemberProfileScreen> {
                         ),
                       );
                     },
-                    childCount: _member.circles.length > 3
+                    childCount: member.circles.length > 3
                         ? 3
-                        : _member.circles.length,
+                        : member.circles.length,
                   ),
                 ),
               ),
@@ -665,14 +498,8 @@ class _TopBar extends StatelessWidget {
 
 class _ProfileHeader extends StatelessWidget {
   final MemberData member;
-  final bool isInCircle;
-  final VoidCallback onToggleCircle;
 
-  const _ProfileHeader({
-    required this.member,
-    required this.isInCircle,
-    required this.onToggleCircle,
-  });
+  const _ProfileHeader({required this.member});
 
   @override
   Widget build(BuildContext context) {
@@ -747,107 +574,31 @@ class _ProfileHeader extends StatelessWidget {
             ),
           ),
 
-          const SizedBox(height: 3),
-
-          // Username
-          Text(
-            member.username,
-            style: GoogleFonts.manrope(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: AppTheme.primaryGreen,
-            ),
-          ),
-
           const SizedBox(height: 8),
 
-          // Bio
-          Text(
-            member.bio,
-            textAlign: TextAlign.center,
-            style: GoogleFonts.manrope(
-              fontSize: 13,
-              fontWeight: FontWeight.w400,
-              color: AppTheme.textSecondary,
-              height: 1.4,
-            ),
-          ),
-
-          const SizedBox(height: 6),
-
           // Member since
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(
-                Icons.eco_rounded,
-                size: 12,
-                color: AppTheme.textMuted,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                'Member since ${member.memberSince}',
-                style: GoogleFonts.manrope(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w400,
+          if (member.memberSince != null && member.memberSince!.isNotEmpty) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  Icons.eco_rounded,
+                  size: 12,
                   color: AppTheme.textMuted,
                 ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 16),
-
-          // Add to Circle / In Circle button
-          GestureDetector(
-            onTap: onToggleCircle,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 250),
-              curve: Curves.easeOutCubic,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              decoration: BoxDecoration(
-                gradient: isInCircle ? null : AppTheme.primaryGradient,
-                color: isInCircle ? AppTheme.surfaceVariantDark : null,
-                borderRadius: BorderRadius.circular(24),
-                border: isInCircle
-                    ? Border.all(
-                        color: AppTheme.primaryGreen.withAlpha(100),
-                        width: 1.0,
-                      )
-                    : null,
-                boxShadow: isInCircle
-                    ? null
-                    : [
-                        BoxShadow(
-                          color: AppTheme.primaryGreen.withAlpha(60),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    isInCircle
-                        ? Icons.check_circle_rounded
-                        : Icons.person_add_rounded,
-                    size: 16,
-                    color: isInCircle ? AppTheme.primaryGreen : Colors.black,
+                const SizedBox(width: 4),
+                Text(
+                  'Member since ${member.memberSince}',
+                  style: GoogleFonts.manrope(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w400,
+                    color: AppTheme.textMuted,
                   ),
-                  const SizedBox(width: 7),
-                  Text(
-                    isInCircle ? 'In Circle' : 'Add to Circle',
-                    style: GoogleFonts.manrope(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: isInCircle ? AppTheme.primaryGreen : Colors.black,
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ),
+            const SizedBox(height: 16),
+          ],
         ],
       ),
     );
@@ -882,12 +633,6 @@ class _StatsRow extends StatelessWidget {
             value: '${member.circlesCount}',
             label: 'Circles',
             color: AppTheme.cyanAccent,
-          ),
-          _StatDivider(),
-          _StatItem(
-            value: '${member.peopleCount}',
-            label: 'People',
-            color: const Color(0xFFFFB84D),
           ),
         ],
       ),

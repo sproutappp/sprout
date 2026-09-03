@@ -39,11 +39,13 @@ class CircleDetailData {
 }
 
 class _MemberData {
+  final String id;
   final String name;
   final String avatarUrl;
   final String semanticLabel;
 
   const _MemberData({
+    required this.id,
     required this.name,
     required this.avatarUrl,
     required this.semanticLabel,
@@ -139,6 +141,7 @@ class _CircleDetailScreenState extends State<CircleDetailScreen> {
           members: [
             for (final m in detail.members)
               _MemberData(
+                id: m.id,
                 name: m.displayName,
                 avatarUrl: m.avatarUrl ??
                     'https://images.pexels.com/photos/3763188/pexels-photo-3763188.jpeg?w=200',
@@ -1108,6 +1111,7 @@ class _PeopleRow extends StatelessWidget {
               context.push(
                 AppRoutes.memberProfileScreen,
                 extra: {
+                  'memberId': member.id,
                   'memberName': member.name,
                   'memberAvatarUrl': member.avatarUrl,
                 },

@@ -81,7 +81,19 @@ class MemoriesRepository {
     return maps.map(Memory.fromMap).toList();
   }
 
-  /// Uploads [file] to Supabase Storage, then writes the memory row.
+  /// Memories uploaded by [uploaderId] that the *current* user can see.
+  /// RLS on memories already restricts every SELECT to circles the current
+  /// session user belongs to, so this naturally only returns memories that
+  /// uploader added to a circle both users share — never anything outside it.
+  static Future<List<Memory>> fetchByUploader(String uploaderId) async {
+    final rows = await _client
+        .from('memories')
+        .select('*, profiles(id, full_name, avatar_url), circles(id, name)')
+        .eq('uploaded_by', uploaderId)
+        .order('created_at', ascending: false);
+
+    return _toMemoriesWithSignedUrls(rows as List);
+  }
   /// Storage path is namespaced by circle so RLS policies can scope
   /// access per-circle (see supabase/schema.sql). The DB stores the raw
   /// path, not a URL — the bucket is private.
