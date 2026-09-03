@@ -7,6 +7,9 @@ import 'package:go_router/go_router.dart';
 import '../../theme/app_theme.dart';
 import '../../presentation/memories_screen/widgets/memories_grid_widget.dart';
 import '../../routes/app_routes.dart';
+import '../../models/comment.dart';
+import '../../services/reactions_repository.dart';
+import '../../services/comments_repository.dart';
 
 // ── Sample detail data ────────────────────────────────────────────────────────
 
@@ -22,81 +25,29 @@ class _TaggedPerson {
   });
 }
 
-class _Reaction {
-  final String emoji;
-  final int count;
-
-  const _Reaction({required this.emoji, required this.count});
-}
-
-class _Comment {
-  final String name;
-  final String avatarUrl;
-  final String avatarSemanticLabel;
-  final String timestamp;
-  final String text;
-  final int likeCount;
-
-  const _Comment({
-    required this.name,
-    required this.avatarUrl,
-    required this.avatarSemanticLabel,
-    required this.timestamp,
-    required this.text,
-    required this.likeCount,
-  });
-}
-
 class MemoryDetailData {
   final MemoryItem memory;
   final String caption;
   final String location;
   final List<_TaggedPerson> taggedPeople;
-  final List<_Reaction> reactions;
-  final int commentCount;
-  final List<_Comment> comments;
 
   const MemoryDetailData({
     required this.memory,
     required this.caption,
     required this.location,
     required this.taggedPeople,
-    required this.reactions,
-    required this.commentCount,
-    required this.comments,
   });
 }
 
-// Fallback detail for any memory not in the map
+// The memory's real caption is already carried on MemoryItem.title (set
+// when the memory was created) — no generic filler text. There's no
+// location or people-tagging data in the schema yet, so those are left
+// empty rather than faked; the UI already hides empty sections.
 MemoryDetailData _buildFallback(MemoryItem m) => MemoryDetailData(
   memory: m,
-  caption:
-      'A moment worth remembering. Some memories don\'t need many words — they just need to be kept safe.',
-  location: 'India',
-  taggedPeople: [
-    _TaggedPerson(
-      name: 'Arjun',
-      avatarUrl:
-          'https://images.pexels.com/photos/1222271/pexels-photo-1222271.jpeg?w=200',
-      semanticLabel: 'Young man with short dark hair smiling outdoors',
-    ),
-  ],
-  reactions: [
-    _Reaction(emoji: '❤️', count: 12),
-    _Reaction(emoji: '😊', count: 8),
-  ],
-  commentCount: 3,
-  comments: [
-    _Comment(
-      name: 'Arjun',
-      avatarUrl:
-          'https://images.pexels.com/photos/1222271/pexels-photo-1222271.jpeg?w=200',
-      avatarSemanticLabel: 'Young man with short dark hair smiling outdoors',
-      timestamp: '1h ago',
-      text: 'Such a great memory! 🙌',
-      likeCount: 3,
-    ),
-  ],
+  caption: m.title,
+  location: '',
+  taggedPeople: const [],
 );
 
 // ── Screen ────────────────────────────────────────────────────────────────────
@@ -118,6 +69,12 @@ class _MemoryDetailScreenState extends State<MemoryDetailScreen>
   late AnimationController _heroFadeController;
   late Animation<double> _heroFadeAnim;
 
+  // Reactions/comments load in the background — the photo/caption render
+  // immediately from widget.memory, these pop in shortly after.
+  ReactionSummary _reactions = ReactionSummary.empty;
+  List<MemoryComment> _comments = [];
+  bool _isLoadingSocial = true;
+
   @override
   void initState() {
     super.initState();
@@ -131,6 +88,69 @@ class _MemoryDetailScreenState extends State<MemoryDetailScreen>
       parent: _heroFadeController,
       curve: Curves.easeOutCubic,
     );
+    _loadSocial();
+  }
+
+  Future<void> _loadSocial() async {
+    try {
+      final reactions = await ReactionsRepository.fetchSummary(widget.memory.id);
+      final comments = await CommentsRepository.fetchForMemory(widget.memory.id);
+      if (!mounted) return;
+      setState(() {
+        _reactions = reactions;
+        _comments = comments;
+        _isLoadingSocial = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isLoadingSocial = false);
+    }
+  }
+
+  Future<void> _onReactionTap(String emoji) async {
+    final wasMine = _reactions.myEmoji == emoji;
+    // Optimistic update — feels instant, corrected on failure.
+    final previous = _reactions;
+    setState(() {
+      final counts = Map<String, int>.from(_reactions.counts);
+      if (_reactions.myEmoji != null) {
+        counts[_reactions.myEmoji!] =
+            (counts[_reactions.myEmoji!] ?? 1) - 1;
+      }
+      if (!wasMine) {
+        counts[emoji] = (counts[emoji] ?? 0) + 1;
+      }
+      counts.removeWhere((_, v) => v <= 0);
+      _reactions = ReactionSummary(
+        counts: counts,
+        myEmoji: wasMine ? null : emoji,
+      );
+    });
+
+    try {
+      if (wasMine) {
+        await ReactionsRepository.removeReaction(widget.memory.id);
+      } else {
+        await ReactionsRepository.setReaction(widget.memory.id, emoji);
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _reactions = previous); // revert on failure
+    }
+  }
+
+  Future<void> _onCommentPosted(String text) async {
+    try {
+      final comment = await CommentsRepository.addComment(
+        memoryId: widget.memory.id,
+        body: text,
+      );
+      if (!mounted) return;
+      setState(() => _comments = [..._comments, comment]);
+    } catch (_) {
+      if (!mounted) return;
+      _showSnack("Couldn't post comment — try again.");
+    }
   }
 
   @override
@@ -288,8 +308,9 @@ class _MemoryDetailScreenState extends State<MemoryDetailScreen>
 
                       // Reactions
                       _ReactionsRow(
-                        reactions: _detail.reactions,
-                        commentCount: _detail.commentCount,
+                        reactions: _reactions,
+                        commentCount: _comments.length,
+                        onReactionTap: _onReactionTap,
                       ),
 
                       const SizedBox(height: 24),
@@ -301,10 +322,9 @@ class _MemoryDetailScreenState extends State<MemoryDetailScreen>
 
                       // ── Comments Section ─────────────────────────────────
                       _CommentsSection(
-                        comments: _detail.comments,
-                        commentCount: _detail.commentCount,
-                        onCommentPosted: (text) =>
-                            _showSnack('Comment posted!'),
+                        comments: _comments,
+                        isLoading: _isLoadingSocial,
+                        onCommentPosted: _onCommentPosted,
                       ),
 
                       const SizedBox(height: 24),
@@ -620,43 +640,45 @@ class _MetaRow extends StatelessWidget {
 
         const SizedBox(width: 16),
 
-        // Dot separator
-        Container(
-          width: 3,
-          height: 3,
-          decoration: const BoxDecoration(
-            color: AppTheme.textDisabled,
-            shape: BoxShape.circle,
+        // Dot separator — only when there's a location to separate from
+        if (location.isNotEmpty) ...[
+          Container(
+            width: 3,
+            height: 3,
+            decoration: const BoxDecoration(
+              color: AppTheme.textDisabled,
+              shape: BoxShape.circle,
+            ),
           ),
-        ),
+          const SizedBox(width: 16),
+        ],
 
-        const SizedBox(width: 16),
-
-        // Location
-        Expanded(
-          child: Row(
-            children: [
-              const Icon(
-                Icons.location_on_rounded,
-                size: 13,
-                color: AppTheme.cyanAccent,
-              ),
-              const SizedBox(width: 5),
-              Flexible(
-                child: Text(
-                  location,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.manrope(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: AppTheme.textSecondary,
+        // Location — only shown when we actually have one
+        if (location.isNotEmpty)
+          Expanded(
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.location_on_rounded,
+                  size: 13,
+                  color: AppTheme.cyanAccent,
+                ),
+                const SizedBox(width: 5),
+                Flexible(
+                  child: Text(
+                    location,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.manrope(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: AppTheme.textSecondary,
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
       ],
     );
   }
@@ -953,78 +975,130 @@ class _PersonChip extends StatelessWidget {
   }
 }
 
-// ── Reactions Row ─────────────────────────────────────────────────────────────
+// ── Reactions Row ─────────────────────────────────────────────────────────
 
-class _ReactionsRow extends StatefulWidget {
-  final List<_Reaction> reactions;
+const _reactionPalette = ['❤️', '😂', '😮', '👏', '🔥'];
+
+class _ReactionsRow extends StatelessWidget {
+  final ReactionSummary reactions;
   final int commentCount;
+  final void Function(String emoji) onReactionTap;
 
-  const _ReactionsRow({required this.reactions, required this.commentCount});
+  const _ReactionsRow({
+    required this.reactions,
+    required this.commentCount,
+    required this.onReactionTap,
+  });
 
-  @override
-  State<_ReactionsRow> createState() => _ReactionsRowState();
-}
-
-class _ReactionsRowState extends State<_ReactionsRow> {
-  int? _tappedIndex;
+  void _openPicker(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        margin: const EdgeInsets.all(12),
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceDark,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: AppTheme.outline, width: 0.5),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: _reactionPalette.map((emoji) {
+            return GestureDetector(
+              onTap: () {
+                Navigator.pop(context);
+                onReactionTap(emoji);
+              },
+              child: Text(emoji, style: const TextStyle(fontSize: 30)),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    final entries = reactions.counts.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
     return Row(
       children: [
-        // Reaction bubbles
-        ...widget.reactions.asMap().entries.map((entry) {
-          final i = entry.key;
-          final r = entry.value;
-          final tapped = _tappedIndex == i;
+        Expanded(
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ...entries.map((entry) {
+                final emoji = entry.key;
+                final count = entry.value;
+                final isMine = reactions.myEmoji == emoji;
 
-          return Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: GestureDetector(
-              onTap: () {
-                setState(() => _tappedIndex = tapped ? null : i);
-              },
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: tapped
-                      ? AppTheme.primaryGreenGlow
-                      : AppTheme.surfaceVariantDark,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: tapped
-                        ? AppTheme.primaryGreen.withAlpha(80)
-                        : AppTheme.outline,
-                    width: 0.8,
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(r.emoji, style: const TextStyle(fontSize: 15)),
-                    const SizedBox(width: 5),
-                    Text(
-                      '${r.count + (tapped ? 1 : 0)}',
-                      style: GoogleFonts.manrope(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: tapped
-                            ? AppTheme.primaryGreen
-                            : AppTheme.textSecondary,
+                return GestureDetector(
+                  onTap: () => onReactionTap(emoji),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isMine
+                          ? AppTheme.primaryGreenGlow
+                          : AppTheme.surfaceVariantDark,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: isMine
+                            ? AppTheme.primaryGreen.withAlpha(80)
+                            : AppTheme.outline,
+                        width: 0.8,
                       ),
                     ),
-                  ],
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(emoji, style: const TextStyle(fontSize: 15)),
+                        const SizedBox(width: 5),
+                        Text(
+                          '$count',
+                          style: GoogleFonts.manrope(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: isMine
+                                ? AppTheme.primaryGreen
+                                : AppTheme.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+
+              // Add-a-reaction button
+              GestureDetector(
+                onTap: () => _openPicker(context),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surfaceVariantDark,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: AppTheme.outline, width: 0.8),
+                  ),
+                  child: const Icon(
+                    Icons.add_reaction_outlined,
+                    size: 17,
+                    color: AppTheme.textMuted,
+                  ),
                 ),
               ),
-            ),
-          );
-        }),
-
-        const Spacer(),
+            ],
+          ),
+        ),
 
         // Comment count
         Row(
@@ -1036,7 +1110,7 @@ class _ReactionsRowState extends State<_ReactionsRow> {
             ),
             const SizedBox(width: 5),
             Text(
-              '${widget.commentCount}',
+              '$commentCount',
               style: GoogleFonts.manrope(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
@@ -1050,18 +1124,27 @@ class _ReactionsRowState extends State<_ReactionsRow> {
   }
 }
 
-// ── Comments Section ──────────────────────────────────────────────────────────
+// ── Comments Section ──────────────────────────────────────────────────────
 
 class _CommentsSection extends StatelessWidget {
-  final List<_Comment> comments;
-  final int commentCount;
+  final List<MemoryComment> comments;
+  final bool isLoading;
   final void Function(String text) onCommentPosted;
 
   const _CommentsSection({
     required this.comments,
-    required this.commentCount,
+    required this.isLoading,
     required this.onCommentPosted,
   });
+
+  static String _timeAgo(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 1) return 'just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    return '${dt.day}/${dt.month}/${dt.year}';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1101,7 +1184,7 @@ class _CommentsSection extends StatelessWidget {
                 ),
               ),
               child: Text(
-                '$commentCount',
+                '${comments.length}',
                 style: GoogleFonts.manrope(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
@@ -1114,8 +1197,33 @@ class _CommentsSection extends StatelessWidget {
 
         const SizedBox(height: 16),
 
-        // Comment cards
-        ...comments.map((c) => _CommentCard(comment: c)),
+        if (isLoading)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: SizedBox(
+              height: 18,
+              width: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppTheme.primaryGreen,
+              ),
+            ),
+          )
+        else if (comments.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Text(
+              'No comments yet — be the first.',
+              style: GoogleFonts.manrope(
+                fontSize: 13,
+                color: AppTheme.textMuted,
+              ),
+            ),
+          )
+        else
+          ...comments.map(
+            (c) => _CommentCard(comment: c, timeAgo: _timeAgo(c.createdAt)),
+          ),
 
         const SizedBox(height: 16),
 
@@ -1126,20 +1234,15 @@ class _CommentsSection extends StatelessWidget {
   }
 }
 
-class _CommentCard extends StatefulWidget {
-  final _Comment comment;
+class _CommentCard extends StatelessWidget {
+  final MemoryComment comment;
+  final String timeAgo;
 
-  const _CommentCard({required this.comment});
-
-  @override
-  State<_CommentCard> createState() => _CommentCardState();
-}
-
-class _CommentCardState extends State<_CommentCard> {
-  bool _liked = false;
+  const _CommentCard({required this.comment, required this.timeAgo});
 
   @override
   Widget build(BuildContext context) {
+    final avatarUrl = comment.author?.avatarUrl;
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: Row(
@@ -1147,28 +1250,39 @@ class _CommentCardState extends State<_CommentCard> {
         children: [
           // Avatar
           ClipOval(
-            child: CachedNetworkImage(
-              imageUrl: widget.comment.avatarUrl,
-              width: 36,
-              height: 36,
-              fit: BoxFit.cover,
-              placeholder: (_, __) => Container(
-                color: AppTheme.surfaceElevatedDark,
-                child: const Icon(
-                  Icons.person_rounded,
-                  size: 18,
-                  color: AppTheme.textDisabled,
-                ),
-              ),
-              errorWidget: (_, __, ___) => Container(
-                color: AppTheme.surfaceElevatedDark,
-                child: const Icon(
-                  Icons.person_rounded,
-                  size: 18,
-                  color: AppTheme.textDisabled,
-                ),
-              ),
-            ),
+            child: avatarUrl != null
+                ? CachedNetworkImage(
+                    imageUrl: avatarUrl,
+                    width: 36,
+                    height: 36,
+                    fit: BoxFit.cover,
+                    placeholder: (_, __) => Container(
+                      color: AppTheme.surfaceElevatedDark,
+                      child: const Icon(
+                        Icons.person_rounded,
+                        size: 18,
+                        color: AppTheme.textDisabled,
+                      ),
+                    ),
+                    errorWidget: (_, __, ___) => Container(
+                      color: AppTheme.surfaceElevatedDark,
+                      child: const Icon(
+                        Icons.person_rounded,
+                        size: 18,
+                        color: AppTheme.textDisabled,
+                      ),
+                    ),
+                  )
+                : Container(
+                    width: 36,
+                    height: 36,
+                    color: AppTheme.surfaceElevatedDark,
+                    child: const Icon(
+                      Icons.person_rounded,
+                      size: 18,
+                      color: AppTheme.textDisabled,
+                    ),
+                  ),
           ),
 
           const SizedBox(width: 12),
@@ -1194,7 +1308,7 @@ class _CommentCardState extends State<_CommentCard> {
                   Row(
                     children: [
                       Text(
-                        widget.comment.name,
+                        comment.author?.displayName ?? 'Member',
                         style: GoogleFonts.manrope(
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
@@ -1203,7 +1317,7 @@ class _CommentCardState extends State<_CommentCard> {
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        widget.comment.timestamp,
+                        timeAgo,
                         style: GoogleFonts.manrope(
                           fontSize: 11,
                           fontWeight: FontWeight.w400,
@@ -1215,46 +1329,12 @@ class _CommentCardState extends State<_CommentCard> {
                   const SizedBox(height: 6),
                   // Comment text
                   Text(
-                    widget.comment.text,
+                    comment.body,
                     style: GoogleFonts.manrope(
                       fontSize: 14,
                       fontWeight: FontWeight.w400,
                       color: AppTheme.textSecondary,
                       height: 1.5,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  // Like action
-                  GestureDetector(
-                    onTap: () => setState(() => _liked = !_liked),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 200),
-                          child: Icon(
-                            _liked
-                                ? Icons.favorite_rounded
-                                : Icons.favorite_border_rounded,
-                            key: ValueKey(_liked),
-                            size: 14,
-                            color: _liked
-                                ? const Color(0xFFFF5C7A)
-                                : AppTheme.textDisabled,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${widget.comment.likeCount + (_liked ? 1 : 0)}',
-                          style: GoogleFonts.manrope(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: _liked
-                                ? const Color(0xFFFF5C7A)
-                                : AppTheme.textDisabled,
-                          ),
-                        ),
-                      ],
                     ),
                   ),
                 ],

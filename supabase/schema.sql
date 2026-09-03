@@ -251,3 +251,121 @@ drop trigger if exists on_circle_member_added on circle_members;
 create trigger on_circle_member_added
   after insert on circle_members
   for each row execute function notify_on_circle_join();
+
+-- ─── reactions & comments ───────────────────────────────────────────────
+-- One reaction per user per memory (tap again to remove/change) — kept
+-- simple deliberately. Both tables reuse is_circle_member() via a join to
+-- the parent memory, same privacy guarantee as everything else: only
+-- people in that memory's circle can see or add to it.
+
+create table if not exists memory_reactions (
+  memory_id uuid not null references memories(id) on delete cascade,
+  user_id uuid not null references profiles(id) on delete cascade,
+  emoji text not null,
+  created_at timestamptz not null default now(),
+  primary key (memory_id, user_id)
+);
+
+alter table memory_reactions enable row level security;
+
+create policy "circle members can view reactions"
+  on memory_reactions for select
+  to authenticated
+  using (
+    exists (
+      select 1 from memories m
+      where m.id = memory_id and is_circle_member(m.circle_id)
+    )
+  );
+
+create policy "circle members can react"
+  on memory_reactions for insert
+  to authenticated
+  with check (
+    user_id = auth.uid()
+    and exists (
+      select 1 from memories m
+      where m.id = memory_id and is_circle_member(m.circle_id)
+    )
+  );
+
+create policy "users can change their own reaction"
+  on memory_reactions for update
+  to authenticated
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid());
+
+create policy "users can remove their own reaction"
+  on memory_reactions for delete
+  to authenticated
+  using (user_id = auth.uid());
+
+create table if not exists memory_comments (
+  id uuid primary key default gen_random_uuid(),
+  memory_id uuid not null references memories(id) on delete cascade,
+  user_id uuid not null references profiles(id) on delete cascade,
+  body text not null,
+  created_at timestamptz not null default now()
+);
+
+alter table memory_comments enable row level security;
+
+create policy "circle members can view comments"
+  on memory_comments for select
+  to authenticated
+  using (
+    exists (
+      select 1 from memories m
+      where m.id = memory_id and is_circle_member(m.circle_id)
+    )
+  );
+
+create policy "circle members can comment"
+  on memory_comments for insert
+  to authenticated
+  with check (
+    user_id = auth.uid()
+    and exists (
+      select 1 from memories m
+      where m.id = memory_id and is_circle_member(m.circle_id)
+    )
+  );
+
+create policy "users can delete their own comment"
+  on memory_comments for delete
+  to authenticated
+  using (user_id = auth.uid());
+
+-- Notify only the memory's owner when someone else comments on it — not
+-- the whole circle. (Reactions deliberately don't notify at all: much
+-- lower signal, and would get noisy fast without a batching mechanism
+-- we don't have yet.)
+alter table notifications
+  drop constraint if exists notifications_type_check;
+alter table notifications
+  add constraint notifications_type_check
+  check (type in ('circle_memory', 'circle_join', 'memory_comment'));
+
+create or replace function notify_on_new_comment()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  owner_id uuid;
+begin
+  select uploaded_by into owner_id from memories where id = new.memory_id;
+  if owner_id is not null and owner_id != new.user_id then
+    insert into notifications (user_id, actor_id, type, circle_id, memory_id)
+    select owner_id, new.user_id, 'memory_comment', m.circle_id, new.memory_id
+    from memories m where m.id = new.memory_id;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_comment_created on memory_comments;
+create trigger on_comment_created
+  after insert on memory_comments
+  for each row execute function notify_on_new_comment();

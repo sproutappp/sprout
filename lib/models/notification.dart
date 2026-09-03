@@ -1,6 +1,6 @@
 import 'profile.dart';
 
-enum AppNotificationType { circleMemory, circleJoin }
+enum AppNotificationType { circleMemory, circleJoin, memoryComment }
 
 class AppNotification {
   final String id;
@@ -27,6 +27,8 @@ class AppNotification {
     switch (v) {
       case 'circle_join':
         return AppNotificationType.circleJoin;
+      case 'memory_comment':
+        return AppNotificationType.memoryComment;
       case 'circle_memory':
       default:
         return AppNotificationType.circleMemory;
@@ -56,6 +58,8 @@ class AppNotification {
         return '${actor.displayName} added a new memory to ${circleName ?? 'a circle'}';
       case AppNotificationType.circleJoin:
         return '${actor.displayName} joined ${circleName ?? 'your circle'}';
+      case AppNotificationType.memoryComment:
+        return '${actor.displayName} commented on your memory';
     }
   }
 }
