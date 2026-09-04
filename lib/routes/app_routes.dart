@@ -15,6 +15,7 @@ import '../presentation/profile_screen/profile_screen.dart';
 import '../presentation/edit_profile_screen/edit_profile_screen.dart';
 import '../presentation/member_profile_screen/member_profile_screen.dart';
 import '../presentation/notifications_screen/notifications_screen.dart';
+import '../presentation/join_circle_screen/join_circle_screen.dart';
 import '../widgets/app_scaffold.dart';
 
 class AppRoutes {
@@ -32,6 +33,7 @@ class AppRoutes {
   static const String editProfileScreen = '/edit-profile-screen';
   static const String memberProfileScreen = '/member-profile-screen';
   static const String notificationsScreen = '/notifications-screen';
+  static const String joinCircleScreen = '/join-circle-screen';
 }
 
 final GoRouter appRouter = GoRouter(
@@ -129,6 +131,15 @@ final GoRouter appRouter = GoRouter(
             );
           },
         );
+      },
+    ),
+
+    // ── Join Circle (outside shell) ────────────────────────────────────────
+    GoRoute(
+      path: AppRoutes.joinCircleScreen,
+      builder: (context, state) {
+        final token = state.extra as String?;
+        return JoinCircleScreen(initialToken: token);
       },
     ),
 

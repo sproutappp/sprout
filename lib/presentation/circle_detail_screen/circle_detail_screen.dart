@@ -1251,17 +1251,50 @@ class _InvitePeopleButton extends StatelessWidget {
 
 // ── Invite Sheet ──────────────────────────────────────────────────────────────
 
-class _InviteSheet extends StatelessWidget {
+class _InviteSheet extends StatefulWidget {
   final String circleId;
   final String circleName;
 
   const _InviteSheet({required this.circleId, required this.circleName});
 
-  String get _inviteLink => 'https://sprout.app/join/$circleId';
+  @override
+  State<_InviteSheet> createState() => _InviteSheetState();
+}
+
+class _InviteSheetState extends State<_InviteSheet> {
+  String? _token;
+  bool _isLoading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _generateInvite();
+  }
+
+  Future<void> _generateInvite() async {
+    try {
+      final token = await CirclesRepository.createInvite(widget.circleId);
+      if (!mounted) return;
+      setState(() {
+        _token = token;
+        _isLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _error = "Couldn't create an invite link — try again.";
+        _isLoading = false;
+      });
+    }
+  }
+
+  String get _inviteLink => 'https://sprout.app/join/${_token ?? ''}';
 
   @override
   Widget build(BuildContext context) {
     final bottomPadding = MediaQuery.of(context).padding.bottom;
+    final circleName = widget.circleName;
 
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
@@ -1301,91 +1334,119 @@ class _InviteSheet extends StatelessWidget {
             style: GoogleFonts.manrope(fontSize: 13, color: AppTheme.textMuted),
           ),
           const SizedBox(height: 24),
-          // Share link row
-          InkWell(
-            borderRadius: BorderRadius.circular(14),
-            onTap: () async {
-              await Clipboard.setData(ClipboardData(text: _inviteLink));
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      'Link copied',
-                      style: GoogleFonts.manrope(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
+
+          if (_isLoading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child: Center(
+                child: SizedBox(
+                  height: 20,
+                  width: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppTheme.primaryGreen,
+                  ),
+                ),
+              ),
+            )
+          else if (_error != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Text(
+                _error!,
+                style: GoogleFonts.manrope(
+                  fontSize: 13,
+                  color: AppTheme.error,
+                ),
+              ),
+            )
+          else
+            // Share link row
+            InkWell(
+              borderRadius: BorderRadius.circular(14),
+              onTap: () async {
+                await Clipboard.setData(ClipboardData(text: _inviteLink));
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Link copied',
+                        style: GoogleFonts.manrope(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black,
+                        ),
+                      ),
+                      backgroundColor: AppTheme.primaryGreen,
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      margin: const EdgeInsets.all(16),
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                }
+              },
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: AppTheme.surfaceVariantDark,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppTheme.outline, width: 0.8),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: const BoxDecoration(
+                        gradient: AppTheme.primaryGradient,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.link_rounded,
+                        size: 18,
                         color: Colors.black,
                       ),
                     ),
-                    backgroundColor: AppTheme.primaryGreen,
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    margin: const EdgeInsets.all(16),
-                    duration: const Duration(seconds: 2),
-                  ),
-                );
-              }
-            },
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: AppTheme.surfaceVariantDark,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppTheme.outline, width: 0.8),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: const BoxDecoration(
-                      gradient: AppTheme.primaryGradient,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.link_rounded,
-                      size: 18,
-                      color: Colors.black,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Share invite link',
-                          style: GoogleFonts.manrope(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: AppTheme.textPrimary,
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Share invite link',
+                            style: GoogleFonts.manrope(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.textPrimary,
+                            ),
                           ),
-                        ),
-                        Text(
-                          _inviteLink,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.manrope(
-                            fontSize: 12,
-                            color: AppTheme.textMuted,
+                          Text(
+                            _inviteLink,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.manrope(
+                              fontSize: 12,
+                              color: AppTheme.textMuted,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                  Text(
-                    'Copy',
-                    style: GoogleFonts.manrope(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: AppTheme.primaryGreen,
+                    Text(
+                      'Copy',
+                      style: GoogleFonts.manrope(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.primaryGreen,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
+
           const SizedBox(height: 20),
           SizedBox(
             width: double.infinity,

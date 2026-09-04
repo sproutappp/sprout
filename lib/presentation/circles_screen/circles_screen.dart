@@ -178,6 +178,30 @@ class _CirclesScreenState extends State<CirclesScreen> {
                               color: AppTheme.textMuted,
                             ),
                           ),
+                          const SizedBox(height: 10),
+                          GestureDetector(
+                            onTap: () =>
+                                context.push(AppRoutes.joinCircleScreen),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.link_rounded,
+                                  size: 14,
+                                  color: AppTheme.primaryGreen,
+                                ),
+                                const SizedBox(width: 5),
+                                Text(
+                                  'Have an invite link? Join a circle',
+                                  style: GoogleFonts.manrope(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppTheme.primaryGreen,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
                     ),

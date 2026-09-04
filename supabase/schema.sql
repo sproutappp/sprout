@@ -369,3 +369,82 @@ drop trigger if exists on_comment_created on memory_comments;
 create trigger on_comment_created
   after insert on memory_comments
   for each row execute function notify_on_new_comment();
+
+-- ─── circle invites (real join-via-link flow) ────────────────────────────
+-- The circle_members insert policy above only allows an existing admin
+-- (or the creator, at creation time) to add a row — nobody can add
+-- themselves. That's correct for direct adds, but it means a plain
+-- "share this link" flow with no token has no real way to let the
+-- recipient join. This table + RPC close that gap properly: a token
+-- proves someone was actually given the link by a real member, and the
+-- RPC (running as security definer) is the only path that's allowed to
+-- add a member on their own behalf, and only when redeeming a valid,
+-- unrevoked, unexpired token for that specific circle.
+
+create table if not exists circle_invites (
+  token uuid primary key default gen_random_uuid(),
+  circle_id uuid not null references circles(id) on delete cascade,
+  created_by uuid not null references profiles(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz, -- null = never expires (kept simple for V1)
+  revoked boolean not null default false
+);
+
+alter table circle_invites enable row level security;
+
+create policy "circle members can view their circle's invites"
+  on circle_invites for select
+  to authenticated
+  using (is_circle_member(circle_id));
+
+create policy "circle members can create invites for their circle"
+  on circle_invites for insert
+  to authenticated
+  with check (is_circle_member(circle_id) and created_by = auth.uid());
+
+create policy "circle members can revoke their circle's invites"
+  on circle_invites for update
+  to authenticated
+  using (is_circle_member(circle_id))
+  with check (is_circle_member(circle_id));
+
+create or replace function redeem_circle_invite(invite_token uuid)
+returns uuid -- the circle_id joined, on success
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_circle_id uuid;
+  v_revoked boolean;
+  v_expires_at timestamptz;
+begin
+  select circle_id, revoked, expires_at
+    into v_circle_id, v_revoked, v_expires_at
+  from circle_invites
+  where token = invite_token;
+
+  if v_circle_id is null then
+    raise exception 'This invite link isn''t valid.';
+  end if;
+
+  if v_revoked then
+    raise exception 'This invite link has been turned off.';
+  end if;
+
+  if v_expires_at is not null and v_expires_at < now() then
+    raise exception 'This invite link has expired.';
+  end if;
+
+  insert into circle_members (circle_id, user_id, role)
+  values (v_circle_id, auth.uid(), 'member')
+  on conflict (circle_id, user_id) do nothing;
+
+  return v_circle_id;
+end;
+$$;
+
+-- Explicit, not implicit: only signed-in users can call this, nobody
+-- anonymous.
+revoke all on function redeem_circle_invite(uuid) from public;
+grant execute on function redeem_circle_invite(uuid) to authenticated;

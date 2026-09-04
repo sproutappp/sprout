@@ -109,6 +109,35 @@ class CirclesRepository {
         .toList();
   }
 
+  /// Creates a real, redeemable invite token for a circle. The resulting
+  /// link (sprout.app/join/<token>) is what actually lets someone join —
+  /// the circle's raw id alone is never enough (RLS blocks self-join by
+  /// design; only redeem_circle_invite is allowed to add someone).
+  static Future<String> createInvite(String circleId) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) {
+      throw StateError('Must be signed in to create an invite');
+    }
+    final row = await _client
+        .from('circle_invites')
+        .insert({'circle_id': circleId, 'created_by': userId})
+        .select('token')
+        .single();
+    return row['token'] as String;
+  }
+
+  /// Redeems an invite token, adding the current user to that circle.
+  /// Returns the circle's id on success. Throws with a user-facing
+  /// message (from the RPC's `raise exception`) if the token is invalid,
+  /// revoked, or expired.
+  static Future<String> joinViaInvite(String token) async {
+    final circleId = await _client.rpc(
+      'redeem_circle_invite',
+      params: {'invite_token': token},
+    );
+    return circleId as String;
+  }
+
   /// Invite an existing user (by their profile id) into a circle.
   /// The inviter must already be a member (enforced by RLS).
   static Future<void> addMember({
