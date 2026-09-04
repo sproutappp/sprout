@@ -5,8 +5,6 @@ import '../core/supabase/supabase_service.dart';
 /// All auth calls go through here — screens never touch
 /// `Supabase.instance.client.auth` directly.
 class AuthService {
-  AuthService._();
-
   static GoTrueClient get _auth => SupabaseService.client.auth;
 
   static User? get currentUser => _auth.currentUser;

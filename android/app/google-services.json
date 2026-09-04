@@ -1,0 +1,94 @@
+{
+  "project_info": {
+    "project_number": "734501171389",
+    "project_id": "sprout-ed7ce",
+    "storage_bucket": "sprout-ed7ce.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:734501171389:android:8c292a2634ee06130087d4",
+        "android_client_info": {
+          "package_name": "com.sprout.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "734501171389-7ph3r3qkea3aogt0m6ntg7i30mheafq8.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.sprout.app",
+            "certificate_hash": "d0c7cf8f1d826ede9f50742a84bea8c815c45bfe"
+          }
+        },
+        {
+          "client_id": "734501171389-a7a1ron77trun6mo5qn0e4j2ltft3sld.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.sprout.app",
+            "certificate_hash": "5a566ec0eab7c52550dd9e67c6f12a1f91315309"
+          }
+        },
+        {
+          "client_id": "734501171389-fonfcis8on5bmmnvmclcs8cv8nojfk0t.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.sprout.app",
+            "certificate_hash": "4ddd22ae1565af20b0b1c567c0e37368048fcb9c"
+          }
+        },
+        {
+          "client_id": "734501171389-gft91g7ln7hupsisb2pimg1smtdjpaks.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.sprout.app",
+            "certificate_hash": "10b2a32b02f2fea040646a87385f372d560969a1"
+          }
+        },
+        {
+          "client_id": "734501171389-q1jehg0b71qnlisqf9v7h700fkdt0hqb.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.sprout.app",
+            "certificate_hash": "a20ed41a0ebe1161a025b62279eeae35c97e5b7e"
+          }
+        },
+        {
+          "client_id": "734501171389-t9p5pfkett67fgukrdf9hth6tgh2jn45.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.sprout.app",
+            "certificate_hash": "f05934082fb78cce54a52aa14b42c718d0007360"
+          }
+        },
+        {
+          "client_id": "734501171389-8199tv2f24r3tt47clc462detk6avn00.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCD827Src_CHRcbUz-ATAxbJ1ncqYCOLgM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "734501171389-2g4qredtgn8rhrrl4ka9rgk1foikvgbs.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "734501171389-89ugpb9lifjdajuksjr1bdvq2hfuu9r1.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.sprout.app"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
