@@ -1,4 +1,4 @@
-package com.example.sprout
+package com.sprout.app
 
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.android.FlutterFragmentActivity
