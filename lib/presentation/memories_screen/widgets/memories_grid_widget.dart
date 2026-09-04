@@ -6,7 +6,6 @@ import '../../../theme/app_theme.dart';
 
 // ── Mock Data ─────────────────────────────────────────────────────────────────
 
-enum MemoryPrivacy { public, circle, private }
 
 enum MemoryType { photo, video, story }
 
