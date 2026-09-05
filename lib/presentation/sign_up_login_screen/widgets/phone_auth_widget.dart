@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../services/firebase_auth_service.dart';
+import '../../../services/phone_auth_bridge.dart';
 import '../../../theme/app_theme.dart';
 
 /// Phone-number OTP sign-in via Firebase. Self-contained — owns its own
@@ -120,13 +121,19 @@ class _PhoneAuthWidgetState extends State<PhoneAuthWidget> {
           setState(() => _isVerifying = true);
           try {
             await FirebaseAuth.instance.signInWithCredential(credential);
+            // Use the local `e164` captured above, not `_e164Phone` —
+            // auto-verification can complete before codeSent ever fires,
+            // so the state field may not be set yet at this point.
+            await PhoneAuthBridge.completeSignIn(e164);
             if (!mounted) return;
             widget.onVerified();
-          } catch (_) {
+          } catch (e) {
             if (!mounted) return;
             setState(() {
               _isVerifying = false;
-              _errorMessage = "Auto-verification failed — enter the code manually.";
+              _errorMessage = e is StateError
+                  ? e.message
+                  : "Auto-verification failed — enter the code manually.";
             });
           }
         },
@@ -163,6 +170,7 @@ class _PhoneAuthWidgetState extends State<PhoneAuthWidget> {
         verificationId: _verificationId!,
         smsCode: code,
       );
+      await PhoneAuthBridge.completeSignIn(_e164Phone!);
       if (!mounted) return;
       widget.onVerified();
     } on FirebaseAuthException catch (e) {
@@ -171,11 +179,13 @@ class _PhoneAuthWidgetState extends State<PhoneAuthWidget> {
         _isVerifying = false;
         _errorMessage = e.message ?? 'Incorrect code — try again.';
       });
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       setState(() {
         _isVerifying = false;
-        _errorMessage = "Couldn't verify that code — try again.";
+        _errorMessage = e is StateError
+            ? e.message
+            : "Couldn't verify that code — try again.";
       });
     }
   }

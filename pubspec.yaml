@@ -9,6 +9,7 @@ environment:
 dependencies:
   firebase_core: ^4.2.0
   firebase_auth: ^6.1.0
+  cloud_firestore: ^6.0.0
   flutter:       # CRITICAL: Required for every Flutter project - DO NOT REMOVE
     sdk: flutter # CRITICAL: Required for every Flutter project - DO NOT REMOVE
   
