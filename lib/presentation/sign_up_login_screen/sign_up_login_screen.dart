@@ -137,6 +137,25 @@ class _SignUpLoginScreenState extends State<SignUpLoginScreen>
     }
   }
 
+  /// Called once Firebase has genuinely verified the phone number —
+  /// that part is real, not faked.
+  ///
+  /// IMPORTANT — read before changing this: there is currently no
+  /// Supabase session for phone-verified users. Every RLS-protected
+  /// query in this app (circles, memories, notifications, reactions,
+  /// comments — all of it) checks Supabase's own auth.uid(), which will
+  /// be null here. Bridging Firebase identity into a real Supabase
+  /// session is a genuine open architecture question, not a missing
+  /// dashboard toggle — see the conversation/report for why Supabase's
+  /// documented Third-Party Auth mechanism can't just be turned on
+  /// without further decisions. Navigating home is still correct for
+  /// now (the login itself succeeded), but screens past this point
+  /// will not show this user's real data until that's resolved.
+  void _onPhoneVerified() {
+    if (!mounted) return;
+    context.go(AppRoutes.homeScreen);
+  }
+
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
@@ -226,6 +245,7 @@ class _SignUpLoginScreenState extends State<SignUpLoginScreen>
                             signupFormKey: _signupFormKey,
                             onSubmit: _onSubmit,
                             onGoogleSignIn: _onGoogleSignIn,
+                            onPhoneVerified: _onPhoneVerified,
                           ),
                         ),
                       ),

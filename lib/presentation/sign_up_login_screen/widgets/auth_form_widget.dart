@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../theme/app_theme.dart';
+import './phone_auth_widget.dart';
 
 // V5 — Glassmorphism form fields
 // LOCKED: frosted background, animated focus, semi-transparent fill
@@ -18,6 +19,7 @@ class AuthFormWidget extends StatefulWidget {
   final GlobalKey<FormState> signupFormKey;
   final VoidCallback onSubmit;
   final VoidCallback onGoogleSignIn;
+  final VoidCallback onPhoneVerified;
 
   const AuthFormWidget({
     super.key,
@@ -33,6 +35,7 @@ class AuthFormWidget extends StatefulWidget {
     required this.signupFormKey,
     required this.onSubmit,
     required this.onGoogleSignIn,
+    required this.onPhoneVerified,
   });
 
   @override
@@ -200,6 +203,33 @@ class _AuthFormWidgetState extends State<AuthFormWidget> {
             ),
           ),
         ),
+
+        const SizedBox(height: 16),
+
+        // Divider
+        Row(
+          children: [
+            Expanded(child: Container(height: 0.5, color: AppTheme.outline)),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                'or use your phone',
+                style: TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 12,
+                  color: AppTheme.textMuted,
+                ),
+              ),
+            ),
+            Expanded(child: Container(height: 0.5, color: AppTheme.outline)),
+          ],
+        ),
+
+        const SizedBox(height: 16),
+
+        // Phone OTP sign-in — self-contained, isolated from Supabase
+        // (see the note in sign_up_login_screen.dart's onPhoneVerified).
+        PhoneAuthWidget(onVerified: widget.onPhoneVerified),
       ],
     );
   }
