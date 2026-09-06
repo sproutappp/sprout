@@ -1289,7 +1289,7 @@ class _InviteSheetState extends State<_InviteSheet> {
     }
   }
 
-  String get _inviteLink => 'https://sprout.app/join/${_token ?? ''}';
+  String get _inviteLink => 'https://sproutapp.in/join/${_token ?? ''}';
 
   @override
   Widget build(BuildContext context) {

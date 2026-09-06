@@ -135,11 +135,22 @@ final GoRouter appRouter = GoRouter(
     ),
 
     // ── Join Circle (outside shell) ────────────────────────────────────────
+    // Two ways in: manual paste (joinCircleScreen, extra: token or null)
+    // and the real deep link (/join/:token) — reached when someone taps
+    // an invite link on a device with the app installed, via the Android
+    // App Links intent-filter in AndroidManifest.xml.
     GoRoute(
       path: AppRoutes.joinCircleScreen,
       builder: (context, state) {
         final token = state.extra as String?;
         return JoinCircleScreen(initialToken: token);
+      },
+    ),
+    GoRoute(
+      path: '/join/:token',
+      builder: (context, state) {
+        final token = state.pathParameters['token'];
+        return JoinCircleScreen(initialToken: token, autoJoin: true);
       },
     ),
 

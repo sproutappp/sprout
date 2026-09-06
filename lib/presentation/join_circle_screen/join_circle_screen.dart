@@ -8,15 +8,19 @@ import '../../theme/app_theme.dart';
 import '../../routes/app_routes.dart';
 import '../../services/circles_repository.dart';
 
-/// Where someone lands to redeem a circle invite. There's no real
-/// OS-level deep-linking wired up yet (that needs a domain we'd have to
-/// verify ownership of for Android App Links / iOS Universal Links) —
-/// for now this is reached by manually pasting the link someone shared,
-/// via a "Have an invite link?" entry point on the Circles screen.
+/// Where someone lands to redeem a circle invite. Two entry points:
+/// manually pasting a link (Circles screen → "Have an invite link?"),
+/// or the real Android App Link (https://sproutapp.in/join/<token>) —
+/// see AndroidManifest.xml's intent-filter and app_routes.dart's
+/// `/join/:token` route.
 class JoinCircleScreen extends StatefulWidget {
   final String? initialToken;
+  /// True when reached via the real deep link — in that case we already
+  /// have a real token from a link the person tapped, so we attempt the
+  /// join immediately instead of making them tap a button too.
+  final bool autoJoin;
 
-  const JoinCircleScreen({super.key, this.initialToken});
+  const JoinCircleScreen({super.key, this.initialToken, this.autoJoin = false});
 
   @override
   State<JoinCircleScreen> createState() => _JoinCircleScreenState();
@@ -31,6 +35,10 @@ class _JoinCircleScreenState extends State<JoinCircleScreen> {
   void initState() {
     super.initState();
     _controller = TextEditingController(text: widget.initialToken ?? '');
+    if (widget.autoJoin && widget.initialToken != null) {
+      // Defer to after the first frame so context is safely usable.
+      WidgetsBinding.instance.addPostFrameCallback((_) => _join());
+    }
   }
 
   @override
