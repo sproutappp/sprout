@@ -1,10 +1,15 @@
+import 'dart:io';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../theme/app_theme.dart';
+import '../../models/profile.dart';
+import '../../services/profiles_repository.dart';
 
 // ── EditProfileScreen ─────────────────────────────────────────────────────────
 
@@ -19,29 +24,57 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final _formKey = GlobalKey<FormState>();
 
   late TextEditingController _nameController;
-  late TextEditingController _usernameController;
-  late TextEditingController _bioController;
 
+  bool _isLoading = true;
   bool _isSaving = false;
-  final String _avatarUrl =
-      'https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?w=400';
+  bool _isChangingPhoto = false;
+  String? _error;
+  Profile? _profile;
+  String? _avatarUrl;
+
+  final _imagePicker = ImagePicker();
 
   @override
   void initState() {
     super.initState();
     SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.light);
-    _nameController = TextEditingController(text: 'Maya');
-    _usernameController = TextEditingController(text: '@maya');
-    _bioController = TextEditingController(
-      text: 'Collecting little moments that matter.',
-    );
+    _nameController = TextEditingController();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    try {
+      final profile = await ProfilesRepository.fetchCurrentUser();
+      if (!mounted) return;
+      if (profile == null) {
+        setState(() {
+          _error = "Couldn't load your profile.";
+          _isLoading = false;
+        });
+        return;
+      }
+      setState(() {
+        _profile = profile;
+        _nameController.text = profile.fullName ?? '';
+        _avatarUrl = profile.avatarUrl;
+        _isLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _error = "Couldn't load your profile.";
+        _isLoading = false;
+      });
+    }
   }
 
   @override
   void dispose() {
     _nameController.dispose();
-    _usernameController.dispose();
-    _bioController.dispose();
     super.dispose();
   }
 
@@ -50,14 +83,74 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
     setState(() => _isSaving = true);
 
-    // Simulate a brief save delay for UX feedback
-    await Future.delayed(const Duration(milliseconds: 600));
+    try {
+      await ProfilesRepository.updateFullName(_nameController.text.trim());
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      context.pop();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            "Couldn't save your changes — try again.",
+            style: GoogleFonts.manrope(color: Colors.white),
+          ),
+          backgroundColor: AppTheme.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
 
-    if (!mounted) return;
-    setState(() => _isSaving = false);
+  Future<void> _pickAndUploadAvatar(ImageSource source) async {
+    Navigator.of(context).pop(); // close the bottom sheet first
+    try {
+      final picked = await _imagePicker.pickImage(
+        source: source,
+        maxWidth: 1024,
+        imageQuality: 85,
+      );
+      if (picked == null) return;
 
-    // Return to Profile
-    context.pop();
+      setState(() => _isChangingPhoto = true);
+      final newUrl = await ProfilesRepository.uploadAvatar(File(picked.path));
+      if (!mounted) return;
+      setState(() {
+        _avatarUrl = newUrl;
+        _isChangingPhoto = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isChangingPhoto = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            "Couldn't update your photo — try again.",
+            style: GoogleFonts.manrope(color: Colors.white),
+          ),
+          backgroundColor: AppTheme.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Future<void> _removeAvatar() async {
+    Navigator.of(context).pop();
+    setState(() => _isChangingPhoto = true);
+    try {
+      await ProfilesRepository.removeAvatar();
+      if (!mounted) return;
+      setState(() {
+        _avatarUrl = null;
+        _isChangingPhoto = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isChangingPhoto = false);
+    }
   }
 
   void _changePhoto() {
@@ -94,21 +187,23 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             _PhotoOptionRow(
               icon: Icons.camera_alt_outlined,
               label: 'Take a photo',
-              onTap: () => Navigator.of(ctx).pop(),
+              onTap: () => _pickAndUploadAvatar(ImageSource.camera),
             ),
             const SizedBox(height: 4),
             _PhotoOptionRow(
               icon: Icons.photo_library_outlined,
               label: 'Choose from library',
-              onTap: () => Navigator.of(ctx).pop(),
+              onTap: () => _pickAndUploadAvatar(ImageSource.gallery),
             ),
-            const SizedBox(height: 4),
-            _PhotoOptionRow(
-              icon: Icons.delete_outline_rounded,
-              label: 'Remove current photo',
-              isDestructive: true,
-              onTap: () => Navigator.of(ctx).pop(),
-            ),
+            if (_avatarUrl != null) ...[
+              const SizedBox(height: 4),
+              _PhotoOptionRow(
+                icon: Icons.delete_outline_rounded,
+                label: 'Remove current photo',
+                isDestructive: true,
+                onTap: _removeAvatar,
+              ),
+            ],
           ],
         ),
       ),
@@ -119,6 +214,34 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   Widget build(BuildContext context) {
     final topPadding = MediaQuery.of(context).padding.top;
     final bottomPadding = MediaQuery.of(context).padding.bottom;
+
+    if (_isLoading) {
+      return const Scaffold(
+        backgroundColor: AppTheme.backgroundDark,
+        body: Center(
+          child: CircularProgressIndicator(
+            color: AppTheme.primaryGreen,
+            strokeWidth: 2,
+          ),
+        ),
+      );
+    }
+
+    if (_error != null) {
+      return Scaffold(
+        backgroundColor: AppTheme.backgroundDark,
+        appBar: AppBar(
+          backgroundColor: AppTheme.backgroundDark,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+            onPressed: () => context.pop(),
+          ),
+        ),
+        body: Center(
+          child: Text(_error!, style: GoogleFonts.manrope(color: AppTheme.textMuted)),
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundDark,
@@ -189,7 +312,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       children: [
                         // Avatar with camera overlay
                         GestureDetector(
-                          onTap: _changePhoto,
+                          onTap: _isChangingPhoto ? null : _changePhoto,
                           child: Stack(
                             alignment: Alignment.bottomRight,
                             children: [
@@ -212,20 +335,48 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                 child: Padding(
                                   padding: const EdgeInsets.all(2.5),
                                   child: ClipOval(
-                                    child: CachedNetworkImage(
-                                      imageUrl: _avatarUrl,
-                                      fit: BoxFit.cover,
-                                      placeholder: (_, __) => Container(
-                                        color: AppTheme.surfaceVariantDark,
-                                      ),
-                                      errorWidget: (_, __, ___) => Container(
-                                        color: AppTheme.surfaceVariantDark,
-                                        child: const Icon(
-                                          Icons.person_rounded,
-                                          color: AppTheme.textMuted,
-                                          size: 40,
-                                        ),
-                                      ),
+                                    child: Stack(
+                                      fit: StackFit.expand,
+                                      children: [
+                                        _avatarUrl != null
+                                            ? CachedNetworkImage(
+                                                imageUrl: _avatarUrl!,
+                                                fit: BoxFit.cover,
+                                                placeholder: (_, __) => Container(
+                                                  color: AppTheme.surfaceVariantDark,
+                                                ),
+                                                errorWidget: (_, __, ___) => Container(
+                                                  color: AppTheme.surfaceVariantDark,
+                                                  child: const Icon(
+                                                    Icons.person_rounded,
+                                                    color: AppTheme.textMuted,
+                                                    size: 40,
+                                                  ),
+                                                ),
+                                              )
+                                            : Container(
+                                                color: AppTheme.surfaceVariantDark,
+                                                child: const Icon(
+                                                  Icons.person_rounded,
+                                                  color: AppTheme.textMuted,
+                                                  size: 40,
+                                                ),
+                                              ),
+                                        if (_isChangingPhoto)
+                                          Container(
+                                            color: Colors.black.withAlpha(140),
+                                            child: const Center(
+                                              child: SizedBox(
+                                                width: 24,
+                                                height: 24,
+                                                child: CircularProgressIndicator(
+                                                  strokeWidth: 2,
+                                                  color: AppTheme.primaryGreen,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                      ],
                                     ),
                                   ),
                                 ),
@@ -288,35 +439,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                             }
                             return null;
                           },
-                        ),
-
-                        const SizedBox(height: 20),
-
-                        // Username
-                        _FieldLabel(label: 'Username'),
-                        const SizedBox(height: 8),
-                        _ProfileTextField(
-                          controller: _usernameController,
-                          hintText: '@username',
-                          keyboardType: TextInputType.text,
-                          validator: (v) {
-                            if (v == null || v.trim().isEmpty) {
-                              return 'Username cannot be empty';
-                            }
-                            return null;
-                          },
-                        ),
-
-                        const SizedBox(height: 20),
-
-                        // Bio
-                        _FieldLabel(label: 'Bio'),
-                        const SizedBox(height: 8),
-                        _ProfileTextField(
-                          controller: _bioController,
-                          hintText: 'Tell your story…',
-                          maxLines: 3,
-                          keyboardType: TextInputType.multiline,
                         ),
                       ],
                     ),

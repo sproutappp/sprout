@@ -448,3 +448,36 @@ $$;
 -- anonymous.
 revoke all on function redeem_circle_invite(uuid) from public;
 grant execute on function redeem_circle_invite(uuid) to authenticated;
+
+-- ─── avatars storage ───────────────────────────────────────────────────
+-- Public bucket — profile pictures are low-sensitivity compared to
+-- family memory photos, and profiles.avatar_url is already readable by
+-- any signed-in user via the profiles table's own RLS policy, so a
+-- public bucket doesn't expose anything that wasn't already visible.
+-- This also avoids needing to refresh signed URLs for something this
+-- simple (unlike the private `memories` bucket).
+
+insert into storage.buckets (id, name, public)
+values ('avatars', 'avatars', true)
+on conflict (id) do update set public = true;
+
+create policy "anyone signed in can view avatars"
+  on storage.objects for select
+  to authenticated
+  using (bucket_id = 'avatars');
+
+create policy "users can upload their own avatar"
+  on storage.objects for insert
+  to authenticated
+  with check (
+    bucket_id = 'avatars'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+create policy "users can replace their own avatar"
+  on storage.objects for update
+  to authenticated
+  using (
+    bucket_id = 'avatars'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );

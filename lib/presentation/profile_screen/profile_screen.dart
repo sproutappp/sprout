@@ -6,58 +6,55 @@ import 'package:go_router/go_router.dart';
 
 import '../../theme/app_theme.dart';
 import '../../routes/app_routes.dart';
+import '../../models/profile.dart';
+import '../../models/circle.dart';
+import '../../models/memory.dart';
+import '../../services/auth_service.dart';
+import '../../services/firebase_auth_service.dart';
+import '../../services/profiles_repository.dart';
+import '../../services/circles_repository.dart';
+import '../../services/memories_repository.dart';
+import '../memories_screen/widgets/memories_grid_widget.dart' show MemoryItem, MemoryPrivacy, MemoryType;
 
-// ── Sample data ───────────────────────────────────────────────────────────────
+// ── View-model shapes ────────────────────────────────────────────────────
+// Populated from real Supabase data in _load() below — no hardcoded
+// instances of these anymore.
 
 class _MemoryPreview {
+  final String id;
   final String title;
   final String date;
   final String imageUrl;
   final String semanticLabel;
+  final String circleName;
 
   const _MemoryPreview({
+    required this.id,
     required this.title,
     required this.date,
     required this.imageUrl,
     required this.semanticLabel,
+    required this.circleName,
   });
+
+  factory _MemoryPreview.fromMemory(Memory m) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    return _MemoryPreview(
+      id: m.id,
+      title: m.caption?.isNotEmpty == true ? m.caption! : 'A shared memory',
+      date: '${months[m.createdAt.month - 1]} ${m.createdAt.day}',
+      imageUrl: m.imageUrl,
+      semanticLabel: 'Shared memory photo',
+      circleName: m.circleName ?? 'Circle',
+    );
+  }
 }
 
-const List<_MemoryPreview> _myMemories = [
-  _MemoryPreview(
-    title: 'Sunrise at Mullayanagiri',
-    date: 'Aug 12',
-    imageUrl:
-        'https://images.pexels.com/photos/1261728/pexels-photo-1261728.jpeg?w=300',
-    semanticLabel: 'Golden sunrise over misty mountain peaks with orange sky',
-  ),
-  _MemoryPreview(
-    title: "Grandma's 80th Birthday",
-    date: 'Aug 5',
-    imageUrl:
-        'https://images.pexels.com/photos/1128318/pexels-photo-1128318.jpeg?w=300',
-    semanticLabel:
-        'Elderly woman smiling surrounded by family at birthday celebration',
-  ),
-  _MemoryPreview(
-    title: 'Late night chai',
-    date: 'Jul 28',
-    imageUrl:
-        'https://images.pexels.com/photos/1417945/pexels-photo-1417945.jpeg?w=300',
-    semanticLabel:
-        'Steaming cup of chai tea on wooden table in warm evening light',
-  ),
-  _MemoryPreview(
-    title: 'College Farewell',
-    date: 'Jul 15',
-    imageUrl:
-        'https://images.pexels.com/photos/1438072/pexels-photo-1438072.jpeg?w=300',
-    semanticLabel:
-        'Group of young college students laughing together on campus',
-  ),
-];
-
 class _CircleRow {
+  final String id;
   final String name;
   final int memberCount;
   final String imageUrl;
@@ -65,48 +62,31 @@ class _CircleRow {
   final Color accent;
 
   const _CircleRow({
+    required this.id,
     required this.name,
     required this.memberCount,
     required this.imageUrl,
     required this.semanticLabel,
     required this.accent,
   });
-}
 
-const List<_CircleRow> _myCircles = [
-  _CircleRow(
-    name: 'Family',
-    memberCount: 8,
-    imageUrl:
+  static const _palette = [
+    Color(0xFFFFB84D),
+    Color(0xFF39FF8C),
+    Color(0xFF00E5FF),
+    Color(0xFFFF6B9D),
+  ];
+
+  factory _CircleRow.fromCircle(Circle c, int index) => _CircleRow(
+    id: c.id,
+    name: c.name,
+    memberCount: c.memberCount,
+    imageUrl: c.coverImageUrl ??
         'https://images.pexels.com/photos/1128318/pexels-photo-1128318.jpeg?w=120',
-    semanticLabel: 'Happy family group sitting together outdoors',
-    accent: Color(0xFFFFB84D),
-  ),
-  _CircleRow(
-    name: 'College Friends',
-    memberCount: 14,
-    imageUrl:
-        'https://images.pexels.com/photos/1438072/pexels-photo-1438072.jpeg?w=120',
-    semanticLabel: 'Group of young college students laughing together',
-    accent: Color(0xFF39FF8C),
-  ),
-  _CircleRow(
-    name: 'Adventure Crew',
-    memberCount: 5,
-    imageUrl:
-        'https://images.pexels.com/photos/1261728/pexels-photo-1261728.jpeg?w=120',
-    semanticLabel: 'Hikers on mountain trail at sunrise',
-    accent: Color(0xFF00E5FF),
-  ),
-  _CircleRow(
-    name: 'Best Friends',
-    memberCount: 4,
-    imageUrl:
-        'https://images.pexels.com/photos/1024993/pexels-photo-1024993.jpeg?w=120',
-    semanticLabel: 'Close friends smiling together outdoors',
-    accent: Color(0xFFFF6B9D),
-  ),
-];
+    semanticLabel: '${c.name} circle cover photo',
+    accent: _palette[index % _palette.length],
+  );
+}
 
 // ── Account action rows ───────────────────────────────────────────────────────
 
@@ -142,16 +122,69 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final ScrollController _scrollController = ScrollController();
 
+  Profile? _profile;
+  List<_MemoryPreview> _myMemories = [];
+  List<_CircleRow> _myCircles = [];
+  bool _isLoading = true;
+  String? _error;
+
   @override
   void initState() {
     super.initState();
     SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.light);
+    _load();
   }
 
   @override
   void dispose() {
     _scrollController.dispose();
     super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    try {
+      final profile = await ProfilesRepository.fetchCurrentUser();
+      if (profile == null) {
+        setState(() {
+          _error = "Couldn't load your profile.";
+          _isLoading = false;
+        });
+        return;
+      }
+
+      final circles = await CirclesRepository.fetchMyCircles();
+      final memories = await MemoriesRepository.fetchByUploader(profile.id);
+
+      if (!mounted) return;
+      setState(() {
+        _profile = profile;
+        _myCircles = [
+          for (var i = 0; i < circles.length; i++)
+            _CircleRow.fromCircle(circles[i], i),
+        ];
+        _myMemories = memories.map(_MemoryPreview.fromMemory).toList();
+        _isLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _error = "Couldn't load your profile.";
+        _isLoading = false;
+      });
+    }
+  }
+
+  static String _formatMemberSince(DateTime? dt) {
+    if (dt == null) return '';
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    return '${months[dt.month - 1]} ${dt.year}';
   }
 
   void _showSignOutDialog() {
@@ -191,8 +224,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.of(ctx).pop();
+              // Sign out of both — a user may have arrived via email/
+              // Google (Supabase-native) or via the phone bridge (which
+              // holds both a Firebase session and a bridged Supabase
+              // one). Clearing only one would leave a stale session
+              // behind. FirebaseAuth.signOut() on an already-signed-out
+              // instance is a safe no-op, so calling both unconditionally
+              // is fine either way.
+              await AuthService.signOut();
+              await FirebaseAuthService.signOut();
+              if (!mounted) return;
               context.go(AppRoutes.signUpLoginScreen);
             },
             child: Text(
@@ -215,14 +258,47 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
     if (action.label == 'Edit Profile') {
       context.push(AppRoutes.editProfileScreen);
+    } else if (action.label == 'Notifications') {
+      context.push(AppRoutes.notificationsScreen);
     }
-    // Other actions are placeholders for now
+    // Privacy / Settings are placeholders for now — no screens exist
+    // for these yet, so left unwired rather than pointed at nothing.
   }
 
   @override
   Widget build(BuildContext context) {
     final bottomPadding = MediaQuery.of(context).padding.bottom;
     final topPadding = MediaQuery.of(context).padding.top;
+
+    if (_isLoading) {
+      return const Scaffold(
+        backgroundColor: AppTheme.backgroundDark,
+        body: Center(
+          child: CircularProgressIndicator(
+            color: AppTheme.primaryGreen,
+            strokeWidth: 2,
+          ),
+        ),
+      );
+    }
+
+    if (_error != null || _profile == null) {
+      return Scaffold(
+        backgroundColor: AppTheme.backgroundDark,
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Text(
+              _error ?? 'Profile not found.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.manrope(color: AppTheme.textMuted),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final profile = _profile!;
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundDark,
@@ -295,28 +371,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             child: Padding(
                               padding: const EdgeInsets.all(2.5),
                               child: ClipOval(
-                                child: CachedNetworkImage(
-                                  imageUrl:
-                                      'https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?w=200',
-                                  fit: BoxFit.cover,
-                                  placeholder: (_, __) => Container(
-                                    color: AppTheme.surfaceVariantDark,
-                                  ),
-                                  errorWidget: (_, __, ___) => Container(
-                                    color: AppTheme.surfaceVariantDark,
-                                    child: const Icon(
-                                      Icons.person_rounded,
-                                      color: AppTheme.textMuted,
-                                      size: 32,
-                                    ),
-                                  ),
-                                ),
+                                child: profile.avatarUrl != null
+                                    ? CachedNetworkImage(
+                                        imageUrl: profile.avatarUrl!,
+                                        fit: BoxFit.cover,
+                                        placeholder: (_, __) => Container(
+                                          color: AppTheme.surfaceVariantDark,
+                                        ),
+                                        errorWidget: (_, __, ___) => Container(
+                                          color: AppTheme.surfaceVariantDark,
+                                          child: const Icon(
+                                            Icons.person_rounded,
+                                            color: AppTheme.textMuted,
+                                            size: 32,
+                                          ),
+                                        ),
+                                      )
+                                    : Container(
+                                        color: AppTheme.surfaceVariantDark,
+                                        child: const Icon(
+                                          Icons.person_rounded,
+                                          color: AppTheme.textMuted,
+                                          size: 32,
+                                        ),
+                                      ),
                               ),
                             ),
                           ),
                           // Edit badge
                           GestureDetector(
-                            onTap: () {},
+                            onTap: () =>
+                                context.push(AppRoutes.editProfileScreen),
                             child: Container(
                               width: 24,
                               height: 24,
@@ -339,31 +424,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                       const SizedBox(height: 14),
                       Text(
-                        'Maya',
+                        profile.displayName,
                         style: GoogleFonts.manrope(
                           color: AppTheme.textPrimary,
                           fontSize: 20,
                           fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '@maya',
-                        style: GoogleFonts.manrope(
-                          color: AppTheme.primaryGreen,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Collecting little moments that matter.',
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.manrope(
-                          color: AppTheme.textSecondary,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w400,
-                          height: 1.5,
                         ),
                       ),
                       const SizedBox(height: 14),
@@ -413,11 +478,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     child: Row(
                       children: [
-                        _StatItem(value: '42', label: 'Memories'),
+                        _StatItem(
+                          value: '${_myMemories.length}',
+                          label: 'Memories',
+                        ),
                         _VerticalDivider(),
-                        _StatItem(value: '4', label: 'Circles'),
-                        _VerticalDivider(),
-                        _StatItem(value: '18', label: 'People'),
+                        _StatItem(
+                          value: '${_myCircles.length}',
+                          label: 'Circles',
+                        ),
                       ],
                     ),
                   ),
@@ -444,7 +513,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     itemCount: _myMemories.length,
                     itemBuilder: (context, index) {
                       final m = _myMemories[index];
-                      return _MemoryCard(memory: m);
+                      return GestureDetector(
+                        onTap: () => context.push(
+                          AppRoutes.memoryDetailScreen,
+                          extra: MemoryItem(
+                            id: m.id,
+                            title: m.title,
+                            date: m.date,
+                            imageUrl: m.imageUrl,
+                            semanticLabel: m.semanticLabel,
+                            circle: m.circleName,
+                            circleColor: AppTheme.primaryGreen,
+                            privacy: MemoryPrivacy.circle,
+                            type: MemoryType.photo,
+                          ),
+                        ),
+                        child: _MemoryCard(memory: m),
+                      );
                     },
                   ),
                 ),
@@ -465,7 +550,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   final c = _myCircles[index];
                   return Padding(
                     padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-                    child: _CircleRowItem(circle: c),
+                    child: GestureDetector(
+                      onTap: () => context.push(
+                        AppRoutes.circleDetailScreen,
+                        extra: c.id,
+                      ),
+                      child: _CircleRowItem(circle: c),
+                    ),
                   );
                 }, childCount: _myCircles.length),
               ),
@@ -500,17 +591,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           children: [
                             _ActivityRow(
                               icon: Icons.photo_library_outlined,
-                              text: '42 memories shared',
+                              text: '${_myMemories.length} memories shared',
                             ),
                             const SizedBox(height: 10),
                             _ActivityRow(
                               icon: Icons.calendar_today_outlined,
-                              text: 'Member since Aug 2026',
+                              text: 'Member since ${_formatMemberSince(profile.createdAt)}',
                             ),
                             const SizedBox(height: 10),
                             _ActivityRow(
                               icon: Icons.group_outlined,
-                              text: 'Part of 4 circles',
+                              text: 'Part of ${_myCircles.length} circle${_myCircles.length == 1 ? '' : 's'}',
                             ),
                           ],
                         ),
