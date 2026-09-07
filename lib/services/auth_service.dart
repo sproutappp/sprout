@@ -47,10 +47,11 @@ class AuthService {
 
   static Future<void> signOut() => _auth.signOut();
 
-  /// Google sign-in via Supabase OAuth. Requires the Google provider to
-  /// be configured in the Supabase dashboard (Authentication > Providers)
-  /// and the redirect URL registered there.
+  /// Google sign-in via Supabase OAuth.
   static Future<bool> signInWithGoogle() {
-    return _auth.signInWithOAuth(OAuthProvider.google);
+    return _auth.signInWithOAuth(
+      OAuthProvider.google,
+      redirectTo: 'app.sprout.auth://login-callback/',
+    );
   }
 }
