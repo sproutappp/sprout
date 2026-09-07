@@ -8,7 +8,7 @@ import '../../../routes/app_routes.dart';
 import '../../../services/memories_repository.dart';
 import '../../../widgets/loading_skeleton_widget.dart';
 import '../../../widgets/status_badge_widget.dart';
-import '../../memories_screen/widgets/memories_grid_widget.dart' hide MemoryPrivacy;
+import '../../memories_screen/widgets/memories_grid_widget.dart';
 
 class _MemoryCard {
   final String id, title, date, imageUrl, semanticLabel, circle;

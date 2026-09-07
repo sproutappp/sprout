@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
-
-enum MemoryPrivacy { private, circle, public }
+import '../presentation/memories_screen/widgets/memories_grid_widget.dart'
+    show MemoryPrivacy;
 
 class PrivacyBadgeWidget extends StatelessWidget {
   final MemoryPrivacy privacy;
