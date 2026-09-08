@@ -7,6 +7,7 @@ import '../../theme/app_theme.dart';
 import '../../routes/app_routes.dart';
 import '../../models/circle.dart';
 import '../../services/circles_repository.dart';
+import '../../widgets/current_user_avatar_widget.dart';
 
 // ── Circle card view-model ──────────────────────────────────────────────────
 // Wraps the real `Circle` model with a few presentation-only touches
@@ -106,7 +107,8 @@ class _CirclesScreenState extends State<CirclesScreen> {
         ];
         _isLoading = false;
       });
-    } catch (_) {
+    } catch (e, st) {
+      debugPrint('CirclesScreen: fetchMyCircles failed: $e\n$st');
       if (!mounted) return;
       setState(() {
         _error = "Couldn't load your circles. Pull down to try again.";
@@ -116,15 +118,23 @@ class _CirclesScreenState extends State<CirclesScreen> {
   }
 
   Future<void> _openCreateCircle() async {
-    final created = await showModalBottomSheet<bool>(
+    // The sheet returns the new circle's id on success (null if the user
+    // cancelled or creation failed).
+    final newCircleId = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => const _CreateCircleSheet(),
     );
-    if (created == true) {
-      _loadCircles();
-    }
+    if (newCircleId == null) return;
+
+    await _loadCircles();
+    if (!mounted) return;
+
+    // Land on the new circle's detail screen, where "Invite People"
+    // (real, redeemable share links) already lives — rather than
+    // re-implementing member-adding inside the creation sheet.
+    context.push(AppRoutes.circleDetailScreen, extra: newCircleId);
   }
 
   void _openCircleDetail(_CircleData circle) {
@@ -250,33 +260,9 @@ class _CirclesScreenState extends State<CirclesScreen> {
                     ),
                     const SizedBox(width: 8),
                     // User avatar → Profile
-                    GestureDetector(
+                    CurrentUserAvatarWidget(
+                      size: 40,
                       onTap: () => context.go(AppRoutes.profileScreen),
-                      child: Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: AppTheme.primaryGreen.withAlpha(128),
-                            width: 1.5,
-                          ),
-                        ),
-                        child: ClipOval(
-                          child: Image.network(
-                            'https://images.pexels.com/photos/3763188/pexels-photo-3763188.jpeg?w=100',
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Container(
-                              color: AppTheme.surfaceVariantDark,
-                              child: const Icon(
-                                Icons.person_rounded,
-                                size: 20,
-                                color: AppTheme.textMuted,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
                     ),
                     const SizedBox(width: 8),
                     // Create circle button
@@ -685,14 +671,12 @@ class _CreateCircleSheet extends StatefulWidget {
 class _CreateCircleSheetState extends State<_CreateCircleSheet> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _descController = TextEditingController();
-  final TextEditingController _peopleController = TextEditingController();
   bool _isCreating = false;
 
   @override
   void dispose() {
     _nameController.dispose();
     _descController.dispose();
-    _peopleController.dispose();
     super.dispose();
   }
 
@@ -702,34 +686,20 @@ class _CreateCircleSheetState extends State<_CreateCircleSheet> {
     setState(() => _isCreating = true);
 
     try {
-      await CirclesRepository.createCircle(
+      final circle = await CirclesRepository.createCircle(
         name: name,
         description: _descController.text.trim().isEmpty
             ? null
             : _descController.text.trim(),
       );
       if (!mounted) return;
-      Navigator.pop(context, true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '"$name" circle created!',
-            style: GoogleFonts.manrope(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: Colors.black,
-            ),
-          ),
-          backgroundColor: AppTheme.primaryGreen,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          margin: const EdgeInsets.all(16),
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    } catch (_) {
+      // Close the sheet, tell the list screen to refresh, and hand the
+      // new circle back so the caller can immediately open its detail
+      // screen — that's where the existing "Invite People" / share-link
+      // flow already lives (see _InviteSheet in circle_detail_screen.dart).
+      Navigator.pop(context, circle.id);
+    } catch (e, st) {
+      debugPrint('CreateCircleSheet: createCircle failed: $e\n$st');
       if (!mounted) return;
       setState(() => _isCreating = false);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -821,17 +791,6 @@ class _CreateCircleSheetState extends State<_CreateCircleSheet> {
             hint: 'What\'s this circle about?',
             icon: Icons.notes_rounded,
             maxLines: 2,
-          ),
-
-          const SizedBox(height: 16),
-
-          // Add people
-          _SheetLabel('Add people'),
-          const SizedBox(height: 8),
-          _SheetTextField(
-            controller: _peopleController,
-            hint: 'Search by name or username...',
-            icon: Icons.person_add_rounded,
           ),
 
           const SizedBox(height: 28),

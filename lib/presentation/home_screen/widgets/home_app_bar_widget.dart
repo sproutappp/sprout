@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../theme/app_theme.dart';
 import '../../../routes/app_routes.dart';
+import '../../../widgets/current_user_avatar_widget.dart';
 
 class HomeAppBarWidget extends StatelessWidget {
   final double scrollOffset;
@@ -61,33 +62,9 @@ class HomeAppBarWidget extends StatelessWidget {
                 const SizedBox(width: 10),
 
                 // Profile avatar
-                GestureDetector(
+                CurrentUserAvatarWidget(
+                  size: 38,
                   onTap: () => context.go(AppRoutes.profileScreen),
-                  child: Container(
-                    width: 38,
-                    height: 38,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: AppTheme.primaryGreen.withAlpha(128),
-                        width: 1.5,
-                      ),
-                    ),
-                    child: ClipOval(
-                      child: Image.network(
-                        'https://images.pexels.com/photos/3763188/pexels-photo-3763188.jpeg?w=100',
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
-                          color: AppTheme.surfaceVariantDark,
-                          child: const Icon(
-                            Icons.person_rounded,
-                            size: 20,
-                            color: AppTheme.textMuted,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
                 ),
               ],
             ),

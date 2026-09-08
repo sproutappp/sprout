@@ -1,4 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -128,6 +129,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isLoading = true;
   String? _error;
 
+  // Circles/memories load independently of the profile itself — a
+  // failure loading either of these must never blank out the profile
+  // that already loaded successfully. These only affect their own
+  // section of the screen, not the top-level _error above.
+  bool _circlesFailed = false;
+  bool _memoriesFailed = false;
+
   @override
   void initState() {
     super.initState();
@@ -145,36 +153,68 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() {
       _isLoading = true;
       _error = null;
+      _circlesFailed = false;
+      _memoriesFailed = false;
     });
+
+    // Step 1: the profile itself. This is the only failure that should
+    // blank the whole screen — everything below degrades independently.
+    Profile profile;
     try {
-      final profile = await ProfilesRepository.fetchCurrentUser();
-      if (profile == null) {
+      final fetched = await ProfilesRepository.fetchCurrentUser();
+      if (fetched == null) {
+        if (!mounted) return;
         setState(() {
           _error = "Couldn't load your profile.";
           _isLoading = false;
         });
         return;
       }
-
-      final circles = await CirclesRepository.fetchMyCircles();
-      final memories = await MemoriesRepository.fetchByUploader(profile.id);
-
-      if (!mounted) return;
-      setState(() {
-        _profile = profile;
-        _myCircles = [
-          for (var i = 0; i < circles.length; i++)
-            _CircleRow.fromCircle(circles[i], i),
-        ];
-        _myMemories = memories.map(_MemoryPreview.fromMemory).toList();
-        _isLoading = false;
-      });
-    } catch (_) {
+      profile = fetched;
+    } catch (e, st) {
+      debugPrint('ProfileScreen: profile fetch failed: $e\n$st');
       if (!mounted) return;
       setState(() {
         _error = "Couldn't load your profile.";
         _isLoading = false;
       });
+      return;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _profile = profile;
+      _isLoading = false;
+    });
+
+    // Step 2: circles — independent. A failure here only clears the
+    // circles section, it never touches _error/_profile.
+    try {
+      final circles = await CirclesRepository.fetchMyCircles();
+      if (!mounted) return;
+      setState(() {
+        _myCircles = [
+          for (var i = 0; i < circles.length; i++)
+            _CircleRow.fromCircle(circles[i], i),
+        ];
+      });
+    } catch (e, st) {
+      debugPrint('ProfileScreen: circles fetch failed: $e\n$st');
+      if (!mounted) return;
+      setState(() => _circlesFailed = true);
+    }
+
+    // Step 3: memories — independent of both of the above.
+    try {
+      final memories = await MemoriesRepository.fetchByUploader(profile.id);
+      if (!mounted) return;
+      setState(() {
+        _myMemories = memories.map(_MemoryPreview.fromMemory).toList();
+      });
+    } catch (e, st) {
+      debugPrint('ProfileScreen: memories fetch failed: $e\n$st');
+      if (!mounted) return;
+      setState(() => _memoriesFailed = true);
     }
   }
 
@@ -503,37 +543,64 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
               ),
-              SliverToBoxAdapter(
-                child: SizedBox(
-                  height: 148,
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
+              if (_memoriesFailed)
+                SliverToBoxAdapter(
+                  child: Padding(
                     padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                    physics: const BouncingScrollPhysics(),
-                    itemCount: _myMemories.length,
-                    itemBuilder: (context, index) {
-                      final m = _myMemories[index];
-                      return GestureDetector(
-                        onTap: () => context.push(
-                          AppRoutes.memoryDetailScreen,
-                          extra: MemoryItem(
-                            id: m.id,
-                            title: m.title,
-                            date: m.date,
-                            imageUrl: m.imageUrl,
-                            semanticLabel: m.semanticLabel,
-                            circle: m.circleName,
-                            circleColor: AppTheme.primaryGreen,
-                            privacy: MemoryPrivacy.circle,
-                            type: MemoryType.photo,
+                    child: Text(
+                      "Couldn't load memories right now.",
+                      style: GoogleFonts.manrope(
+                        color: AppTheme.textMuted,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                )
+              else if (_myMemories.isEmpty)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                    child: Text(
+                      'No memories yet.',
+                      style: GoogleFonts.manrope(
+                        color: AppTheme.textMuted,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                )
+              else
+                SliverToBoxAdapter(
+                  child: SizedBox(
+                    height: 148,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                      physics: const BouncingScrollPhysics(),
+                      itemCount: _myMemories.length,
+                      itemBuilder: (context, index) {
+                        final m = _myMemories[index];
+                        return GestureDetector(
+                          onTap: () => context.push(
+                            AppRoutes.memoryDetailScreen,
+                            extra: MemoryItem(
+                              id: m.id,
+                              title: m.title,
+                              date: m.date,
+                              imageUrl: m.imageUrl,
+                              semanticLabel: m.semanticLabel,
+                              circle: m.circleName,
+                              circleColor: AppTheme.primaryGreen,
+                              privacy: MemoryPrivacy.circle,
+                              type: MemoryType.photo,
+                            ),
                           ),
-                        ),
-                        child: _MemoryCard(memory: m),
-                      );
-                    },
+                          child: _MemoryCard(memory: m),
+                        );
+                      },
+                    ),
                   ),
                 ),
-              ),
 
               // ── My Circles ───────────────────────────────────────────────
               SliverToBoxAdapter(
@@ -545,21 +612,48 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
               ),
-              SliverList(
-                delegate: SliverChildBuilderDelegate((context, index) {
-                  final c = _myCircles[index];
-                  return Padding(
+              if (_circlesFailed)
+                SliverToBoxAdapter(
+                  child: Padding(
                     padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-                    child: GestureDetector(
-                      onTap: () => context.push(
-                        AppRoutes.circleDetailScreen,
-                        extra: c.id,
+                    child: Text(
+                      "Couldn't load circles right now.",
+                      style: GoogleFonts.manrope(
+                        color: AppTheme.textMuted,
+                        fontSize: 13,
                       ),
-                      child: _CircleRowItem(circle: c),
                     ),
-                  );
-                }, childCount: _myCircles.length),
-              ),
+                  ),
+                )
+              else if (_myCircles.isEmpty)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                    child: Text(
+                      "You're not part of any circles yet.",
+                      style: GoogleFonts.manrope(
+                        color: AppTheme.textMuted,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                )
+              else
+                SliverList(
+                  delegate: SliverChildBuilderDelegate((context, index) {
+                    final c = _myCircles[index];
+                    return Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                      child: GestureDetector(
+                        onTap: () => context.push(
+                          AppRoutes.circleDetailScreen,
+                          extra: c.id,
+                        ),
+                        child: _CircleRowItem(circle: c),
+                      ),
+                    );
+                  }, childCount: _myCircles.length),
+                ),
 
               // ── Activity / About ─────────────────────────────────────────
               SliverToBoxAdapter(

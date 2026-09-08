@@ -67,7 +67,10 @@ class _MemoriesScreenState extends State<MemoriesScreen> {
         ];
         _isLoading = false;
       });
-    } catch (_) {
+    } catch (e, st) {
+      // Logged (not swallowed) so the real cause is visible in
+      // `flutter run` / device logs instead of just a generic message.
+      debugPrint('MemoriesScreen: fetchAllForUser failed: $e\n$st');
       if (!mounted) return;
       setState(() {
         _error = "Couldn't load memories. Pull down to try again.";

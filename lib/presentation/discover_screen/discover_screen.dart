@@ -104,7 +104,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         _onThisDay = onThisDay;
         _isLoading = false;
       });
-    } catch (_) {
+    } catch (e, st) {
+      debugPrint('DiscoverScreen: load failed: $e\n$st');
       if (!mounted) return;
       setState(() {
         _error = "Couldn't load Discover right now.";
