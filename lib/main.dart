@@ -13,6 +13,12 @@ void main() async {
 
   await SupabaseService.initialize();
 
+  SupabaseService.client.auth.onAuthStateChange.listen((data) {
+    if (data.event == AuthChangeEvent.signedIn) {
+      appRouter.go(AppRoutes.homeScreen);
+    }
+  });
+
   bool hasShownError = false;
 
   // 🚨 CRITICAL: Custom error handling - DO NOT REMOVE

@@ -260,9 +260,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       context.push(AppRoutes.editProfileScreen);
     } else if (action.label == 'Notifications') {
       context.push(AppRoutes.notificationsScreen);
+    } else if (action.label == 'Privacy') {
+      context.push(AppRoutes.privacyPolicyScreen);
     }
-    // Privacy / Settings are placeholders for now — no screens exist
-    // for these yet, so left unwired rather than pointed at nothing.
   }
 
   @override
