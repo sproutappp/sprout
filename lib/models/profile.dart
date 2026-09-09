@@ -2,12 +2,14 @@ class Profile {
   final String id;
   final String? fullName;
   final String? avatarUrl;
+  final DateTime? dateOfBirth;
   final DateTime? createdAt;
 
   const Profile({
     required this.id,
     this.fullName,
     this.avatarUrl,
+    this.dateOfBirth,
     this.createdAt,
   });
 
@@ -16,6 +18,9 @@ class Profile {
       id: map['id'] as String,
       fullName: map['full_name'] as String?,
       avatarUrl: map['avatar_url'] as String?,
+      dateOfBirth: map['date_of_birth'] != null
+          ? DateTime.tryParse(map['date_of_birth'] as String)
+          : null,
       createdAt: map['created_at'] != null
           ? DateTime.tryParse(map['created_at'] as String)
           : null,

@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../theme/app_theme.dart';
 import '../../routes/app_routes.dart';
 import '../../models/memory.dart';
+import '../../models/circle.dart';
 import '../../services/circles_repository.dart';
 import '../../services/memories_repository.dart';
 import '../memories_screen/widgets/memories_grid_widget.dart' show MemoryItem, MemoryPrivacy, MemoryType;
@@ -46,6 +47,12 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   List<Memory> _onThisDay = [];
   String? _selectedCircleFilter; // null = All
 
+  // Circles and memories are fetched independently below so a failure
+  // in one doesn't blank the whole screen the way a single shared
+  // try/catch used to (same fix applied to ProfileScreen earlier).
+  bool _circlesFailed = false;
+  bool _memoriesFailed = false;
+
   @override
   void initState() {
     super.initState();
@@ -56,26 +63,59 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     setState(() {
       _isLoading = true;
       _error = null;
+      _circlesFailed = false;
+      _memoriesFailed = false;
     });
+
+    List<Circle> circles = [];
     try {
-      final circles = await CirclesRepository.fetchMyCircles();
-      final memories = await MemoriesRepository.fetchAllForUser();
+      circles = await CirclesRepository.fetchMyCircles();
+    } catch (e, st) {
+      debugPrint('DiscoverScreen: fetchMyCircles failed: $e\n$st');
+      _circlesFailed = true;
+    }
 
-      // Group memories by circle to build cover + count for each experience,
-      // and to find "on this day" matches — all client-side, no extra calls.
-      final byCircle = <String, List<Memory>>{};
-      for (final m in memories) {
-        byCircle.putIfAbsent(m.circleId, () => []).add(m);
-      }
+    List<Memory> memories = [];
+    try {
+      memories = await MemoriesRepository.fetchAllForUser();
+    } catch (e, st) {
+      debugPrint('DiscoverScreen: fetchAllForUser failed: $e\n$st');
+      _memoriesFailed = true;
+    }
 
-      final now = DateTime.now();
-      final onThisDay = memories.where((m) {
-        return m.createdAt.month == now.month &&
-            m.createdAt.day == now.day &&
-            m.createdAt.year != now.year;
-      }).toList();
+    if (!mounted) return;
 
-      final experiences = <_Experience>[];
+    // Only a total failure (both calls failed, or a genuinely unexpected
+    // error escaped the two try/catches above) blanks the whole screen
+    // now — one failing while the other succeeds still renders whatever
+    // data came back, same as Profile.
+    if (_circlesFailed && _memoriesFailed) {
+      setState(() {
+        _error = "Couldn't load Discover right now.";
+        _isLoading = false;
+      });
+      return;
+    }
+
+    // Group memories by circle to build cover + count for each experience,
+    // and to find "on this day" matches — all client-side, no extra calls.
+    final byCircle = <String, List<Memory>>{};
+    for (final m in memories) {
+      byCircle.putIfAbsent(m.circleId, () => []).add(m);
+    }
+
+    final now = DateTime.now();
+    final onThisDay = memories.where((m) {
+      return m.createdAt.month == now.month &&
+          m.createdAt.day == now.day &&
+          m.createdAt.year != now.year;
+    }).toList();
+
+    // "Experiences" need both a circle (for its name) and its memories —
+    // if circles failed to load there's nothing sensible to label them
+    // with, so this section is simply empty rather than guessing names.
+    final experiences = <_Experience>[];
+    if (!_circlesFailed) {
       for (final circle in circles) {
         final circleMemories = byCircle[circle.id];
         if (circleMemories == null || circleMemories.isEmpty) {
@@ -96,22 +136,14 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         final bLatest = byCircle[b.circleId]!.first.createdAt;
         return bLatest.compareTo(aLatest);
       });
-
-      if (!mounted) return;
-      setState(() {
-        _allMemories = memories;
-        _experiences = experiences;
-        _onThisDay = onThisDay;
-        _isLoading = false;
-      });
-    } catch (e, st) {
-      debugPrint('DiscoverScreen: load failed: $e\n$st');
-      if (!mounted) return;
-      setState(() {
-        _error = "Couldn't load Discover right now.";
-        _isLoading = false;
-      });
     }
+
+    setState(() {
+      _allMemories = memories;
+      _experiences = experiences;
+      _onThisDay = onThisDay;
+      _isLoading = false;
+    });
   }
 
   List<Memory> get _filteredRecent {
@@ -198,6 +230,24 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                       ),
                     ),
                   ),
+
+                  if (_circlesFailed || _memoriesFailed)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                        child: Text(
+                          _circlesFailed && _memoriesFailed
+                              ? "Couldn't load circles or memories right now."
+                              : _circlesFailed
+                                  ? "Couldn't load your circles right now — showing memories only."
+                                  : "Couldn't load memories right now — showing circles only.",
+                          style: GoogleFonts.manrope(
+                            fontSize: 12,
+                            color: AppTheme.textMuted,
+                          ),
+                        ),
+                      ),
+                    ),
 
                   if (_experiences.isEmpty && _allMemories.isEmpty)
                     SliverToBoxAdapter(

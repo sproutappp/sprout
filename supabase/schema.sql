@@ -9,6 +9,12 @@ create table if not exists profiles (
   created_at timestamptz not null default now()
 );
 
+-- Added for the Edit Profile "Date of Birth" field. `if not exists` makes
+-- this safe to run again on a project that already has the base table
+-- above (this is the one statement in this file you need to run by hand
+-- against an existing/live project — everything else was already applied).
+alter table profiles add column if not exists date_of_birth date;
+
 alter table profiles enable row level security;
 
 create policy "profiles are readable by any signed-in user"

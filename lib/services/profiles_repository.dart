@@ -40,16 +40,34 @@ class ProfilesRepository {
     return Profile.fromMap(row);
   }
 
-  /// Updates the current user's display name. Relies on the existing
-  /// "users can update their own profile" RLS policy (auth.uid() = id)
-  /// — no schema change needed for this.
-  static Future<void> updateFullName(String fullName) async {
+  /// Updates the current user's editable profile fields (currently full
+  /// name and date of birth). Relies on the existing "users can update
+  /// their own profile" RLS policy (auth.uid() = id) — no RLS change
+  /// needed for this.
+  ///
+  /// NOTE: `date_of_birth` requires the migration added to
+  /// supabase/schema.sql (`alter table profiles add column if not
+  /// exists date_of_birth date;`) to have been run against the live
+  /// project. Passing a non-null [dateOfBirth] before that migration
+  /// runs will fail with a Postgrest "column does not exist" error.
+  static Future<void> updateBasicInfo({
+    required String fullName,
+    DateTime? dateOfBirth,
+    bool updateDateOfBirth = false,
+  }) async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) throw StateError('Must be signed in to update profile');
-    await _client
-        .from('profiles')
-        .update({'full_name': fullName})
-        .eq('id', userId);
+    final updates = <String, dynamic>{'full_name': fullName};
+    if (updateDateOfBirth) {
+      // Stored as a plain date (no time/timezone) — matches the `date`
+      // column type added in schema.sql.
+      updates['date_of_birth'] = dateOfBirth == null
+          ? null
+          : '${dateOfBirth.year.toString().padLeft(4, '0')}-'
+              '${dateOfBirth.month.toString().padLeft(2, '0')}-'
+              '${dateOfBirth.day.toString().padLeft(2, '0')}';
+    }
+    await _client.from('profiles').update(updates).eq('id', userId);
   }
 
   /// Uploads a new avatar and updates profiles.avatar_url to point at it.

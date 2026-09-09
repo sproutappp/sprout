@@ -6,10 +6,14 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../theme/app_theme.dart';
 import '../../models/profile.dart';
+import '../../services/auth_service.dart';
+import '../../services/firebase_auth_service.dart';
 import '../../services/profiles_repository.dart';
+import '../../widgets/current_user_avatar_widget.dart';
 
 // ── EditProfileScreen ─────────────────────────────────────────────────────────
 
@@ -24,6 +28,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final _formKey = GlobalKey<FormState>();
 
   late TextEditingController _nameController;
+  DateTime? _dateOfBirth;
 
   bool _isLoading = true;
   bool _isSaving = false;
@@ -33,6 +38,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   String? _avatarUrl;
 
   final _imagePicker = ImagePicker();
+
+  // Read-only account info — not stored in `profiles`, so not part of
+  // Profile/ProfilesRepository. Sourced directly from whichever auth
+  // system actually owns each value (see _load()).
+  String? _readOnlyEmail;
+  String? _readOnlyMobile;
 
   @override
   void initState() {
@@ -57,10 +68,32 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         });
         return;
       }
+
+      // Email comes from the Supabase auth user, not `profiles` — but
+      // phone-OTP accounts are keyed by a synthetic
+      // "<digits>@phone.sprout.invalid" address (see PhoneAuthBridge)
+      // that was never a real email and would only confuse someone
+      // looking at their own account info, so it's treated the same as
+      // "no email on file" here rather than displayed.
+      final authEmail = AuthService.currentUser?.email;
+      final hasRealEmail =
+          authEmail != null && !authEmail.endsWith('@phone.sprout.invalid');
+
+      // Mobile number: only ever present for accounts that actually
+      // signed in through the Firebase phone-OTP bridge. Read straight
+      // from Firebase's own User object — nothing new to store, and
+      // this stays a read-only display value, not something this
+      // screen can edit (changing a verified phone number has to go
+      // through OTP verification again, not a text field).
+      final phoneNumber = FirebaseAuthService.currentUser?.phoneNumber;
+
       setState(() {
         _profile = profile;
         _nameController.text = profile.fullName ?? '';
+        _dateOfBirth = profile.dateOfBirth;
         _avatarUrl = profile.avatarUrl;
+        _readOnlyEmail = hasRealEmail ? authEmail : null;
+        _readOnlyMobile = phoneNumber;
         _isLoading = false;
       });
     } catch (_) {
@@ -83,10 +116,45 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
     setState(() => _isSaving = true);
 
+    String? dobWarning;
     try {
-      await ProfilesRepository.updateFullName(_nameController.text.trim());
+      try {
+        await ProfilesRepository.updateBasicInfo(
+          fullName: _nameController.text.trim(),
+          dateOfBirth: _dateOfBirth,
+          updateDateOfBirth: true,
+        );
+      } on PostgrestException catch (e) {
+        // `date_of_birth` is a new column (see supabase/schema.sql) —
+        // if the migration hasn't been run against this project yet,
+        // Postgres reports it as undefined (code 42703). Don't let a
+        // missing column block saving the name too; retry without it
+        // and tell the person their date of birth specifically wasn't
+        // saved, rather than failing the whole save silently-wrongly.
+        final isMissingColumn =
+            e.code == '42703' || e.message.contains('date_of_birth');
+        if (!isMissingColumn) rethrow;
+        await ProfilesRepository.updateBasicInfo(
+          fullName: _nameController.text.trim(),
+        );
+        dobWarning =
+            "Saved your name, but date of birth couldn't be saved yet.";
+      }
+
       if (!mounted) return;
       setState(() => _isSaving = false);
+      if (dobWarning != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              dobWarning,
+              style: GoogleFonts.manrope(color: Colors.white),
+            ),
+            backgroundColor: AppTheme.textMuted,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
       context.pop();
     } catch (_) {
       if (!mounted) return;
@@ -104,6 +172,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
   }
 
+  Future<void> _pickDateOfBirth() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _dateOfBirth ?? DateTime(now.year - 18, now.month, now.day),
+      firstDate: DateTime(now.year - 120),
+      lastDate: now,
+      helpText: 'Date of birth',
+    );
+    if (picked == null) return;
+    setState(() => _dateOfBirth = picked);
+  }
+
   Future<void> _pickAndUploadAvatar(ImageSource source) async {
     Navigator.of(context).pop(); // close the bottom sheet first
     try {
@@ -117,6 +198,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       setState(() => _isChangingPhoto = true);
       final newUrl = await ProfilesRepository.uploadAvatar(File(picked.path));
       if (!mounted) return;
+      // Bust the app-bar avatar cache immediately — the source of truth
+      // (profiles.avatar_url) just changed, so Home/Circles/Memories
+      // should pick up the new photo on their next build, not stay
+      // stale until some unrelated reload.
+      CurrentUserAvatarWidget.refresh();
       setState(() {
         _avatarUrl = newUrl;
         _isChangingPhoto = false;
@@ -143,6 +229,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     try {
       await ProfilesRepository.removeAvatar();
       if (!mounted) return;
+      CurrentUserAvatarWidget.refresh();
       setState(() {
         _avatarUrl = null;
         _isChangingPhoto = false;
@@ -440,6 +527,41 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                             return null;
                           },
                         ),
+
+                        const SizedBox(height: 24),
+
+                        // Date of Birth — editable
+                        _FieldLabel(label: 'Date of Birth'),
+                        const SizedBox(height: 8),
+                        _DateOfBirthField(
+                          value: _dateOfBirth,
+                          onTap: _pickDateOfBirth,
+                        ),
+
+                        const SizedBox(height: 24),
+
+                        // Email — read-only. Comes from the Supabase
+                        // auth user, not `profiles`; changing it isn't
+                        // safe to do from this screen (it's tied to
+                        // how the account signs in), so it's shown but
+                        // not editable here.
+                        _FieldLabel(label: 'Email Address'),
+                        const SizedBox(height: 8),
+                        _ReadOnlyField(
+                          value: _readOnlyEmail ?? 'No email on file',
+                        ),
+
+                        const SizedBox(height: 24),
+
+                        // Mobile — read-only. Only present for accounts
+                        // that signed in via the Firebase phone-OTP
+                        // bridge; changing a verified number has to go
+                        // through OTP again, not a text field here.
+                        _FieldLabel(label: 'Mobile Number'),
+                        const SizedBox(height: 8),
+                        _ReadOnlyField(
+                          value: _readOnlyMobile ?? 'No mobile number linked',
+                        ),
                       ],
                     ),
                   ),
@@ -592,6 +714,101 @@ class _ProfileTextField extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           borderSide: const BorderSide(color: AppTheme.error, width: 1.5),
         ),
+      ),
+    );
+  }
+}
+
+/// Tap-to-open date picker styled to match `_ProfileTextField`.
+class _DateOfBirthField extends StatelessWidget {
+  final DateTime? value;
+  final VoidCallback onTap;
+
+  const _DateOfBirthField({required this.value, required this.onTap});
+
+  String _format(DateTime d) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    return '${d.day} ${months[d.month - 1]} ${d.year}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceVariantDark,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppTheme.outline, width: 0.8),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                value != null ? _format(value!) : 'Add your date of birth',
+                style: GoogleFonts.manrope(
+                  color: value != null
+                      ? AppTheme.textPrimary
+                      : AppTheme.textDisabled,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            const Icon(
+              Icons.calendar_today_outlined,
+              size: 16,
+              color: AppTheme.textMuted,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Non-interactive display for account fields this screen can show but
+/// can't safely edit (email, mobile — see the comments where these are
+/// used above for why).
+class _ReadOnlyField extends StatelessWidget {
+  final String value;
+
+  const _ReadOnlyField({required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceVariantDark.withAlpha(140),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppTheme.outline, width: 0.8),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              value,
+              style: GoogleFonts.manrope(
+                color: AppTheme.textMuted,
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          const Icon(
+            Icons.lock_outline_rounded,
+            size: 15,
+            color: AppTheme.textMuted,
+          ),
+        ],
       ),
     );
   }

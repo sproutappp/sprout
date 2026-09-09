@@ -104,7 +104,6 @@ class _AccountAction {
 }
 
 const List<_AccountAction> _accountActions = [
-  _AccountAction(icon: Icons.edit_outlined, label: 'Edit Profile'),
   _AccountAction(icon: Icons.notifications_outlined, label: 'Notifications'),
   _AccountAction(icon: Icons.lock_outline_rounded, label: 'Privacy'),
   _AccountAction(icon: Icons.settings_outlined, label: 'Settings'),
@@ -291,18 +290,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  Future<void> _openEditProfile() async {
+    // Edit Profile can change full_name and/or avatar_url; refresh
+    // regardless of what (if anything) the edit screen pops with, so
+    // Profile always reflects the latest saved state on return rather
+    // than waiting for some later unrelated reload.
+    await context.push(AppRoutes.editProfileScreen);
+    if (!mounted) return;
+    await _load();
+  }
+
   void _onAccountActionTap(_AccountAction action) {
     if (action.isDanger) {
       _showSignOutDialog();
       return;
     }
-    if (action.label == 'Edit Profile') {
-      context.push(AppRoutes.editProfileScreen);
-    } else if (action.label == 'Notifications') {
+    if (action.label == 'Notifications') {
       context.push(AppRoutes.notificationsScreen);
     } else if (action.label == 'Privacy') {
       context.push(AppRoutes.privacyPolicyScreen);
     }
+    // 'Settings' has no route yet in AppRoutes — left as a no-op like
+    // before, rather than inventing a screen that wasn't asked for.
   }
 
   @override
@@ -374,11 +383,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           fontWeight: FontWeight.w700,
                         ),
                       ),
-                      const Spacer(),
-                      _IconButton(
-                        icon: Icons.settings_outlined,
-                        onTap: () {}, // Settings placeholder
-                      ),
                     ],
                   ),
                 ),
@@ -440,8 +444,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                           // Edit badge
                           GestureDetector(
-                            onTap: () =>
-                                context.push(AppRoutes.editProfileScreen),
+                            onTap: _openEditProfile,
                             child: Container(
                               width: 24,
                               height: 24,
@@ -474,9 +477,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       const SizedBox(height: 14),
                       // Edit profile pill
                       GestureDetector(
-                        onTap: () {
-                          context.push(AppRoutes.editProfileScreen);
-                        },
+                        onTap: _openEditProfile,
                         child: Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 18,
@@ -760,30 +761,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 }
 
 // ── Sub-widgets ───────────────────────────────────────────────────────────────
-
-class _IconButton extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-
-  const _IconButton({required this.icon, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 38,
-        height: 38,
-        decoration: BoxDecoration(
-          color: AppTheme.surfaceVariantDark,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppTheme.outline, width: 0.8),
-        ),
-        child: Icon(icon, color: AppTheme.textSecondary, size: 18),
-      ),
-    );
-  }
-}
 
 class _StatItem extends StatelessWidget {
   final String value;
