@@ -633,6 +633,50 @@ create policy "memories are visible per can_view_memory"
   to authenticated
   using (can_view_memory(id));
 
+-- ─── 3b. Fix reactions/comments for public + multi-circle memories ─────
+-- The original reactions/comments policies above (section "reactions &
+-- comments") still check is_circle_member(m.circle_id) directly — that
+-- predates public memories (circle_id is now nullable, so this is null
+-- for a public memory and the check always fails) and multi-circle
+-- sharing (it only ever looked at the single circle_id column, so
+-- members of a *secondary* shared circle could see a memory via
+-- can_view_memory() but still couldn't react/comment on it). Replace
+-- both with can_view_memory(memory_id), which already accounts for
+-- public visibility and every circle a memory is shared to.
+drop policy if exists "circle members can view reactions" on memory_reactions;
+create policy "anyone who can view the memory can view reactions"
+  on memory_reactions for select
+  to authenticated
+  using (can_view_memory(memory_id));
+
+drop policy if exists "circle members can react" on memory_reactions;
+create policy "anyone who can view the memory can react"
+  on memory_reactions for insert
+  to authenticated
+  with check (
+    user_id = auth.uid()
+    and can_view_memory(memory_id)
+  );
+-- "users can change/remove their own reaction" (update/delete) already
+-- key off user_id = auth.uid() only and need no change.
+
+drop policy if exists "circle members can view comments" on memory_comments;
+create policy "anyone who can view the memory can view comments"
+  on memory_comments for select
+  to authenticated
+  using (can_view_memory(memory_id));
+
+drop policy if exists "circle members can comment" on memory_comments;
+create policy "anyone who can view the memory can comment"
+  on memory_comments for insert
+  to authenticated
+  with check (
+    user_id = auth.uid()
+    and can_view_memory(memory_id)
+  );
+-- "users can delete their own comment" already keys off user_id =
+-- auth.uid() only and needs no change.
+
 -- Circle-membership checks for each shared circle are enforced by the
 -- memory_circles insert policy above (a separate statement); this only
 -- needs to confirm people can't insert memory rows claiming to be
