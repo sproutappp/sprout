@@ -52,8 +52,12 @@ class _HomeDiscoverTeaserWidgetState extends State<HomeDiscoverTeaserWidget> {
       final byCircle = <String, int>{};
       final coverByCircle = <String, String>{};
       for (final m in memories) {
-        byCircle[m.circleId] = (byCircle[m.circleId] ?? 0) + 1;
-        coverByCircle.putIfAbsent(m.circleId, () => m.imageUrl);
+        // Public memories have no circleId — irrelevant to a "your
+        // circles" teaser, so they're simply skipped here.
+        final cid = m.circleId;
+        if (cid == null) continue;
+        byCircle[cid] = (byCircle[cid] ?? 0) + 1;
+        coverByCircle.putIfAbsent(cid, () => m.imageUrl);
       }
 
       final experiences = [

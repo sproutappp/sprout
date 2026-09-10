@@ -60,7 +60,7 @@ class _MemoriesScreenState extends State<MemoriesScreen> {
               imageUrl: m.imageUrl,
               semanticLabel: 'Shared memory photo',
               circle: m.circleName ?? 'Circle',
-              circleColor: _palette[m.circleId.hashCode.abs() % _palette.length],
+              circleColor: _palette[(m.circleId ?? m.id).hashCode.abs() % _palette.length],
               privacy: MemoryPrivacy.circle,
               type: MemoryType.photo,
             ),
@@ -95,12 +95,14 @@ class _MemoriesScreenState extends State<MemoriesScreen> {
 
   List<MemoryItem> get _filteredMemories {
     return _allMemories.where((m) {
-      // Filter by type
+      // "All" and "Photos" are the only filters shown — every memory the
+      // app can create is a photo (see MemoriesRepository/CreateMemory:
+      // there's no video or story capture anywhere in the product yet),
+      // so this is a real, correct filter rather than faking categories
+      // that can't actually exist.
       final matchesFilter =
           _activeFilter == 'All' ||
-          (_activeFilter == 'Photos' && m.type == MemoryType.photo) ||
-          (_activeFilter == 'Videos' && m.type == MemoryType.video) ||
-          (_activeFilter == 'Stories' && m.type == MemoryType.story);
+          (_activeFilter == 'Photos' && m.type == MemoryType.photo);
 
       // Filter by search
       final matchesSearch =
@@ -135,15 +137,25 @@ class _MemoriesScreenState extends State<MemoriesScreen> {
           ),
 
           // Glassmorphism AppBar
-          MemoriesAppBarWidget(scrollOffset: _scrollOffset),
+          MemoriesAppBarWidget(
+            scrollOffset: _scrollOffset,
+            memoryCount: _allMemories.length,
+          ),
 
           // Scrollable content
           CustomScrollView(
             controller: _scrollController,
             physics: const BouncingScrollPhysics(),
             slivers: [
-              // Space for app bar
-              const SliverToBoxAdapter(child: SizedBox(height: 88)),
+              // Space for app bar — computed from the same height the
+              // header actually renders at (device safe-area inset +
+              // fixed content height), not a guessed constant. A fixed
+              // 88 here vs. a taller real header (topPadding + 72) on
+              // devices with a bigger notch/status bar is exactly what
+              // caused the header to visually overlap the search box.
+              SliverToBoxAdapter(
+                child: SizedBox(height: MemoriesAppBarWidget.heightFor(context)),
+              ),
 
               // Search + Filter
               SliverToBoxAdapter(

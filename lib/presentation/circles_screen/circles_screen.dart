@@ -7,7 +7,7 @@ import '../../theme/app_theme.dart';
 import '../../routes/app_routes.dart';
 import '../../models/circle.dart';
 import '../../services/circles_repository.dart';
-import '../../widgets/current_user_avatar_widget.dart';
+import '../../services/notifications_repository.dart';
 
 // ── Circle card view-model ──────────────────────────────────────────────────
 // Wraps the real `Circle` model with a few presentation-only touches
@@ -85,11 +85,25 @@ class _CirclesScreenState extends State<CirclesScreen> {
   List<_CircleData> _circles = [];
   bool _isLoading = true;
   String? _error;
+  int _unreadMemoryCount = 0;
 
   @override
   void initState() {
     super.initState();
     _loadCircles();
+    _loadUnreadCount();
+  }
+
+  Future<void> _loadUnreadCount() async {
+    try {
+      final count = await NotificationsRepository.fetchUnreadCircleMemoryCount();
+      if (!mounted) return;
+      setState(() => _unreadMemoryCount = count);
+    } catch (e, st) {
+      // Non-critical — the banner just stays hidden (same as "no new
+      // memories") rather than blocking the rest of the screen on it.
+      debugPrint('CirclesScreen: fetchUnreadCircleMemoryCount failed: $e\n$st');
+    }
   }
 
   Future<void> _loadCircles() async {
@@ -216,79 +230,36 @@ class _CirclesScreenState extends State<CirclesScreen> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    // Bell → Notifications
-                    GestureDetector(
-                      onTap: () => context.push(AppRoutes.notificationsScreen),
-                      child: Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: AppTheme.surfaceVariantDark.withAlpha(179),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: AppTheme.outline,
-                            width: 0.5,
+                    // Create circle button — only shown once the user has
+                    // at least one circle (see build()'s hasCircles logic
+                    // just below this widget); when they have none, the
+                    // large middle "Create Circle" button is the only
+                    // entry point instead, so this stays out of the tree
+                    // entirely rather than being hidden-but-present.
+                    if (_circles.isNotEmpty)
+                      GestureDetector(
+                        onTap: _openCreateCircle,
+                        child: Container(
+                          width: 42,
+                          height: 42,
+                          decoration: BoxDecoration(
+                            gradient: AppTheme.primaryGradient,
+                            borderRadius: BorderRadius.circular(14),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppTheme.primaryGreen.withAlpha(60),
+                                blurRadius: 12,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.add_rounded,
+                            size: 22,
+                            color: Colors.black,
                           ),
                         ),
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            const Icon(
-                              Icons.notifications_outlined,
-                              size: 20,
-                              color: AppTheme.textSecondary,
-                            ),
-                            Positioned(
-                              top: 9,
-                              right: 9,
-                              child: Container(
-                                width: 7,
-                                height: 7,
-                                decoration: BoxDecoration(
-                                  color: AppTheme.primaryGreen,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: AppTheme.backgroundDark,
-                                    width: 1.5,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    // User avatar → Profile
-                    CurrentUserAvatarWidget(
-                      size: 40,
-                      onTap: () => context.go(AppRoutes.profileScreen),
-                    ),
-                    const SizedBox(width: 8),
-                    // Create circle button
-                    GestureDetector(
-                      onTap: _openCreateCircle,
-                      child: Container(
-                        width: 42,
-                        height: 42,
-                        decoration: BoxDecoration(
-                          gradient: AppTheme.primaryGradient,
-                          borderRadius: BorderRadius.circular(14),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppTheme.primaryGreen.withAlpha(60),
-                              blurRadius: 12,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.add_rounded,
-                          size: 22,
-                          color: Colors.black,
-                        ),
-                      ),
-                    ),
                   ],
                 ),
               ),
@@ -296,15 +267,19 @@ class _CirclesScreenState extends State<CirclesScreen> {
 
             const SliverToBoxAdapter(child: SizedBox(height: 20)),
 
-            // ── New memories banner ──────────────────────────────────────
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: _NewMemoriesBanner(onTap: () {}),
+            // ── New memories banner — only when there really are some ──
+            if (_unreadMemoryCount > 0) ...[
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: _NewMemoriesBanner(
+                    count: _unreadMemoryCount,
+                    onTap: () => context.push(AppRoutes.notificationsScreen),
+                  ),
+                ),
               ),
-            ),
-
-            const SliverToBoxAdapter(child: SizedBox(height: 20)),
+              const SliverToBoxAdapter(child: SizedBox(height: 20)),
+            ],
 
             // ── Circle cards list ────────────────────────────────────────
             if (_isLoading)
@@ -374,13 +349,16 @@ class _CirclesScreenState extends State<CirclesScreen> {
                 ),
               ),
 
-            // ── Create Circle CTA ────────────────────────────────────────
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-                child: _CreateCircleCTA(onTap: _openCreateCircle),
+            // ── Create Circle CTA — only when there are zero circles;
+            // the top-right + button (shown once _circles.isNotEmpty)
+            // is the entry point after that, never both at once.
+            if (_circles.isEmpty)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                  child: _CreateCircleCTA(onTap: _openCreateCircle),
+                ),
               ),
-            ),
 
             const SliverToBoxAdapter(child: SizedBox(height: 120)),
           ],
@@ -393,9 +371,10 @@ class _CirclesScreenState extends State<CirclesScreen> {
 // ── New Memories Banner ───────────────────────────────────────────────────────
 
 class _NewMemoriesBanner extends StatelessWidget {
+  final int count;
   final VoidCallback onTap;
 
-  const _NewMemoriesBanner({required this.onTap});
+  const _NewMemoriesBanner({required this.count, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -439,7 +418,9 @@ class _NewMemoriesBanner extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '3 new memories across your circles',
+                    count == 1
+                        ? '1 new memory across your circles'
+                        : '$count new memories across your circles',
                     style: GoogleFonts.manrope(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,

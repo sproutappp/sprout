@@ -25,7 +25,10 @@ class _MemoriesSearchFilterWidgetState
     extends State<MemoriesSearchFilterWidget> {
   late TextEditingController _controller;
 
-  final List<String> _filters = ['All', 'Photos', 'Videos', 'Stories'];
+  // Every memory the app can create is a photo — no video/story capture
+  // exists anywhere yet (see MemoriesRepository/CreateMemoryScreen) — so
+  // only "All" and "Photos" are real, meaningful filters right now.
+  final List<String> _filters = ['All', 'Photos'];
 
   @override
   void initState() {

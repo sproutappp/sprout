@@ -1,21 +1,40 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../theme/app_theme.dart';
-import '../../../routes/app_routes.dart';
-import '../../../widgets/current_user_avatar_widget.dart';
 
+/// Clean "My Memories" header — title + a real (not hardcoded) count of
+/// the signed-in user's memories. Notification/settings/avatar controls
+/// were removed: those belong on their own screens (Home, Profile), not
+/// duplicated here.
 class MemoriesAppBarWidget extends StatelessWidget {
   final double scrollOffset;
+  final int memoryCount;
 
-  const MemoriesAppBarWidget({super.key, required this.scrollOffset});
+  const MemoriesAppBarWidget({
+    super.key,
+    required this.scrollOffset,
+    required this.memoryCount,
+  });
+
+  /// Total height this header actually occupies, including the device's
+  /// top safe-area inset — the scroll content below needs to reserve
+  /// exactly this much space (see MemoriesScreen), or the header (drawn
+  /// on top, positioned absolutely) will overlap whatever comes right
+  /// after it.
+  static double heightFor(BuildContext context) =>
+      MediaQuery.of(context).padding.top + 64;
 
   @override
   Widget build(BuildContext context) {
     final topPadding = MediaQuery.of(context).padding.top;
     final blurOpacity = (scrollOffset / 60).clamp(0.0, 1.0);
+    final subtitle = memoryCount == 0
+        ? 'No moments saved yet'
+        : memoryCount == 1
+            ? '1 moment you\'ve saved'
+            : '$memoryCount moments you\'ve saved';
 
     return Positioned(
       top: 0,
@@ -29,7 +48,7 @@ class MemoriesAppBarWidget extends StatelessWidget {
           ),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 150),
-            height: topPadding + 72,
+            height: topPadding + 64,
             decoration: BoxDecoration(
               color: AppTheme.backgroundDark.withOpacity(0.5 * blurOpacity),
               border: scrollOffset > 10
@@ -39,121 +58,32 @@ class MemoriesAppBarWidget extends StatelessWidget {
                   : null,
             ),
             padding: EdgeInsets.only(top: topPadding, left: 20, right: 20),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
-                      Text(
-                        'My Memories',
-                        style: TextStyle(
-                          fontFamily: 'Manrope',
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
-                          color: AppTheme.textPrimary,
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                      SizedBox(height: 2),
-                      Text(
-                        '42 moments you\'ve saved',
-                        style: TextStyle(
-                          fontFamily: 'Manrope',
-                          fontSize: 12,
-                          fontWeight: FontWeight.w400,
-                          color: AppTheme.textMuted,
-                        ),
-                      ),
-                    ],
+                Text(
+                  'My Memories',
+                  style: TextStyle(
+                    fontFamily: 'Manrope',
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: AppTheme.textPrimary,
+                    letterSpacing: -0.5,
                   ),
                 ),
-                _AppBarAction(
-                  icon: Icons.sort_rounded,
-                  semanticLabel: 'Sort memories',
-                  onTap: () {},
-                ),
-                const SizedBox(width: 8),
-                _AppBarAction(
-                  icon: Icons.tune_rounded,
-                  semanticLabel: 'Filter memories',
-                  onTap: () {},
-                ),
-                const SizedBox(width: 8),
-                // Bell → Notifications
-                _AppBarAction(
-                  icon: Icons.notifications_outlined,
-                  semanticLabel: 'Notifications',
-                  onTap: () => context.push(AppRoutes.notificationsScreen),
-                  hasBadge: true,
-                ),
-                const SizedBox(width: 8),
-                // User avatar → Profile
-                CurrentUserAvatarWidget(
-                  size: 36,
-                  onTap: () => context.go(AppRoutes.profileScreen),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    fontFamily: 'Manrope',
+                    fontSize: 12,
+                    fontWeight: FontWeight.w400,
+                    color: AppTheme.textMuted,
+                  ),
                 ),
               ],
             ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _AppBarAction extends StatelessWidget {
-  final IconData icon;
-  final String semanticLabel;
-  final VoidCallback onTap;
-  final bool hasBadge;
-
-  const _AppBarAction({
-    required this.icon,
-    required this.semanticLabel,
-    required this.onTap,
-    this.hasBadge = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      label: semanticLabel,
-      button: true,
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          width: 36,
-          height: 36,
-          decoration: BoxDecoration(
-            color: AppTheme.surfaceVariantDark.withAlpha(179),
-            borderRadius: BorderRadius.circular(11),
-            border: Border.all(color: AppTheme.outline, width: 0.5),
-          ),
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              Icon(icon, size: 18, color: AppTheme.textSecondary),
-              if (hasBadge)
-                Positioned(
-                  top: 7,
-                  right: 7,
-                  child: Container(
-                    width: 6,
-                    height: 6,
-                    decoration: BoxDecoration(
-                      color: AppTheme.primaryGreen,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: AppTheme.backgroundDark,
-                        width: 1.0,
-                      ),
-                    ),
-                  ),
-                ),
-            ],
           ),
         ),
       ),

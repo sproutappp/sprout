@@ -111,4 +111,83 @@ class ProfilesRepository {
         .update({'avatar_url': null})
         .eq('id', userId);
   }
+
+  // ── Identity linking ───────────────────────────────────────────────
+  //
+  // Goal: the same person should have ONE Sprout profile regardless of
+  // whether they authenticate with Google/email or phone OTP. The
+  // existing PhoneAuthBridge creates a brand-new Supabase account keyed
+  // by a synthetic email per phone number — reusing that flow here would
+  // sign the CURRENTLY authenticated user out of their real account and
+  // into that synthetic one instead of linking anything. So linking is
+  // deliberately implemented as a separate, narrower path: verify via
+  // Firebase, then attach the verified value directly to the profile
+  // that's already signed in — no new Supabase account, no session
+  // change, and PhoneAuthBridge itself is untouched.
+
+  /// Whether [e164Phone] is already linked to *some* profile (any
+  /// profile, not necessarily this one). Used to give a clear "already
+  /// in use" message before even starting Firebase verification, without
+  /// ever exposing whose account it belongs to (see
+  /// is_mobile_number_taken in schema.sql — a security-definer function,
+  /// not a direct table read).
+  static Future<bool> isMobileNumberTaken(String e164Phone) async {
+    final result = await _client.rpc(
+      'is_mobile_number_taken',
+      params: {'phone': e164Phone},
+    );
+    return result as bool;
+  }
+
+  /// The current user's own linked mobile number, if any. Lives in
+  /// `private_profile_info` (owner-only RLS), not on `profiles` — see
+  /// the migration notes in schema.sql for why.
+  static Future<String?> fetchLinkedMobileNumber() async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return null;
+    final row = await _client
+        .from('private_profile_info')
+        .select('mobile_number')
+        .eq('id', userId)
+        .maybeSingle();
+    return row?['mobile_number'] as String?;
+  }
+
+  /// Links [e164Phone] to the CURRENTLY signed-in profile. Call this only
+  /// after Firebase has already verified the OTP for this number (see
+  /// FirebaseAuthService.verifyOtp) — this method itself does not
+  /// re-verify, it only persists the result of a verification the caller
+  /// already completed.
+  ///
+  /// Throws a [StateError] if the number is already linked to a
+  /// *different* profile (enforced by the unique index in schema.sql —
+  /// this is just a friendlier error than the raw Postgrest one).
+  static Future<void> linkMobileNumber(String e164Phone) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) throw StateError('Must be signed in to link a mobile number');
+
+    try {
+      await _client.from('private_profile_info').upsert({
+        'id': userId,
+        'mobile_number': e164Phone,
+      });
+    } on PostgrestException catch (e) {
+      if (e.code == '23505') {
+        // unique_violation on private_profile_info_mobile_unique_idx
+        throw StateError(
+          'This mobile number is already linked to a different account.',
+        );
+      }
+      rethrow;
+    }
+  }
+
+  /// Links a new email to the current account using Supabase's own email
+  /// change flow (not a new column/table) — this sends a confirmation
+  /// link to the new address per the project's existing email-auth
+  /// configuration, and only takes effect once confirmed. Used for a
+  /// phone-primary account (email currently unset) adding an email.
+  static Future<void> linkEmail(String email) async {
+    await _client.auth.updateUser(UserAttributes(email: email));
+  }
 }

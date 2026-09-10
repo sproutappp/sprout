@@ -487,3 +487,234 @@ create policy "users can replace their own avatar"
     bucket_id = 'avatars'
     and (storage.foldername(name))[1] = auth.uid()::text
   );
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- MIGRATION — run this whole block by hand in the Supabase SQL editor
+-- against the live project. Everything above this line was already
+-- applied; everything below is new as of this change and has NOT been
+-- run against the live database yet. Safe to run more than once
+-- (idempotent: uses if-exists/if-not-exists/or-replace throughout).
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- ─── 1. Fix circle creation (RLS deadlock) ─────────────────────────────
+-- Root cause of "Can't create the circle": CirclesRepository.createCircle
+-- does `insert into circles ... .select().single()` — PostgREST applies
+-- the SELECT policy to the INSERT's RETURNING clause. The old SELECT
+-- policy only allowed rows where is_circle_member(id) is true, i.e. a
+-- circle_members row already exists for that circle — but at the moment
+-- of creating the circle, the creator's circle_members row doesn't exist
+-- yet (that's a separate second insert). So the RETURNING select saw zero
+-- rows and `.single()` threw. Letting the creator see their own circle
+-- unconditionally (not just members) closes that gap without weakening
+-- anything for anyone else — only the actual creator (created_by =
+-- auth.uid()) gets this extra visibility.
+drop policy if exists "members can view their circles" on circles;
+create policy "members can view their circles"
+  on circles for select
+  to authenticated
+  using (is_circle_member(id) or created_by = auth.uid());
+
+-- ─── 2. Identity linking: verified mobile number, kept private ────────
+-- IMPORTANT: this is NOT a column on `profiles`. The existing "profiles
+-- are readable by any signed-in user" policy applies to the whole row,
+-- so a mobile_number column there would leak everyone's phone number to
+-- every other signed-in user. It lives in its own table instead, with
+-- its own owner-only RLS, and a security-definer function
+-- (is_mobile_number_taken) is the only way to check "is this number
+-- already linked" without exposing whose it is.
+create table if not exists private_profile_info (
+  id uuid primary key references profiles(id) on delete cascade,
+  mobile_number text
+);
+
+alter table private_profile_info enable row level security;
+
+drop policy if exists "users can view their own private info" on private_profile_info;
+create policy "users can view their own private info"
+  on private_profile_info for select
+  to authenticated
+  using (auth.uid() = id);
+
+drop policy if exists "users can create their own private info" on private_profile_info;
+create policy "users can create their own private info"
+  on private_profile_info for insert
+  to authenticated
+  with check (auth.uid() = id);
+
+drop policy if exists "users can update their own private info" on private_profile_info;
+create policy "users can update their own private info"
+  on private_profile_info for update
+  to authenticated
+  using (auth.uid() = id);
+
+drop index if exists private_profile_info_mobile_unique_idx;
+create unique index private_profile_info_mobile_unique_idx
+  on private_profile_info (mobile_number)
+  where mobile_number is not null;
+
+-- Lets the client check "is this number already linked to *someone*"
+-- (to give a clear message before even trying Firebase verification)
+-- without ever exposing whose account it belongs to.
+create or replace function is_mobile_number_taken(phone text)
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1 from private_profile_info where mobile_number = phone
+  );
+$$;
+
+-- ─── 3. Multi-circle + public memories ─────────────────────────────────
+-- memories.circle_id becomes nullable: a memory is either public
+-- (is_public = true, no circles) or shared to one-or-more circles via
+-- the new memory_circles join table below. circle_id itself is kept
+-- (as the "primary"/first-selected circle) purely so existing screens
+-- that show one circle badge per memory keep working unchanged — the
+-- join table, not this column, is the source of truth for who can
+-- actually see the memory.
+alter table memories alter column circle_id drop not null;
+alter table memories add column if not exists is_public boolean not null default false;
+
+create table if not exists memory_circles (
+  memory_id uuid not null references memories(id) on delete cascade,
+  circle_id uuid not null references circles(id) on delete cascade,
+  primary key (memory_id, circle_id)
+);
+
+alter table memory_circles enable row level security;
+
+drop policy if exists "circle members can view their circle's memory shares" on memory_circles;
+create policy "circle members can view their circle's memory shares"
+  on memory_circles for select
+  to authenticated
+  using (is_circle_member(circle_id));
+
+drop policy if exists "uploader can share their own memory to their circles" on memory_circles;
+create policy "uploader can share their own memory to their circles"
+  on memory_circles for insert
+  to authenticated
+  with check (
+    is_circle_member(circle_id)
+    and exists (
+      select 1 from memories m
+      where m.id = memory_id and m.uploaded_by = auth.uid()
+    )
+  );
+
+-- Single source of truth for "can the current user see this memory" —
+-- reused below by both the memories table policy and the storage policy,
+-- so there's exactly one place that defines memory visibility.
+create or replace function can_view_memory(mem_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1 from memories m
+    where m.id = mem_id
+      and (
+        m.is_public
+        or exists (
+          select 1 from memory_circles mc
+          where mc.memory_id = m.id and is_circle_member(mc.circle_id)
+        )
+      )
+  );
+$$;
+
+drop policy if exists "members can view memories in their circles" on memories;
+create policy "memories are visible per can_view_memory"
+  on memories for select
+  to authenticated
+  using (can_view_memory(id));
+
+-- Circle-membership checks for each shared circle are enforced by the
+-- memory_circles insert policy above (a separate statement); this only
+-- needs to confirm people can't insert memory rows claiming to be
+-- someone else's upload. Public memories need no circle check at all.
+drop policy if exists "members can add memories to their circles" on memories;
+create policy "users can add their own memories"
+  on memories for insert
+  to authenticated
+  with check (uploaded_by = auth.uid());
+
+-- ─── 4. Storage: same can_view_memory check, keyed by path ─────────────
+-- The app now uploads to `{memory_id}/{filename}` (was `{circle_id}/...`)
+-- so a single per-memory check works for storage the same way it works
+-- for the memories table — see MemoriesRepository.addMemory for the
+-- matching Dart-side change (insert the memories row first, then upload
+-- to the id-keyed path, so this insert policy's existence check passes).
+drop policy if exists "circle members can read their circle's photos" on storage.objects;
+create policy "memory photo is visible to whoever can view its row"
+  on storage.objects for select
+  to authenticated
+  using (
+    bucket_id = 'memories'
+    and can_view_memory((storage.foldername(name))[1]::uuid)
+  );
+
+-- Dedicated check for "is the current user this memory's uploader" — kept
+-- separate from can_view_memory (which is about *visibility*, e.g. any
+-- circle member or anyone if public) and marked security definer so it
+-- doesn't depend on the memories row already being visible under RLS at
+-- the moment it's checked. Used by the storage insert policy below.
+create or replace function is_memory_uploader(mem_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1 from memories m
+    where m.id = mem_id and m.uploaded_by = auth.uid()
+  );
+$$;
+
+drop policy if exists "circle members can upload to their circle's folder" on storage.objects;
+create policy "uploader can upload to their own memory's folder"
+  on storage.objects for insert
+  to authenticated
+  with check (
+    bucket_id = 'memories'
+    and is_memory_uploader((storage.foldername(name))[1]::uuid)
+  );
+
+-- ─── 5. Notifications: fan out per circle share, not per memory ───────
+-- The old trigger fired once on `memories` insert, keyed off the single
+-- circle_id column. With sharing now possibly spanning several circles
+-- via memory_circles (inserted in a separate statement right after the
+-- memories row), notification fan-out moves to fire per memory_circles
+-- row instead — once per circle actually shared to, whether that's one
+-- circle or several. Public memories intentionally produce no
+-- "new memory in your circle" notifications (nobody's circle received
+-- anything in that case).
+drop trigger if exists on_memory_created on memories;
+drop function if exists notify_on_new_memory();
+
+create or replace function notify_on_memory_shared_to_circle()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into notifications (user_id, actor_id, type, circle_id, memory_id)
+  select cm.user_id, m.uploaded_by, 'circle_memory', new.circle_id, new.memory_id
+  from circle_members cm
+  join memories m on m.id = new.memory_id
+  where cm.circle_id = new.circle_id
+    and cm.user_id != m.uploaded_by;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_memory_shared_to_circle on memory_circles;
+create trigger on_memory_shared_to_circle
+  after insert on memory_circles
+  for each row execute function notify_on_memory_shared_to_circle();

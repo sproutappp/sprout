@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'auth_service.dart';
 import 'firebase_auth_service.dart';
+import 'profiles_repository.dart';
 
 /// Bridges a Firebase-verified phone number into a real Supabase identity.
 ///
@@ -76,6 +77,36 @@ class PhoneAuthBridge {
     }
 
     // First time this phone number has completed the bridge.
+    //
+    // Best-effort duplicate guard: if this exact number is already
+    // *linked* (see ProfilesRepository.linkMobileNumber) to a real
+    // Google/email account, creating a brand-new synthetic-email account
+    // here would silently produce a second, disconnected profile for the
+    // same person. There's no safe way from a client to sign into an
+    // arbitrary existing Supabase account without its password (that
+    // would need a server-side function with the service role key,
+    // which is out of scope here) — so the honest, safe choice is to
+    // stop and point them at their original sign-in method rather than
+    // create a duplicate identity. This check is intentionally
+    // fail-open: if it errors for an unrelated reason, normal phone
+    // sign-up still proceeds rather than blocking everyone on a hiccup
+    // in an best-effort safety check.
+    try {
+      final alreadyLinkedElsewhere =
+          await ProfilesRepository.isMobileNumberTaken(e164Phone);
+      if (alreadyLinkedElsewhere) {
+        throw StateError(
+          'This mobile number is already linked to an existing account. '
+          'Please sign in with the original method (Google or email) and '
+          "it'll already be there.",
+        );
+      }
+    } on StateError {
+      rethrow;
+    } catch (_) {
+      // Swallow — see comment above; this check is best-effort.
+    }
+
     final password = _generateSecurePassword();
     try {
       await AuthService.signUp(email: email, password: password, fullName: '');

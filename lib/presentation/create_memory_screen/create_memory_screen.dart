@@ -83,7 +83,7 @@ const List<_PersonOption> _mockPeople = [
 
 // ── Privacy Option ────────────────────────────────────────────────────────────
 
-enum _Privacy { circle, public, private }
+enum _Privacy { circle, public }
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
@@ -111,10 +111,10 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen>
   // Privacy
   _Privacy _selectedPrivacy = _Privacy.circle;
 
-  // Circle
+  // Circle — multi-select: a memory can be shared to more than one.
   List<_CircleOption> _circleOptions = [];
   bool _isLoadingCircles = true;
-  String? _selectedCircleId;
+  final Set<String> _selectedCircleIds = {};
 
   // People
   final Set<String> _taggedPeople = {};
@@ -143,7 +143,10 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen>
     _saveScale = Tween<double>(begin: 1.0, end: 0.96).animate(
       CurvedAnimation(parent: _saveController, curve: Curves.easeOutCubic),
     );
-    _selectedCircleId = widget.initialCircleId;
+    _selectedCircleIds.clear();
+    if (widget.initialCircleId != null) {
+      _selectedCircleIds.add(widget.initialCircleId!);
+    }
     _loadCircles();
   }
 
@@ -157,10 +160,10 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen>
           for (var i = 0; i < circles.length; i++)
             _CircleOption.fromCircle(circles[i], i),
         ];
-        // Keep the preselected circle if it's still valid; otherwise
+        // Keep any preselected circle(s) if still valid; otherwise
         // default to the first circle so the picker isn't empty.
-        if (_selectedCircleId == null && _circleOptions.isNotEmpty) {
-          _selectedCircleId = _circleOptions.first.id;
+        if (_selectedCircleIds.isEmpty && _circleOptions.isNotEmpty) {
+          _selectedCircleIds.add(_circleOptions.first.id);
         }
         _isLoadingCircles = false;
       });
@@ -202,8 +205,8 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen>
       setState(() => _errorMessage = 'Add a photo before saving.');
       return;
     }
-    if (_selectedPrivacy == _Privacy.circle && _selectedCircleId == null) {
-      setState(() => _errorMessage = 'Choose a circle to share this with.');
+    if (_selectedPrivacy == _Privacy.circle && _selectedCircleIds.isEmpty) {
+      setState(() => _errorMessage = 'Choose at least one circle to share this with.');
       return;
     }
 
@@ -220,9 +223,12 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen>
       ].where((s) => s.isNotEmpty).join(' — ');
 
       await MemoriesRepository.addMemory(
-        circleId: _selectedCircleId!,
         file: _pickedImage!,
         caption: caption.isEmpty ? null : caption,
+        isPublic: _selectedPrivacy == _Privacy.public,
+        circleIds: _selectedPrivacy == _Privacy.circle
+            ? _selectedCircleIds.toList()
+            : const [],
       );
 
       if (!mounted) return;
@@ -349,7 +355,7 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen>
                     selected: _selectedPrivacy,
                     onChanged: (p) => setState(() {
                       _selectedPrivacy = p;
-                      if (p != _Privacy.circle) _selectedCircleId = null;
+                      if (p != _Privacy.circle) _selectedCircleIds.clear();
                     }),
                   ),
                 ),
@@ -389,11 +395,31 @@ class _CreateMemoryScreenState extends State<CreateMemoryScreen>
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: _CircleSelector(
-                        circles: _circleOptions,
-                        selected: _selectedCircleId,
-                        onChanged: (id) =>
-                            setState(() => _selectedCircleId = id),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Choose one or more circles',
+                            style: GoogleFonts.manrope(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.textMuted,
+                              letterSpacing: 0.4,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          _CircleSelector(
+                            circles: _circleOptions,
+                            selectedIds: _selectedCircleIds,
+                            onToggle: (id) => setState(() {
+                              if (_selectedCircleIds.contains(id)) {
+                                _selectedCircleIds.remove(id);
+                              } else {
+                                _selectedCircleIds.add(id);
+                              }
+                            }),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -968,17 +994,6 @@ class _PrivacySelector extends StatelessWidget {
             onTap: () => onChanged(_Privacy.public),
           ),
         ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _PrivacyOption(
-            icon: Icons.lock_outline_rounded,
-            label: 'Private',
-            sublabel: 'Only you',
-            isSelected: selected == _Privacy.private,
-            accentColor: const Color(0xFFB839FF),
-            onTap: () => onChanged(_Privacy.private),
-          ),
-        ),
       ],
     );
   }
@@ -1055,38 +1070,25 @@ class _PrivacyOption extends StatelessWidget {
 
 class _CircleSelector extends StatelessWidget {
   final List<_CircleOption> circles;
-  final String? selected;
-  final ValueChanged<String> onChanged;
+  final Set<String> selectedIds;
+  final ValueChanged<String> onToggle;
 
   const _CircleSelector({
     required this.circles,
-    required this.selected,
-    required this.onChanged,
+    required this.selectedIds,
+    required this.onToggle,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Choose a Circle',
-          style: GoogleFonts.manrope(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: AppTheme.textMuted,
-            letterSpacing: 0.4,
-          ),
-        ),
-        const SizedBox(height: 10),
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: circles.map((circle) {
-            final isSelected = selected == circle.id;
-            return GestureDetector(
-              onTap: () => onChanged(circle.id),
-              child: AnimatedContainer(
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: circles.map((circle) {
+        final isSelected = selectedIds.contains(circle.id);
+        return GestureDetector(
+          onTap: () => onToggle(circle.id),
+          child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 curve: Curves.easeOutCubic,
                 padding: const EdgeInsets.symmetric(
@@ -1133,8 +1135,6 @@ class _CircleSelector extends StatelessWidget {
               ),
             );
           }).toList(),
-        ),
-      ],
     );
   }
 }

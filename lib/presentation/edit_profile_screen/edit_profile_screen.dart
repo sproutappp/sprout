@@ -45,6 +45,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   String? _readOnlyEmail;
   String? _readOnlyMobile;
 
+  // Which identity is "primary" (the one actually used to sign in) vs.
+  // "linked" (added afterwards, editable here) depends on how this
+  // account authenticated — see _load() for the exact detection.
+  bool _isPhonePrimary = false;
+  String? _linkedMobileNumber;
+
   @override
   void initState() {
     super.initState();
@@ -72,20 +78,23 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       // Email comes from the Supabase auth user, not `profiles` — but
       // phone-OTP accounts are keyed by a synthetic
       // "<digits>@phone.sprout.invalid" address (see PhoneAuthBridge)
-      // that was never a real email and would only confuse someone
-      // looking at their own account info, so it's treated the same as
-      // "no email on file" here rather than displayed.
+      // that was never a real email. Whether that's the *current* email
+      // is also exactly the signal for which identity is "primary":
+      // a synthetic email means this account signed in via phone OTP
+      // (isPhonePrimary), a real one means Google/email.
       final authEmail = AuthService.currentUser?.email;
       final hasRealEmail =
           authEmail != null && !authEmail.endsWith('@phone.sprout.invalid');
+      final isPhonePrimary = !hasRealEmail;
 
-      // Mobile number: only ever present for accounts that actually
-      // signed in through the Firebase phone-OTP bridge. Read straight
-      // from Firebase's own User object — nothing new to store, and
-      // this stays a read-only display value, not something this
-      // screen can edit (changing a verified phone number has to go
-      // through OTP verification again, not a text field).
-      final phoneNumber = FirebaseAuthService.currentUser?.phoneNumber;
+      // Mobile number: for a phone-primary account, straight from
+      // Firebase's own User object — that number IS this account's
+      // verified identity. For a Google/email-primary account, whatever
+      // (if anything) they've separately linked via linkMobileNumber.
+      final firebasePhone = FirebaseAuthService.currentUser?.phoneNumber;
+      final linkedMobile = isPhonePrimary
+          ? firebasePhone
+          : await ProfilesRepository.fetchLinkedMobileNumber();
 
       setState(() {
         _profile = profile;
@@ -93,7 +102,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         _dateOfBirth = profile.dateOfBirth;
         _avatarUrl = profile.avatarUrl;
         _readOnlyEmail = hasRealEmail ? authEmail : null;
-        _readOnlyMobile = phoneNumber;
+        _readOnlyMobile = firebasePhone;
+        _isPhonePrimary = isPhonePrimary;
+        _linkedMobileNumber = linkedMobile;
         _isLoading = false;
       });
     } catch (_) {
@@ -183,6 +194,26 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
     if (picked == null) return;
     setState(() => _dateOfBirth = picked);
+  }
+
+  Future<void> _openLinkEmail() async {
+    final linked = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const _EmailLinkSheet(),
+    );
+    if (linked == true) _load();
+  }
+
+  Future<void> _openLinkMobile() async {
+    final linked = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const _MobileLinkSheet(),
+    );
+    if (linked == true) _load();
   }
 
   Future<void> _pickAndUploadAvatar(ImageSource source) async {
@@ -540,28 +571,42 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
                         const SizedBox(height: 24),
 
-                        // Email — read-only. Comes from the Supabase
-                        // auth user, not `profiles`; changing it isn't
-                        // safe to do from this screen (it's tied to
-                        // how the account signs in), so it's shown but
-                        // not editable here.
+                        // Email: locked for a Google/email-primary
+                        // account (it's the sign-in identity itself).
+                        // For a phone-primary account it's editable
+                        // until one is linked, then locked too.
                         _FieldLabel(label: 'Email Address'),
                         const SizedBox(height: 8),
-                        _ReadOnlyField(
-                          value: _readOnlyEmail ?? 'No email on file',
-                        ),
+                        if (!_isPhonePrimary || _readOnlyEmail != null)
+                          _ReadOnlyField(
+                            value: _readOnlyEmail ?? 'No email on file',
+                          )
+                        else
+                          _LinkableField(
+                            hint: 'Add an email address',
+                            onTap: _openLinkEmail,
+                          ),
 
                         const SizedBox(height: 24),
 
-                        // Mobile — read-only. Only present for accounts
-                        // that signed in via the Firebase phone-OTP
-                        // bridge; changing a verified number has to go
-                        // through OTP again, not a text field here.
+                        // Mobile: locked for a phone-primary account
+                        // (it's the verified sign-in identity itself).
+                        // For a Google/email-primary account it's
+                        // editable until one is linked (via real
+                        // Firebase verification), then locked too.
                         _FieldLabel(label: 'Mobile Number'),
                         const SizedBox(height: 8),
-                        _ReadOnlyField(
-                          value: _readOnlyMobile ?? 'No mobile number linked',
-                        ),
+                        if (_isPhonePrimary)
+                          _ReadOnlyField(
+                            value: _readOnlyMobile ?? 'No mobile number linked',
+                          )
+                        else if (_linkedMobileNumber != null)
+                          _ReadOnlyField(value: _linkedMobileNumber!)
+                        else
+                          _LinkableField(
+                            hint: 'Add a mobile number',
+                            onTap: _openLinkMobile,
+                          ),
                       ],
                     ),
                   ),
@@ -809,6 +854,395 @@ class _ReadOnlyField extends StatelessWidget {
             color: AppTheme.textMuted,
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Tappable prompt for an account field that's currently unset but CAN
+/// be added (as opposed to `_ReadOnlyField`, which never can). Opens the
+/// relevant verification sheet on tap.
+class _LinkableField extends StatelessWidget {
+  final String hint;
+  final VoidCallback onTap;
+
+  const _LinkableField({required this.hint, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceVariantDark,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: AppTheme.primaryGreen.withAlpha(130),
+            width: 0.8,
+          ),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                hint,
+                style: GoogleFonts.manrope(
+                  color: AppTheme.primaryGreen,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const Icon(
+              Icons.add_circle_outline_rounded,
+              size: 18,
+              color: AppTheme.primaryGreen,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Links a new email to a phone-primary account via Supabase's native
+/// email-change flow (ProfilesRepository.linkEmail) — sends a
+/// confirmation link; the field only becomes "linked" once it's clicked.
+class _EmailLinkSheet extends StatefulWidget {
+  const _EmailLinkSheet();
+
+  @override
+  State<_EmailLinkSheet> createState() => _EmailLinkSheetState();
+}
+
+class _EmailLinkSheetState extends State<_EmailLinkSheet> {
+  final _emailController = TextEditingController();
+  bool _isSubmitting = false;
+  String? _error;
+  bool _sent = false;
+
+  Future<void> _submit() async {
+    final email = _emailController.text.trim();
+    if (!email.contains('@') || !email.contains('.')) {
+      setState(() => _error = 'Enter a valid email address.');
+      return;
+    }
+    setState(() {
+      _isSubmitting = true;
+      _error = null;
+    });
+    try {
+      await ProfilesRepository.linkEmail(email);
+      if (!mounted) return;
+      setState(() {
+        _isSubmitting = false;
+        _sent = true;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isSubmitting = false;
+        _error = "Couldn't send confirmation — try again.";
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _LinkSheetScaffold(
+      title: 'Add an email address',
+      child: _sent
+          ? Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Text(
+                "We've sent a confirmation link to "
+                "${_emailController.text.trim()}. It'll show here as "
+                'linked once confirmed.',
+                style: GoogleFonts.manrope(
+                  color: AppTheme.textSecondary,
+                  fontSize: 14,
+                ),
+              ),
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextField(
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  style: GoogleFonts.manrope(color: AppTheme.textPrimary),
+                  decoration: InputDecoration(
+                    hintText: 'you@example.com',
+                    hintStyle: GoogleFonts.manrope(color: AppTheme.textDisabled),
+                    filled: true,
+                    fillColor: AppTheme.surfaceVariantDark,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+                if (_error != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    _error!,
+                    style: GoogleFonts.manrope(color: AppTheme.error, fontSize: 12),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                _LinkSheetButton(
+                  label: 'Send confirmation link',
+                  isLoading: _isSubmitting,
+                  onTap: _submit,
+                ),
+              ],
+            ),
+    );
+  }
+}
+
+/// Links a new mobile number to a Google/email-primary account. Requires
+/// genuine Firebase OTP verification first (FirebaseAuthService) — only
+/// once that succeeds does this call ProfilesRepository.linkMobileNumber.
+/// Deliberately does NOT go through PhoneAuthBridge.completeSignIn: that
+/// would create/switch to a different Supabase session instead of
+/// linking the number to the one already signed in.
+class _MobileLinkSheet extends StatefulWidget {
+  const _MobileLinkSheet();
+
+  @override
+  State<_MobileLinkSheet> createState() => _MobileLinkSheetState();
+}
+
+class _MobileLinkSheetState extends State<_MobileLinkSheet> {
+  final _phoneController = TextEditingController();
+  final _codeController = TextEditingController();
+  String? _verificationId;
+  String? _e164Phone;
+  bool _isSubmitting = false;
+  String? _error;
+
+  Future<void> _sendCode() async {
+    var phone = _phoneController.text.trim();
+    if (!phone.startsWith('+') || phone.length < 8) {
+      setState(() => _error = 'Enter your number in international format, e.g. +919876543210.');
+      return;
+    }
+    setState(() {
+      _isSubmitting = true;
+      _error = null;
+    });
+
+    try {
+      final taken = await ProfilesRepository.isMobileNumberTaken(phone);
+      if (taken) {
+        setState(() {
+          _isSubmitting = false;
+          _error = 'This mobile number is already linked to an account.';
+        });
+        return;
+      }
+
+      await FirebaseAuthService.sendOtp(
+        phoneNumber: phone,
+        onCodeSent: (verificationId) {
+          if (!mounted) return;
+          setState(() {
+            _verificationId = verificationId;
+            _e164Phone = phone;
+            _isSubmitting = false;
+          });
+        },
+        onVerificationFailed: (e) {
+          if (!mounted) return;
+          setState(() {
+            _isSubmitting = false;
+            _error = e.message ?? "Couldn't send the code — try again.";
+          });
+        },
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isSubmitting = false;
+        _error = "Couldn't send the code — try again.";
+      });
+    }
+  }
+
+  Future<void> _verifyAndLink() async {
+    final code = _codeController.text.trim();
+    if (_verificationId == null || code.isEmpty || _e164Phone == null) return;
+
+    setState(() {
+      _isSubmitting = true;
+      _error = null;
+    });
+
+    try {
+      await FirebaseAuthService.verifyOtp(
+        verificationId: _verificationId!,
+        smsCode: code,
+      );
+      await ProfilesRepository.linkMobileNumber(_e164Phone!);
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } on StateError catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isSubmitting = false;
+        _error = e.message;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isSubmitting = false;
+        _error = 'Incorrect code — try again.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _LinkSheetScaffold(
+      title: 'Add a mobile number',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: _phoneController,
+            enabled: _verificationId == null,
+            keyboardType: TextInputType.phone,
+            style: GoogleFonts.manrope(color: AppTheme.textPrimary),
+            decoration: InputDecoration(
+              hintText: '+919876543210',
+              hintStyle: GoogleFonts.manrope(color: AppTheme.textDisabled),
+              filled: true,
+              fillColor: AppTheme.surfaceVariantDark,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+          if (_verificationId != null) ...[
+            const SizedBox(height: 12),
+            TextField(
+              controller: _codeController,
+              keyboardType: TextInputType.number,
+              style: GoogleFonts.manrope(color: AppTheme.textPrimary),
+              decoration: InputDecoration(
+                hintText: '6-digit code',
+                hintStyle: GoogleFonts.manrope(color: AppTheme.textDisabled),
+                filled: true,
+                fillColor: AppTheme.surfaceVariantDark,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+          ],
+          if (_error != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              _error!,
+              style: GoogleFonts.manrope(color: AppTheme.error, fontSize: 12),
+            ),
+          ],
+          const SizedBox(height: 16),
+          _LinkSheetButton(
+            label: _verificationId == null ? 'Send code' : 'Verify & link',
+            isLoading: _isSubmitting,
+            onTap: _verificationId == null ? _sendCode : _verifyAndLink,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LinkSheetScaffold extends StatelessWidget {
+  final String title;
+  final Widget child;
+
+  const _LinkSheetScaffold({required this.title, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+        decoration: const BoxDecoration(
+          color: AppTheme.surfaceDark,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: GoogleFonts.manrope(
+                color: AppTheme.textPrimary,
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 16),
+            child,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LinkSheetButton extends StatelessWidget {
+  final String label;
+  final bool isLoading;
+  final VoidCallback onTap;
+
+  const _LinkSheetButton({
+    required this.label,
+    required this.isLoading,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 50,
+      child: ElevatedButton(
+        onPressed: isLoading ? null : onTap,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppTheme.primaryGreen,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+        child: isLoading
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.black,
+                ),
+              )
+            : Text(
+                label,
+                style: GoogleFonts.manrope(
+                  color: Colors.black,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
       ),
     );
   }
