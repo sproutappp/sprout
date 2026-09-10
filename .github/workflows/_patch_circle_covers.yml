@@ -1,0 +1,427 @@
+name: One-time circle cover patch
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Patch circle cover UI
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          # circles_screen.dart
+          f = Path('lib/presentation/circles_screen/circles_screen.dart')
+          s = f.read_text()
+
+          s = s.replace(
+              "import 'package:cached_network_image/cached_network_image.dart';",
+              "import 'dart:io';\n\nimport 'package:cached_network_image/cached_network_image.dart';",
+              1,
+          )
+          s = s.replace(
+              "import 'package:go_router/go_router.dart';",
+              "import 'package:go_router/go_router.dart';\nimport 'package:image_picker/image_picker.dart';",
+              1,
+          )
+          s = s.replace(
+              "      imageUrl: circle.coverImageUrl ??\n          'https://images.pexels.com/photos/1128318/pexels-photo-1128318.jpeg?w=400',",
+              "      imageUrl: circle.coverImageUrl ?? '',",
+              1,
+          )
+          s = s.replace(
+              "  final TextEditingController _descController = TextEditingController();\n  bool _isCreating = false;",
+              "  final TextEditingController _descController = TextEditingController();\n  File? _coverFile;\n  bool _isCreating = false;",
+              1,
+          )
+
+          needle = "  void _create() async {\n"
+          picker = '''  Future<void> _pickCover() async {
+            final picked = await ImagePicker().pickImage(
+              source: ImageSource.gallery,
+              imageQuality: 85,
+            );
+            if (picked == null || !mounted) return;
+            setState(() => _coverFile = File(picked.path));
+          }
+
+          '''
+          assert needle in s
+          s = s.replace(needle, picker + needle, 1)
+
+          old = '''  void _create() async {
+            final name = _nameController.text.trim();
+            if (name.isEmpty) return;
+            setState(() => _isCreating = true);
+
+            try {
+              final circle = await CirclesRepository.createCircle(
+                name: name,
+                description: _descController.text.trim().isEmpty
+                    ? null
+                    : _descController.text.trim(),
+              );
+              if (!mounted) return;
+              // Close the sheet, tell the list screen to refresh, and hand the
+              // new circle back so the caller can immediately open its detail
+              // screen — that's where the existing "Invite People" / share-link
+              // flow already lives (see _InviteSheet in circle_detail_screen.dart).
+              Navigator.pop(context, circle.id);
+            } catch (e, st) {
+              debugPrint('CreateCircleSheet: createCircle failed: $e\\n$st');
+              if (!mounted) return;
+              setState(() => _isCreating = false);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    "Couldn't create circle — try again.",
+                    style: GoogleFonts.manrope(fontSize: 13, color: Colors.white),
+                  ),
+                  backgroundColor: AppTheme.error,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  margin: const EdgeInsets.all(16),
+                ),
+              );
+            }
+          }
+'''
+          new = '''  void _create() async {
+            final name = _nameController.text.trim();
+            if (name.isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Enter a circle name.')),
+              );
+              return;
+            }
+            final coverFile = _coverFile;
+            if (coverFile == null) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('A circle cover image is required.')),
+              );
+              return;
+            }
+            setState(() => _isCreating = true);
+
+            try {
+              final circle = await CirclesRepository.createCircle(
+                name: name,
+                description: _descController.text.trim().isEmpty
+                    ? null
+                    : _descController.text.trim(),
+                coverFile: coverFile,
+              );
+              if (!mounted) return;
+              // Close the sheet, refresh the list, then open the new circle.
+              // The existing Invite People/share-link flow remains unchanged.
+              Navigator.pop(context, circle.id);
+            } catch (e, st) {
+              debugPrint('CreateCircleSheet: createCircle failed: $e\\n$st');
+              if (!mounted) return;
+              setState(() => _isCreating = false);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    "Couldn't create circle — try again.",
+                    style: GoogleFonts.manrope(fontSize: 13, color: Colors.white),
+                  ),
+                  backgroundColor: AppTheme.error,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  margin: const EdgeInsets.all(16),
+                ),
+              );
+            }
+          }
+'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          needle = '''          const SizedBox(height: 28),
+
+          // Create button
+'''
+          insert = '''          const SizedBox(height: 20),
+
+          // Mandatory circle cover
+          _SheetLabel('Circle cover *'),
+          const SizedBox(height: 8),
+          GestureDetector(
+            onTap: _isCreating ? null : _pickCover,
+            child: Container(
+              height: 150,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: AppTheme.surfaceVariantDark,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppTheme.outline, width: 0.8),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: _coverFile == null
+                  ? Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.add_photo_alternate_rounded,
+                          size: 34,
+                          color: AppTheme.textDisabled,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Tap to select a cover image',
+                          style: GoogleFonts.manrope(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.textMuted,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          'Required',
+                          style: GoogleFonts.manrope(
+                            fontSize: 11,
+                            color: AppTheme.textDisabled,
+                          ),
+                        ),
+                      ],
+                    )
+                  : Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        Image.file(_coverFile!, fit: BoxFit.cover),
+                        Positioned(
+                          right: 10,
+                          bottom: 10,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 7,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withAlpha(170),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              'Change',
+                              style: GoogleFonts.manrope(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+          ),
+
+          const SizedBox(height: 28),
+
+          // Create button
+'''
+          assert needle in s
+          s = s.replace(needle, insert, 1)
+
+          s = s.replace(
+              "onPressed: _isCreating ? null : _create,",
+              "onPressed: _isCreating || _coverFile == null ? null : _create,",
+              1,
+          )
+
+          old = '''      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+'''
+          new = '''      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SheetLabel'''
+          new = '''            ),
+          ),
+        ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SheetLabel'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''                    child: CachedNetworkImage(
+                      imageUrl: circle.imageUrl,
+                      width: 64,
+                      height: 64,
+                      fit: BoxFit.cover,
+                      placeholder: (_, __) => Container(
+                        width: 64,
+                        height: 64,
+                        color: AppTheme.surfaceVariantDark,
+                        child: const Icon(
+                          Icons.group_rounded,
+                          size: 28,
+                          color: AppTheme.textDisabled,
+                        ),
+                      ),
+                      errorWidget: (_, __, ___) => Container(
+                        width: 64,
+                        height: 64,
+                        color: AppTheme.surfaceVariantDark,
+                        child: const Icon(
+                          Icons.group_rounded,
+                          size: 28,
+                          color: AppTheme.textDisabled,
+                        ),
+                      ),
+                    ),'''
+          new = '''                    child: circle.imageUrl.isEmpty
+                        ? Container(
+                            width: 64,
+                            height: 64,
+                            color: AppTheme.surfaceVariantDark,
+                            child: const Icon(
+                              Icons.group_rounded,
+                              size: 28,
+                              color: AppTheme.textDisabled,
+                            ),
+                          )
+                        : CachedNetworkImage(
+                            imageUrl: circle.imageUrl,
+                            width: 64,
+                            height: 64,
+                            fit: BoxFit.cover,
+                            placeholder: (_, __) => Container(
+                              width: 64,
+                              height: 64,
+                              color: AppTheme.surfaceVariantDark,
+                              child: const Icon(
+                                Icons.group_rounded,
+                                size: 28,
+                                color: AppTheme.textDisabled,
+                              ),
+                            ),
+                            errorWidget: (_, __, ___) => Container(
+                              width: 64,
+                              height: 64,
+                              color: AppTheme.surfaceVariantDark,
+                              child: const Icon(
+                                Icons.group_rounded,
+                                size: 28,
+                                color: AppTheme.textDisabled,
+                              ),
+                            ),
+                          ),'''
+          assert old in s
+          s = s.replace(old, new, 1)
+          f.write_text(s)
+
+          # circle_detail_screen.dart: remove the Pexels circle-cover fallback.
+          f = Path('lib/presentation/circle_detail_screen/circle_detail_screen.dart')
+          s = f.read_text()
+          old = """          coverUrl: detail.circle.coverImageUrl ??\n              'https://images.pexels.com/photos/1128318/pexels-photo-1128318.jpeg?w=800',"""
+          assert old in s
+          s = s.replace(old, "          coverUrl: detail.circle.coverImageUrl ?? '',", 1)
+
+          old = '''          child: CachedNetworkImage(
+            imageUrl: circle.coverUrl,
+            fit: BoxFit.cover,
+            placeholder: (_, __) => Container(
+              color: AppTheme.surfaceVariantDark,
+              child: const Center(
+                child: Icon(
+                  Icons.group_rounded,
+                  size: 48,
+                  color: AppTheme.textDisabled,
+                ),
+              ),
+            ),
+            errorWidget: (_, __, ___) => Container(
+              color: AppTheme.surfaceVariantDark,
+              child: const Center(
+                child: Icon(
+                  Icons.group_rounded,
+                  size: 48,
+                  color: AppTheme.textDisabled,
+                ),
+              ),
+            ),
+          ),'''
+          new = '''          child: circle.coverUrl.isEmpty
+              ? Container(
+                  color: AppTheme.surfaceVariantDark,
+                  child: const Center(
+                    child: Icon(
+                      Icons.group_rounded,
+                      size: 48,
+                      color: AppTheme.textDisabled,
+                    ),
+                  ),
+                )
+              : CachedNetworkImage(
+                  imageUrl: circle.coverUrl,
+                  fit: BoxFit.cover,
+                  placeholder: (_, __) => Container(
+                    color: AppTheme.surfaceVariantDark,
+                    child: const Center(
+                      child: Icon(
+                        Icons.group_rounded,
+                        size: 48,
+                        color: AppTheme.textDisabled,
+                      ),
+                    ),
+                  ),
+                  errorWidget: (_, __, ___) => Container(
+                    color: AppTheme.surfaceVariantDark,
+                    child: const Center(
+                      child: Icon(
+                        Icons.group_rounded,
+                        size: 48,
+                        color: AppTheme.textDisabled,
+                      ),
+                    ),
+                  ),
+                ),'''
+          assert old in s
+          s = s.replace(old, new, 1)
+          f.write_text(s)
+          PY
+
+          git diff --check
+
+      - name: Commit and remove one-time workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm .github/workflows/_patch_circle_covers.yml
+          git add lib/presentation/circles_screen/circles_screen.dart lib/presentation/circle_detail_screen/circle_detail_screen.dart .github/workflows/_patch_circle_covers.yml
+          git commit -m "Require circle cover image on creation"
+          git push
