@@ -40,10 +40,12 @@ if (hasLocalKeyProperties) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
-val hasCiSigningEnv = System.getenv("ANDROID_KEYSTORE_PATH") != null &&
-    System.getenv("ANDROID_KEYSTORE_PASSWORD") != null &&
-    System.getenv("ANDROID_KEY_ALIAS") != null &&
-    System.getenv("ANDROID_KEY_PASSWORD") != null
+val hasCiSigningEnv = listOf(
+    System.getenv("ANDROID_KEYSTORE_PATH"),
+    System.getenv("ANDROID_KEYSTORE_PASSWORD"),
+    System.getenv("ANDROID_KEY_ALIAS"),
+    System.getenv("ANDROID_KEY_PASSWORD"),
+).all { !it.isNullOrBlank() }
 
 val hasReleaseSigning = hasLocalKeyProperties || hasCiSigningEnv
 
