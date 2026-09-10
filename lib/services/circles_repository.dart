@@ -136,6 +136,62 @@ class CirclesRepository {
     }
   }
 
+  static Future<Circle> updateCircle({
+    required String circleId,
+    required String name,
+    String? description,
+    File? coverFile,
+  }) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) {
+      throw StateError('Must be signed in to edit a circle');
+    }
+
+    String? newCoverPath;
+    String? newCoverUrl;
+
+    if (coverFile != null) {
+      final ext = coverFile.path.split('.').last.toLowerCase();
+      newCoverPath = '$userId/${DateTime.now().microsecondsSinceEpoch}.$ext';
+      await _client.storage
+          .from(_circleCoverBucket)
+          .upload(newCoverPath, coverFile);
+      newCoverUrl = _client.storage
+          .from(_circleCoverBucket)
+          .getPublicUrl(newCoverPath);
+    }
+
+    try {
+      final update = <String, dynamic>{
+        'name': name,
+        'description': description,
+      };
+      if (newCoverUrl != null) update['cover_image_url'] = newCoverUrl;
+
+      final row = await _client
+          .from('circles')
+          .update(update)
+          .eq('id', circleId)
+          .select()
+          .single();
+
+      final memberCount = await _client
+          .from('circle_members')
+          .select('user_id')
+          .eq('circle_id', circleId);
+      row['member_count'] = (memberCount as List).length;
+
+      return Circle.fromMap(row);
+    } catch (e) {
+      if (newCoverPath != null) {
+        try {
+          await _client.storage.from(_circleCoverBucket).remove([newCoverPath]);
+        } catch (_) {}
+      }
+      rethrow;
+    }
+  }
+
   /// A single circle plus its member list (each with profile info),
   /// for the circle detail screen.
   static Future<({Circle circle, List<Profile> members})> fetchCircleDetail(
