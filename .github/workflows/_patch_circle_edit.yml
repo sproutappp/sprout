@@ -1,0 +1,398 @@
+name: Patch circle edit flow
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply circle edit changes
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          # circles_screen_with_cover.dart
+          p = Path('lib/presentation/circles_screen/circles_screen_with_cover.dart')
+          s = p.read_text()
+
+          s = s.replace(
+              "class _CreateCircleSheetWithCover extends StatefulWidget {\n  const _CreateCircleSheetWithCover();",
+              "class _CreateCircleSheetWithCover extends StatefulWidget {\n  final Circle? circle;\n\n  const _CreateCircleSheetWithCover({this.circle});",
+              1,
+          )
+          s = s.replace(
+              "  final _descController = TextEditingController();\n  File? _coverFile;\n  bool _isCreating = false;",
+              "  final _descController = TextEditingController();\n  File? _coverFile;\n  String? _existingCoverUrl;\n  bool _isCreating = false;",
+              1,
+          )
+          s = s.replace(
+              "  @override\n  void dispose() {",
+              "  @override\n  void initState() {\n    super.initState();\n    final circle = widget.circle;\n    if (circle != null) {\n      _nameController.text = circle.name;\n      _descController.text = circle.description ?? '';\n      _existingCoverUrl = circle.coverImageUrl;\n    }\n  }\n\n  @override\n  void dispose() {",
+              1,
+          )
+
+          start = s.index("  Future<void> _create() async {")
+          end = s.index("\n  @override\n  Widget build", start)
+          new_method = '''  Future<void> _save() async {
+            final name = _nameController.text.trim();
+            final coverFile = _coverFile;
+            final isEdit = widget.circle != null;
+
+            if (name.isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Enter a circle name.')),
+              );
+              return;
+            }
+            if (!isEdit && coverFile == null) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('A circle cover image is required.')),
+              );
+              return;
+            }
+
+            setState(() => _isCreating = true);
+            try {
+              final circle = isEdit
+                  ? await CirclesRepository.updateCircle(
+                      circleId: widget.circle!.id,
+                      name: name,
+                      description: _descController.text.trim().isEmpty
+                          ? null
+                          : _descController.text.trim(),
+                      coverFile: coverFile,
+                    )
+                  : await CirclesRepository.createCircle(
+                      name: name,
+                      description: _descController.text.trim().isEmpty
+                          ? null
+                          : _descController.text.trim(),
+                      coverFile: coverFile,
+                    );
+              if (!mounted) return;
+              Navigator.pop(context, circle.id);
+            } catch (e, st) {
+              debugPrint('CircleForm: save failed: $e\\n$st');
+              if (!mounted) return;
+              setState(() => _isCreating = false);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    isEdit
+                        ? "Couldn't save circle — try again."
+                        : "Couldn't create circle — try again.",
+                    style: GoogleFonts.manrope(fontSize: 13, color: Colors.white),
+                  ),
+                  backgroundColor: AppTheme.error,
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            }
+          }
+'''
+          s = s[:start] + new_method + s[end:]
+
+          s = s.replace("              'Create a Circle',", "              widget.circle == null ? 'Create a Circle' : 'Edit Circle',", 1)
+          s = s.replace("              'A private space for your trusted people',", "              widget.circle == null\n                  ? 'A private space for your trusted people'\n                  : 'Update your circle details',", 1)
+          s = s.replace("            _SheetLabel('Circle cover *'),", "            _SheetLabel(widget.circle == null ? 'Circle cover *' : 'Circle cover'),", 1)
+
+          old_preview = '''                child: _coverFile == null
+                    ? Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.add_photo_alternate_rounded,
+                            size: 34,
+                            color: AppTheme.textDisabled,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Tap to select a cover image',
+                            style: GoogleFonts.manrope(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.textMuted,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            'Required',
+                            style: GoogleFonts.manrope(
+                              fontSize: 11,
+                              color: AppTheme.textDisabled,
+                            ),
+                          ),
+                        ],
+                      )
+                    : Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          Image.file(_coverFile!, fit: BoxFit.cover),
+                          Positioned(
+                            right: 10,
+                            bottom: 10,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 7,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withAlpha(170),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                'Change',
+                                style: GoogleFonts.manrope(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),'''
+          new_preview = '''                child: _coverFile != null
+                    ? Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          Image.file(_coverFile!, fit: BoxFit.cover),
+                          _changeCoverLabel(),
+                        ],
+                      )
+                    : (_existingCoverUrl?.isNotEmpty == true
+                        ? Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              CachedNetworkImage(
+                                imageUrl: _existingCoverUrl!,
+                                fit: BoxFit.cover,
+                                errorWidget: (_, __, ___) => Container(
+                                  color: AppTheme.surfaceVariantDark,
+                                  child: const Center(
+                                    child: Icon(
+                                      Icons.broken_image_rounded,
+                                      size: 34,
+                                      color: AppTheme.textDisabled,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              _changeCoverLabel(),
+                            ],
+                          )
+                        : Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(
+                                Icons.add_photo_alternate_rounded,
+                                size: 34,
+                                color: AppTheme.textDisabled,
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Tap to select a cover image',
+                                style: GoogleFonts.manrope(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.textMuted,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                'Required',
+                                style: GoogleFonts.manrope(
+                                  fontSize: 11,
+                                  color: AppTheme.textDisabled,
+                                ),
+                              ),
+                            ],
+                          )),'''
+          assert old_preview in s
+          s = s.replace(old_preview, new_preview, 1)
+
+          needle = "  @override\n  Widget build(BuildContext context) {"
+          helper = '''  Widget _changeCoverLabel() {
+    return Positioned(
+      right: 10,
+      bottom: 10,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(
+          color: Colors.black.withAlpha(170),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Text(
+          'Change',
+          style: GoogleFonts.manrope(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: Colors.white,
+          ),
+        ),
+      ),
+    );
+  }
+
+'''
+          assert needle in s
+          s = s.replace(needle, helper + needle, 1)
+
+          s = s.replace(
+              "onPressed: _isCreating || _coverFile == null ? null : _create,",
+              "onPressed: _isCreating || (widget.circle == null && _coverFile == null) ? null : _save,",
+              1,
+          )
+          s = s.replace("                        'Create Circle',", "                        widget.circle == null ? 'Create Circle' : 'Save',", 1)
+          p.write_text(s)
+
+          # circle_detail_screen.dart
+          p = Path('lib/presentation/circle_detail_screen/circle_detail_screen.dart')
+          s = p.read_text()
+          s = s.replace(
+              "  void _openSettingsMenu() {\n    final circle = _circle;\n    if (circle == null) return;\n    showModalBottomSheet(\n      context: context,\n      backgroundColor: Colors.transparent,\n      builder: (_) => _CircleSettingsSheet(circleName: circle.name),\n    );\n  }",
+              '''  Future<void> _openSettingsMenu() async {
+    final circle = _circle;
+    if (circle == null) return;
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _CircleSettingsSheet(circleName: circle.name),
+    );
+    if (!mounted || action == null) return;
+    if (action == 'invite') {
+      _openInviteSheet();
+    } else if (action == 'edit') {
+      final updatedId = await showModalBottomSheet<String>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (_) => _CreateCircleSheetWithCover(circle: Circle(
+          id: circle.id,
+          name: circle.name,
+          description: circle.subtitle == 'A private space for your circle.'
+              ? null
+              : circle.subtitle,
+          coverImageUrl: circle.coverUrl,
+          createdBy: '',
+          createdAt: DateTime.now(),
+          memberCount: circle.memberCount,
+        )),
+      );
+      if (updatedId != null) _load();
+    }
+  }''',
+              1,
+          )
+          s = s.replace(
+              "          coverUrl: detail.circle.coverImageUrl ??\n              'https://images.pexels.com/photos/1128318/pexels-photo-1128318.jpeg?w=800',",
+              "          coverUrl: detail.circle.coverImageUrl ?? '',",
+              1,
+          )
+          old_settings_start = s.index('class _CircleSettingsSheet extends StatelessWidget {')
+          new_settings = '''class _CircleSettingsSheet extends StatelessWidget {
+  final String circleName;
+
+  const _CircleSettingsSheet({required this.circleName});
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
+    final options = [
+      (Icons.person_add_rounded, 'Invite', 'invite', AppTheme.primaryGreen),
+      (Icons.edit_rounded, 'Edit Circle', 'edit', AppTheme.textPrimary),
+    ];
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      padding: EdgeInsets.fromLTRB(20, 0, 20, bottomPadding + 12),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceDark,
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: AppTheme.outline, width: 0.5),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Center(
+            child: Container(
+              margin: const EdgeInsets.only(top: 12, bottom: 16),
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppTheme.outline,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          Text(
+            circleName,
+            style: GoogleFonts.manrope(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: AppTheme.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Circle options',
+            style: GoogleFonts.manrope(fontSize: 13, color: AppTheme.textMuted),
+          ),
+          const SizedBox(height: 20),
+          ...options.map(
+            (opt) => GestureDetector(
+              onTap: () => Navigator.pop(context, opt.$3),
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(
+                  color: AppTheme.surfaceVariantDark,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppTheme.outline, width: 0.6),
+                ),
+                child: Row(
+                  children: [
+                    Icon(opt.$1, size: 20, color: opt.$4),
+                    const SizedBox(width: 12),
+                    Text(
+                      opt.$2,
+                      style: GoogleFonts.manrope(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: opt.$4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+'''
+          s = s[:old_settings_start] + new_settings
+          p.write_text(s)
+          PY
+
+          git diff --check
+
+      - name: Commit patch and remove workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm .github/workflows/_patch_circle_edit.yml
+          git add lib/presentation/circles_screen/circles_screen_with_cover.dart lib/presentation/circle_detail_screen/circle_detail_screen.dart .github/workflows/_patch_circle_edit.yml
+          git commit -m "Add circle edit flow and menu"
+          git push
