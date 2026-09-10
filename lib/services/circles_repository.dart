@@ -73,11 +73,14 @@ class CirclesRepository {
   static Future<Circle> createCircle({
     required String name,
     String? description,
-    required File coverFile,
+    File? coverFile,
   }) async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) {
       throw StateError('Must be signed in to create a circle');
+    }
+    if (coverFile == null) {
+      throw StateError('A circle cover image is required');
     }
 
     final ext = coverFile.path.split('.').last.toLowerCase();
