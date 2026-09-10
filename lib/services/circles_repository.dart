@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import '../core/supabase/supabase_service.dart';
 import '../models/circle.dart';
 import '../models/profile.dart';
@@ -9,6 +11,7 @@ class CirclesRepository {
   CirclesRepository._();
 
   static final _client = SupabaseService.client;
+  static const _circleCoverBucket = 'circle-covers';
 
   /// Circles the current user is a member of, newest first.
   ///
@@ -70,31 +73,64 @@ class CirclesRepository {
   static Future<Circle> createCircle({
     required String name,
     String? description,
+    required File coverFile,
   }) async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) {
       throw StateError('Must be signed in to create a circle');
     }
 
-    final circleRow = await _client
-        .from('circles')
-        .insert({
-          'name': name,
-          'description': description,
-          'created_by': userId,
-        })
-        .select()
-        .single();
+    final ext = coverFile.path.split('.').last.toLowerCase();
+    final coverPath = '$userId/${DateTime.now().microsecondsSinceEpoch}.$ext';
 
-    // Creator automatically joins their own circle as admin.
-    await _client.from('circle_members').insert({
-      'circle_id': circleRow['id'],
-      'user_id': userId,
-      'role': 'admin',
-    });
+    // Upload first so the circle is never intentionally created without the
+    // required cover image. Circle covers are presentation assets, so the
+    // dedicated bucket is public (unlike private memory photos).
+    await _client.storage
+        .from(_circleCoverBucket)
+        .upload(coverPath, coverFile);
 
-    circleRow['member_count'] = 1;
-    return Circle.fromMap(circleRow);
+    final coverUrl = _client.storage
+        .from(_circleCoverBucket)
+        .getPublicUrl(coverPath);
+
+    String? circleId;
+    try {
+      final circleRow = await _client
+          .from('circles')
+          .insert({
+            'name': name,
+            'description': description,
+            'cover_image_url': coverUrl,
+            'created_by': userId,
+          })
+          .select()
+          .single();
+
+      circleId = circleRow['id'] as String;
+
+      // Creator automatically joins their own circle as admin.
+      await _client.from('circle_members').insert({
+        'circle_id': circleId,
+        'user_id': userId,
+        'role': 'admin',
+      });
+
+      circleRow['member_count'] = 1;
+      return Circle.fromMap(circleRow);
+    } catch (e) {
+      // Best-effort rollback: don't leave an orphaned cover (or circle) if
+      // the database portion of creation fails.
+      if (circleId != null) {
+        try {
+          await _client.from('circles').delete().eq('id', circleId);
+        } catch (_) {}
+      }
+      try {
+        await _client.storage.from(_circleCoverBucket).remove([coverPath]);
+      } catch (_) {}
+      rethrow;
+    }
   }
 
   /// A single circle plus its member list (each with profile info),
