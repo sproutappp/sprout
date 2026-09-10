@@ -7,7 +7,7 @@ import '../presentation/onboarding_screen/onboarding_screen.dart';
 import '../presentation/sign_up_login_screen/sign_up_login_screen.dart';
 import '../presentation/create_memory_screen/create_memory_screen.dart';
 import '../presentation/memory_detail_screen/memory_detail_screen.dart';
-import '../presentation/circles_screen/circles_screen.dart';
+import '../presentation/circles_screen/circles_screen_with_cover.dart';
 import '../presentation/circle_detail_screen/circle_detail_screen.dart';
 import '../presentation/memories_screen/widgets/memories_grid_widget.dart';
 import '../presentation/discover_screen/discover_screen.dart';
@@ -381,7 +381,7 @@ final GoRouter appRouter = GoRouter(
             GoRoute(
               path: AppRoutes.circlesScreen,
               pageBuilder: (context, state) =>
-                  const NoTransitionPage(child: CirclesScreen()),
+                  const NoTransitionPage(child: CirclesScreenWithCover()),
             ),
           ],
         ),
