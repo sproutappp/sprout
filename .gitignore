@@ -11,7 +11,6 @@
 .svn/
 .swiftpm/
 migrate_working_dir/
-pubspec.lock
 
 # IntelliJ related
 *.iml
@@ -38,6 +37,10 @@ env.json
 .pub/
 /build/
 /web/
+# NOTE: pubspec.lock is intentionally NOT ignored (removed from here) —
+# this is an application, not a package, so the lockfile is committed for
+# reproducible builds. See the "pubspec.lock" section of the changelog/PR
+# for the one-time regeneration this required.
 
 # Symbolication related
 app.*.symbols
