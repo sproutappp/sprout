@@ -1,6 +1,6 @@
 import 'profile.dart';
 
-enum AppNotificationType { circleMemory, circleJoin, memoryComment }
+enum AppNotificationType { circleMemory, circleJoin, memoryComment, circleInvite }
 
 class AppNotification {
   final String id;
@@ -9,6 +9,7 @@ class AppNotification {
   final String? circleId;
   final String? circleName;
   final String? memoryId;
+  final String? inviteToken;
   final bool isRead;
   final DateTime createdAt;
 
@@ -19,6 +20,7 @@ class AppNotification {
     this.circleId,
     this.circleName,
     this.memoryId,
+    this.inviteToken,
     required this.isRead,
     required this.createdAt,
   });
@@ -29,6 +31,8 @@ class AppNotification {
         return AppNotificationType.circleJoin;
       case 'memory_comment':
         return AppNotificationType.memoryComment;
+      case 'circle_invite':
+        return AppNotificationType.circleInvite;
       case 'circle_memory':
       default:
         return AppNotificationType.circleMemory;
@@ -47,6 +51,7 @@ class AppNotification {
       circleId: map['circle_id'] as String?,
       circleName: circleMap != null ? circleMap['name'] as String? : null,
       memoryId: map['memory_id'] as String?,
+      inviteToken: map['invite_token'] as String?,
       isRead: map['is_read'] as bool? ?? false,
       createdAt: DateTime.parse(map['created_at'] as String),
     );
@@ -60,6 +65,8 @@ class AppNotification {
         return '${actor.displayName} joined ${circleName ?? 'your circle'}';
       case AppNotificationType.memoryComment:
         return '${actor.displayName} commented on your memory';
+      case AppNotificationType.circleInvite:
+        return '${actor.displayName} invited you to ${circleName ?? 'a circle'}';
     }
   }
 }
