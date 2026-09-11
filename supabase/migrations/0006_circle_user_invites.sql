@@ -67,3 +67,4 @@ notify pgrst, 'reload schema';
 
 -- Applied after the existing circle invite and notification schema.
 -- In-app invite tokens are intentionally unique per recipient.
+-- Trigger patch retry.
