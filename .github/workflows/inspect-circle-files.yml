@@ -1,0 +1,22 @@
+name: Inspect circle UI files
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dump circle files
+        run: |
+          echo '===== HOME CIRCLES ====='
+          sed -n '1,260p' lib/presentation/home_screen/widgets/home_circles_strip_widget.dart
+          echo '===== PROFILE ====='
+          grep -n -A120 -B20 'class _CircleRow' lib/presentation/profile_screen/profile_screen.dart || true
+          echo '===== CIRCLES SCREEN CARD ====='
+          grep -n -A130 -B10 'class _CircleCard' lib/presentation/circles_screen/circles_screen_with_cover.dart || true
