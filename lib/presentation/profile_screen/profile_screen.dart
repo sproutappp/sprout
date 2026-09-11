@@ -309,9 +309,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       context.push(AppRoutes.notificationsScreen);
     } else if (action.label == 'Privacy') {
       context.push(AppRoutes.privacyPolicyScreen);
+    } else if (action.label == 'Settings') {
+      context.push(AppRoutes.settingsScreen);
     }
-    // 'Settings' has no route yet in AppRoutes — left as a no-op like
-    // before, rather than inventing a screen that wasn't asked for.
   }
 
   @override
