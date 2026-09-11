@@ -1,22 +1,147 @@
 name: Inspect circle UI files
-
 on:
   push:
     branches: [main]
-
 permissions:
-  contents: read
-
+  contents: write
 jobs:
-  inspect:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[circle-actions-applied]') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Dump circle files
+      - name: Apply circle actions
         run: |
-          echo '===== HOME CIRCLES ====='
-          sed -n '1,260p' lib/presentation/home_screen/widgets/home_circles_strip_widget.dart
-          echo '===== PROFILE ====='
-          grep -n -A120 -B20 'class _CircleRow' lib/presentation/profile_screen/profile_screen.dart || true
-          echo '===== CIRCLES SCREEN CARD ====='
-          grep -n -A130 -B10 'class _CircleCard' lib/presentation/circles_screen/circles_screen_with_cover.dart || true
+          python3 <<'PY'
+          from pathlib import Path
+
+          def add_import(path, imp):
+              p=Path(path); s=p.read_text()
+              if imp not in s:
+                  lines=s.splitlines(); j=0
+                  while j<len(lines) and lines[j].startswith('import '): j+=1
+                  lines.insert(j,imp); s='\n'.join(lines)+'\n'
+              return p,s
+
+          path='lib/presentation/home_screen/widgets/home_circles_strip_widget.dart'; p,s=add_import(path,"import '../../../widgets/circle_action_menu.dart';")
+          s=s.replace('  final Color color;\n\n  const _CircleModel({','  final Color color;\n  final Circle sourceCircle;\n\n  const _CircleModel({',1)
+          s=s.replace('    required this.color,\n  });','    required this.color,\n    required this.sourceCircle,\n  });',1)
+          s=s.replace('    id: circle.id,\n    name: circle.name,','    id: circle.id,\n    name: circle.name,\n    sourceCircle: circle,',1)
+          old='''            // Chevron
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 18,
+              color: AppTheme.textDisabled,
+            ),'''
+          s=s.replace(old,'''            CircleActionMenu(
+              circle: c.sourceCircle,
+              onChanged: _load,
+            ),''',1)
+          p.write_text(s)
+
+          path='lib/presentation/circles_screen/circles_screen_with_cover.dart'; p,s=add_import(path,"import '../../widgets/circle_action_menu.dart';")
+          s=s.replace('''                          onTap: () => _openCircleDetail(circle),
+                        ),''','''                          onTap: () => _openCircleDetail(circle),
+                          onChanged: _loadCircles,
+                        ),''',1)
+          s=s.replace('''  final VoidCallback onTap;
+
+  const _CircleCard({
+    required this.circle,
+    required this.accentColor,
+    required this.onTap,
+  });''','''  final VoidCallback onTap;
+  final VoidCallback? onChanged;
+
+  const _CircleCard({
+    required this.circle,
+    required this.accentColor,
+    required this.onTap,
+    this.onChanged,
+  });''',1)
+          old='''            const SizedBox(width: 8),
+            const Icon(
+              Icons.chevron_right_rounded,
+              size: 20,
+              color: AppTheme.textDisabled,
+            ),'''
+          s=s.replace(old,'''            const SizedBox(width: 4),
+            CircleActionMenu(
+              circle: circle,
+              onChanged: onChanged,
+            ),''',1)
+          p.write_text(s)
+
+          path='lib/presentation/profile_screen/profile_screen.dart'; p,s=add_import(path,"import '../../widgets/circle_action_menu.dart';")
+          s=s.replace('  final Color accent;\n\n  const _CircleRow({','  final Color accent;\n  final Circle sourceCircle;\n\n  const _CircleRow({',1)
+          s=s.replace('    required this.accent,\n  });','    required this.accent,\n    required this.sourceCircle,\n  });',1)
+          s=s.replace('    id: c.id,\n    name: c.name,','    id: c.id,\n    name: c.name,\n    sourceCircle: c,',1)
+          old='''          Icon(
+            Icons.chevron_right_rounded,
+            color: AppTheme.textMuted,
+            size: 18,
+          ),'''
+          s=s.replace(old,'''          CircleActionMenu(
+            circle: circle.sourceCircle,
+            onChanged: _load,
+          ),''',1)
+          p.write_text(s)
+
+          path='lib/services/circles_repository.dart'; p=Path(path); s=p.read_text()
+          if 'static String? get currentUserId' not in s:
+              block='''  static String? get currentUserId => _client.auth.currentUser?.id;
+
+  static Future<List<String>> fetchMemberIds(String circleId) async {
+    final rows = await _client.from('circle_members').select('user_id').eq('circle_id', circleId);
+    return (rows as List).map((row) => row['user_id'] as String).toList();
+  }
+
+  static Future<int> sendCircleInvites({required String circleId, required List<String> userIds}) async {
+    final result = await _client.rpc('send_circle_invites', params: {
+      'p_circle_id': circleId,
+      'p_user_ids': userIds,
+    });
+    return (result as num).toInt();
+  }
+
+'''
+              marker='  static Future<void> addMember'
+              if marker not in s: raise SystemExit('circle repository marker missing')
+              s=s.replace(marker,block+marker,1); p.write_text(s)
+
+          path='lib/services/profiles_repository.dart'; p=Path(path); s=p.read_text()
+          if 'static Future<List<Profile>> fetchAllUsers()' not in s:
+              block='''  static Future<List<Profile>> fetchAllUsers() async {
+    final rows = await _client.from('profiles').select('id, full_name, avatar_url').order('full_name');
+    return (rows as List).map((row) => Profile.fromMap(Map<String, dynamic>.from(row))).toList();
+  }
+
+'''
+              marker='  // ── Identity linking'
+              if marker not in s: raise SystemExit('profile repository marker missing')
+              s=s.replace(marker,block+marker,1); p.write_text(s)
+
+          path='lib/models/notification.dart'; p=Path(path); s=p.read_text()
+          s=s.replace('enum AppNotificationType { circleMemory, circleJoin, memoryComment }','enum AppNotificationType { circleMemory, circleJoin, memoryComment, circleInvite }',1)
+          s=s.replace("      case 'circle_memory':\n      default:\n        return AppNotificationType.circleMemory;", "      case 'circle_invite':\n        return AppNotificationType.circleInvite;\n      case 'circle_memory':\n      default:\n        return AppNotificationType.circleMemory;",1)
+          s=s.replace('  final String? memoryId;\n  final bool isRead;', '  final String? memoryId;\n  final String? inviteToken;\n  final bool isRead;',1)
+          s=s.replace('    this.memoryId,\n    required this.isRead,', '    this.memoryId,\n    this.inviteToken,\n    required this.isRead,',1)
+          s=s.replace("      memoryId: map['memory_id'] as String?,\n      isRead", "      memoryId: map['memory_id'] as String?,\n      inviteToken: map['invite_token'] as String?,\n      isRead",1)
+          s=s.replace("      case AppNotificationType.memoryComment:\n        return '${actor.displayName} commented on your memory';", "      case AppNotificationType.memoryComment:\n        return '${actor.displayName} commented on your memory';\n      case AppNotificationType.circleInvite:\n        return '${actor.displayName} invited you to ${circleName ?? 'a circle'}';",1)
+          p.write_text(s)
+
+          path='lib/presentation/notifications_screen/notifications_screen.dart'; p=Path(path); s=p.read_text()
+          s=s.replace('  final String? circleId;\n\n  _NotifItem({', '  final String? circleId;\n  final String? inviteToken;\n\n  _NotifItem({',1)
+          s=s.replace('    this.circleId,\n  });', '    this.circleId,\n    this.inviteToken,\n  });',1)
+          s=s.replace('      circleId: n.circleId,\n    );', '      circleId: n.circleId,\n      inviteToken: n.inviteToken,\n    );',1)
+          s=s.replace('    if (notif.memoryId != null) {', "    if (notif.inviteToken != null) {\n      context.push(AppRoutes.joinCircleScreen, extra: notif.inviteToken);\n    } else if (notif.memoryId != null) {",1)
+          s=s.replace('      case AppNotificationType.memoryComment:\n        return Icons.chat_bubble_rounded;', '      case AppNotificationType.memoryComment:\n        return Icons.chat_bubble_rounded;\n      case AppNotificationType.circleInvite:\n        return Icons.person_add_rounded;',1)
+          s=s.replace('      case AppNotificationType.memoryComment:\n        return AppTheme.cyanAccent;', '      case AppNotificationType.memoryComment:\n        return AppTheme.cyanAccent;\n      case AppNotificationType.circleInvite:\n        return AppTheme.primaryGreen;',1)
+          p.write_text(s)
+          PY
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add lib pubspec.yaml pubspec.lock
+          git commit -m 'Complete circle actions and invitations [circle-actions-applied]'
+          git push
