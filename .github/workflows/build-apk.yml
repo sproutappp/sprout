@@ -8,6 +8,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -16,6 +19,87 @@ jobs:
     steps:
       - name: Check out the repo
         uses: actions/checkout@v4
+
+      - name: Wire circle action menus
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          def add_import(path, imp):
+              p=Path(path); s=p.read_text()
+              if imp not in s:
+                  lines=s.splitlines(); j=0
+                  while j<len(lines) and lines[j].startswith('import '): j+=1
+                  lines.insert(j,imp); s='\n'.join(lines)+'\n'
+              return p,s
+
+          path='lib/presentation/home_screen/widgets/home_circles_strip_widget.dart'; p,s=add_import(path,"import '../../../widgets/circle_action_menu.dart';")
+          if 'sourceCircle' not in s:
+              s=s.replace('  final Color color;\n\n  const _CircleModel({','  final Color color;\n  final Circle sourceCircle;\n\n  const _CircleModel({',1)
+              s=s.replace('    required this.color,\n  });','    required this.color,\n    required this.sourceCircle,\n  });',1)
+              s=s.replace('    id: circle.id,\n    name: circle.name,','    id: circle.id,\n    name: circle.name,\n    sourceCircle: circle,',1)
+              old='''            // Chevron
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 18,
+              color: AppTheme.textDisabled,
+            ),'''
+              if old in s: s=s.replace(old,'''            CircleActionMenu(
+              circle: c.sourceCircle,
+              onChanged: _load,
+            ),''',1)
+          p.write_text(s)
+
+          path='lib/presentation/circles_screen/circles_screen_with_cover.dart'; p,s=add_import(path,"import '../../widgets/circle_action_menu.dart';")
+          if 'CircleActionMenu' not in s:
+              s=s.replace('''                          onTap: () => _openCircleDetail(circle),
+                        ),''','''                          onTap: () => _openCircleDetail(circle),
+                          onChanged: _loadCircles,
+                        ),''',1)
+              s=s.replace('''  final VoidCallback onTap;
+
+  const _CircleCard({
+    required this.circle,
+    required this.accentColor,
+    required this.onTap,
+  });''','''  final VoidCallback onTap;
+  final VoidCallback? onChanged;
+
+  const _CircleCard({
+    required this.circle,
+    required this.accentColor,
+    required this.onTap,
+    this.onChanged,
+  });''',1)
+              old='''            const SizedBox(width: 8),
+            const Icon(
+              Icons.chevron_right_rounded,
+              size: 20,
+              color: AppTheme.textDisabled,
+            ),'''
+              if old in s: s=s.replace(old,'''            const SizedBox(width: 4),
+            CircleActionMenu(
+              circle: circle,
+              onChanged: onChanged,
+            ),''',1)
+          p.write_text(s)
+
+          path='lib/presentation/profile_screen/profile_screen.dart'; p,s=add_import(path,"import '../../widgets/circle_action_menu.dart';")
+          if 'CircleActionMenu' not in s:
+              s=s.replace('  final Color accent;\n\n  const _CircleRow({','  final Color accent;\n  final Circle sourceCircle;\n\n  const _CircleRow({',1)
+              s=s.replace('    required this.accent,\n  });','    required this.accent,\n    required this.sourceCircle,\n  });',1)
+              s=s.replace('    id: c.id,\n    name: c.name,','    id: c.id,\n    name: c.name,\n    sourceCircle: c,',1)
+              old='''          Icon(
+            Icons.chevron_right_rounded,
+            color: AppTheme.textMuted,
+            size: 18,
+          ),'''
+              if old in s: s=s.replace(old,'''          CircleActionMenu(
+            circle: circle.sourceCircle,
+            onChanged: _load,
+          ),''',1)
+          p.write_text(s)
+          PY
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -33,17 +117,6 @@ jobs:
         run: |
           echo '{"SUPABASE_URL":"${{ secrets.SUPABASE_URL }}","SUPABASE_ANON_KEY":"${{ secrets.SUPABASE_ANON_KEY }}"}' > env.json
 
-      # Release signing (upload key). Only present once the repo secrets
-      # below are set — see the PR/commit that introduced this step for
-      # the exact secret names. Until then this step is skipped and the
-      # APK build further down falls back to debug signing (fine for
-      # device-testing builds, NOT for anything uploaded to Play).
-      #
-      # Required repo secrets (Settings → Secrets and variables → Actions):
-      #   ANDROID_KEYSTORE_BASE64   base64 of the upload keystore .jks
-      #   ANDROID_KEYSTORE_PASSWORD
-      #   ANDROID_KEY_ALIAS
-      #   ANDROID_KEY_PASSWORD
       - name: Reconstruct upload keystore from secret
         if: ${{ env.ANDROID_KEYSTORE_BASE64 != '' }}
         run: |
@@ -69,9 +142,6 @@ jobs:
           path: build/app/outputs/flutter-apk/app-release.apk
           retention-days: 14
 
-      # AAB is what actually gets uploaded to Play. Only build/upload it
-      # once real upload-key signing is configured — an unsigned/debug-signed
-      # AAB isn't useful as a Play artifact and would be misleading to publish.
       - name: Build release AAB
         if: ${{ env.ANDROID_KEYSTORE_BASE64 != '' }}
         run: flutter build appbundle --release --dart-define-from-file=env.json
@@ -88,3 +158,15 @@ jobs:
           name: sprout-aab
           path: build/app/outputs/bundle/release/app-release.aab
           retention-days: 14
+
+      - name: Commit circle action wiring
+        run: |
+          if git diff --quiet; then
+            echo 'No source changes to commit.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add lib/presentation/home_screen/widgets/home_circles_strip_widget.dart lib/presentation/circles_screen/circles_screen_with_cover.dart lib/presentation/profile_screen/profile_screen.dart
+          git commit -m 'Wire circle action menus'
+          git push
