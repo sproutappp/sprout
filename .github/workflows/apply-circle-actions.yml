@@ -1,0 +1,106 @@
+name: Apply circle actions
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/apply-circle-actions.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[circle-actions-applied]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch app
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new):
+              p = Path(path)
+              s = p.read_text()
+              if old not in s:
+                  raise SystemExit(f'Missing expected text in {path}: {old[:120]!r}')
+              p.write_text(s.replace(old, new, 1))
+
+          p = Path('lib/presentation/home_screen/widgets/home_circles_strip_widget.dart')
+          s = p.read_text()
+          s = s.replace("import '../../../services/circles_repository.dart';", "import '../../../services/circles_repository.dart';\nimport '../../../widgets/circle_action_menu.dart';")
+          s = s.replace('  final Color color;\n\n  const _CircleModel({', '  final Color color;\n  final Circle sourceCircle;\n\n  const _CircleModel({')
+          s = s.replace('    required this.color,\n  });', '    required this.color,\n    required this.sourceCircle,\n  });')
+          s = s.replace('    id: circle.id,\n    name: circle.name,', '    id: circle.id,\n    name: circle.name,\n    sourceCircle: circle,')
+          replace('lib/presentation/home_screen/widgets/home_circles_strip_widget.dart', '''            // Chevron
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 18,
+              color: AppTheme.textDisabled,
+            ),''', '''            CircleActionMenu(
+              circle: c.sourceCircle,
+              onChanged: _load,
+            ),''')
+          p.write_text(s)
+
+          p = Path('lib/presentation/circles_screen/circles_screen_with_cover.dart')
+          s = p.read_text()
+          s = s.replace("import '../../theme/app_theme.dart';", "import '../../theme/app_theme.dart';\nimport '../../widgets/circle_action_menu.dart';")
+          s = s.replace('''                          onTap: () => _openCircleDetail(circle),
+                        ),''', '''                          onTap: () => _openCircleDetail(circle),
+                          onChanged: _loadCircles,
+                        ),''', 1)
+          s = s.replace('''  final VoidCallback onTap;
+
+  const _CircleCard({
+    required this.circle,
+    required this.accentColor,
+    required this.onTap,
+  });''', '''  final VoidCallback onTap;
+  final VoidCallback? onChanged;
+
+  const _CircleCard({
+    required this.circle,
+    required this.accentColor,
+    required this.onTap,
+    this.onChanged,
+  });''', 1)
+          replace('lib/presentation/circles_screen/circles_screen_with_cover.dart', '''            const SizedBox(width: 8),
+            const Icon(
+              Icons.chevron_right_rounded,
+              size: 20,
+              color: AppTheme.textDisabled,
+            ),''', '''            const SizedBox(width: 4),
+            CircleActionMenu(
+              circle: circle,
+              onChanged: onChanged,
+            ),''')
+          p.write_text(s)
+
+          p = Path('lib/presentation/profile_screen/profile_screen.dart')
+          s = p.read_text()
+          if "import '../../widgets/circle_action_menu.dart';" not in s:
+              s = s.replace("import '../../theme/app_theme.dart';", "import '../../theme/app_theme.dart';\nimport '../../widgets/circle_action_menu.dart';")
+          s = s.replace('  final Color accent;\n\n  const _CircleRow({', '  final Color accent;\n  final Circle sourceCircle;\n\n  const _CircleRow({')
+          s = s.replace('    required this.accent,\n  });', '    required this.accent,\n    required this.sourceCircle,\n  });', 1)
+          s = s.replace('    id: c.id,\n    name: c.name,', '    id: c.id,\n    name: c.name,\n    sourceCircle: c,', 1)
+          replace('lib/presentation/profile_screen/profile_screen.dart', '''          Icon(
+            Icons.chevron_right_rounded,
+            color: AppTheme.textMuted,
+            size: 18,
+          ),''', '''          CircleActionMenu(
+            circle: circle.sourceCircle,
+            onChanged: _load,
+          ),''')
+          p.write_text(s)
+
+          p = Path('pubspec.yaml')
+          s = p.read_text()
+          if '  share_plus:' not in s:
+              s = s.replace('  geocoding: ^5.0.0\n', '  geocoding: ^5.0.0\n  share_plus: ^10.1.4\n')
+          p.write_text(s)
+          PY
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add lib/presentation/home_screen/widgets/home_circles_strip_widget.dart lib/presentation/circles_screen/circles_screen_with_cover.dart lib/presentation/profile_screen/profile_screen.dart pubspec.yaml
+          git commit -m 'Add circle actions and native sharing [circle-actions-applied]'
+          git push
