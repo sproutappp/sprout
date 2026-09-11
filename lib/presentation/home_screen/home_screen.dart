@@ -54,7 +54,6 @@ class _HomeScreenState extends State<HomeScreen> {
       extendBodyBehindAppBar: true,
       body: Stack(
         children: [
-          // Subtle background gradient
           Container(
             decoration: const BoxDecoration(
               gradient: RadialGradient(
@@ -65,18 +64,14 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
 
-          // Glassmorphism AppBar
-          HomeAppBarWidget(scrollOffset: _scrollOffset),
-
-          // Scrollable content
+          // Scrollable content stays behind the glass app bar. Keeping the
+          // app bar last is important: otherwise the full-screen scroll view
+          // wins hit-testing over the bell/avatar even though it starts lower.
           CustomScrollView(
             controller: _scrollController,
             physics: const BouncingScrollPhysics(),
             slivers: [
-              // Top space for app bar
               const SliverToBoxAdapter(child: SizedBox(height: 80)),
-
-              // Greeting
               SliverToBoxAdapter(
                 child: Padding(
                   padding: EdgeInsets.fromLTRB(
@@ -88,20 +83,14 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: const HomeGreetingWidget(),
                 ),
               ),
-
               const SliverToBoxAdapter(child: SizedBox(height: 28)),
-
-              // Recent memories — horizontal scroll
               SliverToBoxAdapter(
                 child: HomeRecentMemoriesWidget(
                   key: ValueKey('recent_memories_$_refreshKey'),
                   isTablet: isTablet,
                 ),
               ),
-
               const SliverToBoxAdapter(child: SizedBox(height: 28)),
-
-              // Circles activity strip
               SliverToBoxAdapter(
                 child: Padding(
                   padding: EdgeInsets.symmetric(horizontal: isTablet ? 32 : 20),
@@ -110,23 +99,21 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ),
-
               const SliverToBoxAdapter(child: SizedBox(height: 28)),
-
-              // Discover teaser
               SliverToBoxAdapter(
                 child: Padding(
                   padding: EdgeInsets.symmetric(horizontal: isTablet ? 32 : 20),
                   child: HomeDiscoverTeaserWidget(isTablet: isTablet),
                 ),
               ),
-
-              // Bottom padding for nav bar
               SliverToBoxAdapter(child: SizedBox(height: bottomPadding + 100)),
             ],
           ),
 
-          // Extended FAB — Capture Memory
+          // App bar is intentionally AFTER the scroll view so its controls
+          // are on top and receive taps.
+          HomeAppBarWidget(scrollOffset: _scrollOffset),
+
           Positioned(
             bottom: bottomPadding + 88,
             right: 20,
