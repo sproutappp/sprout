@@ -9,6 +9,8 @@ class CirclesRepository {
   static final _client = SupabaseService.client;
   static const _circleCoverBucket = 'circle-covers';
 
+  static String? get currentUserId => _client.auth.currentUser?.id;
+
   static Future<List<Circle>> fetchMyCircles() async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) return [];
@@ -30,6 +32,11 @@ class CirclesRepository {
       counts[cid] = (counts[cid] ?? 0) + 1;
     }
     return counts;
+  }
+
+  static Future<List<String>> fetchMemberIds(String circleId) async {
+    final rows = await _client.from('circle_members').select('user_id').eq('circle_id', circleId);
+    return (rows as List).map((row) => row['user_id'] as String).toList();
   }
 
   static Future<List<Profile>> fetchMembersForCircles(List<String> circleIds) async {
@@ -112,6 +119,14 @@ class CirclesRepository {
     if (userId == null) throw StateError('Must be signed in to create an invite');
     final row = await _client.from('circle_invites').insert({'circle_id': circleId, 'created_by': userId}).select('token').single();
     return row['token'] as String;
+  }
+
+  static Future<int> sendCircleInvites({required String circleId, required List<String> userIds}) async {
+    final result = await _client.rpc('send_circle_invites', params: {
+      'p_circle_id': circleId,
+      'p_user_ids': userIds,
+    });
+    return (result as num).toInt();
   }
 
   static Future<String> joinViaInvite(String token) async {
