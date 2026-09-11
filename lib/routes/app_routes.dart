@@ -16,6 +16,7 @@ import '../presentation/edit_profile_screen/edit_profile_screen.dart';
 import '../presentation/member_profile_screen/member_profile_screen.dart';
 import '../presentation/notifications_screen/notifications_screen.dart';
 import '../presentation/privacy_policy_screen/privacy_policy_screen.dart';
+import '../presentation/settings_screen/settings_screen.dart';
 import '../presentation/join_circle_screen/join_circle_screen.dart';
 import '../widgets/app_scaffold.dart';
 
@@ -35,6 +36,7 @@ class AppRoutes {
   static const String memberProfileScreen = '/member-profile-screen';
   static const String notificationsScreen = '/notifications-screen';
   static const String privacyPolicyScreen = '/privacy-policy-screen';
+  static const String settingsScreen = '/settings-screen';
   static const String joinCircleScreen = '/join-circle-screen';
 }
 
@@ -73,6 +75,7 @@ final GoRouter appRouter = GoRouter(
       },
     ),
     GoRoute(path: AppRoutes.privacyPolicyScreen, builder: (context, state) => const PrivacyPolicyScreen()),
+    GoRoute(path: AppRoutes.settingsScreen, builder: (context, state) => const SettingsScreen()),
     GoRoute(path: AppRoutes.notificationsScreen, builder: (context, state) => const NotificationsScreen()),
     StatefulShellRoute.indexedStack(
       builder: (context, state, navigationShell) => AppScaffold(navigationShell: navigationShell),
