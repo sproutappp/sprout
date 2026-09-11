@@ -1,0 +1,59 @@
+name: Implement circle actions
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: "!contains(github.event.head_commit.message, 'Implement circle actions')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply circle actions
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+
+          def imp(path, text):
+              p=Path(path); s=p.read_text()
+              if text not in s:
+                  i=s.find('\n', s.rfind("import ",0,s.find('\n\n')) if False else 0)
+                  lines=s.splitlines(); j=0
+                  while j < len(lines) and lines[j].startswith('import '): j+=1
+                  lines.insert(j,text); p.write_text('\n'.join(lines)+'\n')
+
+          pub=Path('pubspec.yaml'); s=pub.read_text()
+          if '  share_plus:' not in s:
+              s=s.replace('dependencies:\n','dependencies:\n  share_plus: ^10.1.4\n',1); pub.write_text(s)
+
+          Path('lib/widgets').mkdir(parents=True,exist_ok=True)
+          Path('lib/widgets/circle_actions_menu.dart').write_text('''import 'package:flutter/material.dart';\nimport 'package:go_router/go_router.dart';\nimport 'package:share_plus/share_plus.dart';\n\nimport '../routes/app_routes.dart';\nimport '../services/circles_repository.dart';\nimport '../theme/app_theme.dart';\nimport 'circle_invite_sheet.dart';\n\nclass CircleActionsButton extends StatelessWidget {\n  final String circleId;\n  final String circleName;\n  const CircleActionsButton({super.key, required this.circleId, required this.circleName});\n\n  Future<void> _open(BuildContext context) async {\n    final action = await showModalBottomSheet<String>(\n      context: context, backgroundColor: AppTheme.surfaceVariantDark,\n      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),\n      builder: (c) => SafeArea(child: Column(mainAxisSize: MainAxisSize.min, children: [\n        ListTile(leading: const Icon(Icons.edit_outlined,color: AppTheme.textPrimary), title: const Text('Edit',style: TextStyle(color: AppTheme.textPrimary)), onTap:()=>Navigator.pop(c,'edit')),\n        ListTile(leading: const Icon(Icons.person_add_alt_1_outlined,color: AppTheme.textPrimary), title: const Text('Invite',style: TextStyle(color: AppTheme.textPrimary)), onTap:()=>Navigator.pop(c,'invite')),\n        ListTile(leading: const Icon(Icons.share_outlined,color: AppTheme.textPrimary), title: const Text('Share',style: TextStyle(color: AppTheme.textPrimary)), onTap:()=>Navigator.pop(c,'share')),\n        const SizedBox(height:8),\n      ])),\n    );\n    if (!context.mounted || action == null) return;\n    if (action == 'edit') {\n      context.push(AppRoutes.circleDetailScreen, extra: circleId);\n    } else if (action == 'invite') {\n      await showModalBottomSheet(context: context,isScrollControlled:true,backgroundColor:Colors.transparent,builder:(_)=>CircleInviteSheet(circleId:circleId,circleName:circleName));\n    } else {\n      try {\n        final invite=await CirclesRepository.createInvite(circleId);\n        await Share.share('Join my "$circleName" circle on Sprout:\\nhttps://sproutapp.in/join/${invite.token}');\n      } catch (_) {\n        if(context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Couldn’t create the invite link.')));\n      }\n    }\n  }\n\n  @override Widget build(BuildContext context)=>IconButton(\n    tooltip:'Circle options',padding:EdgeInsets.zero,constraints:const BoxConstraints(minWidth:32,minHeight:32),visualDensity:VisualDensity.compact,\n    icon:const Icon(Icons.more_vert_rounded,size:21,color:AppTheme.textMuted),onPressed:()=>_open(context));\n}\n''')
+
+          Path('lib/widgets/circle_invite_sheet.dart').write_text('''import 'package:cached_network_image/cached_network_image.dart';\nimport 'package:flutter/material.dart';\nimport '../core/supabase/supabase_service.dart';\nimport '../theme/app_theme.dart';\n\nclass CircleInviteSheet extends StatefulWidget {\n  final String circleId; final String circleName;\n  const CircleInviteSheet({super.key,required this.circleId,required this.circleName});\n  @override State<CircleInviteSheet> createState()=>_CircleInviteSheetState();\n}\nclass _CircleInviteSheetState extends State<CircleInviteSheet>{\n  List<Map<String,dynamic>> people=[]; Set<String> selected={}; bool loading=true,sending=false;\n  @override void initState(){super.initState();load();}\n  Future<void> load() async {\n    try {\n      final client=SupabaseService.client;\n      final profiles=await client.from('profiles').select('id,full_name,avatar_url').order('full_name');\n      final members=await client.from('circle_members').select('user_id').eq('circle_id',widget.circleId);\n      final existing=Set<String>.from((members as List).map((e)=>e['user_id'].toString()));\n      final uid=client.auth.currentUser?.id; existing.add(uid??'');\n      if(!mounted)return; setState(()=>{loading=false,people:List<Map<String,dynamic>>.from(profiles).where((p)=>!existing.contains(p['id'].toString())).toList()});\n    } catch(_){if(mounted)setState(()=>loading=false);}\n  }\n  Future<void> send() async {\n    if(selected.isEmpty)return; setState(()=>sending=true);\n    try {\n      await SupabaseService.client.from('circle_members').insert(selected.map((id)=>{'circle_id':widget.circleId,'user_id':id,'role':'member'}).toList());\n      if(mounted){Navigator.pop(context,true);ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('${selected.length} people invited to ${widget.circleName}.')));}\n    } catch(_){if(mounted){setState(()=>sending=false);ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Couldn’t send the invites.')));}}\n  }\n  @override Widget build(BuildContext context)=>SafeArea(child:Container(height:MediaQuery.of(context).size.height*.78,decoration:const BoxDecoration(color:AppTheme.backgroundDark,borderRadius:BorderRadius.vertical(top:Radius.circular(24))),child:Column(children:[\n    const SizedBox(height:16),Text('Invite to ${widget.circleName}',style:const TextStyle(color:AppTheme.textPrimary,fontSize:18,fontWeight:FontWeight.w700)),const SizedBox(height:6),const Text('Select people already using Sprout',style:TextStyle(color:AppTheme.textMuted,fontSize:12)),\n    Expanded(child:loading?const Center(child:CircularProgressIndicator(color:AppTheme.primaryGreen)):people.isEmpty?const Center(child:Text('No new people to invite.',style:TextStyle(color:AppTheme.textMuted))):ListView.builder(itemCount:people.length,itemBuilder:(_,i){final p=people[i];final id=p['id'].toString();final on=selected.contains(id);final a=p['avatar_url'] as String?;return ListTile(onTap:()=>setState(()=>on?selected.remove(id):selected.add(id)),leading:CircleAvatar(backgroundColor:AppTheme.surfaceVariantDark,backgroundImage:a?.isNotEmpty==true?CachedNetworkImageProvider(a!):null,child:a?.isNotEmpty==true?null:const Icon(Icons.person_outline,color:AppTheme.textMuted)),title:Text((p['full_name'] as String?)?.trim().isNotEmpty==true?(p['full_name'] as String):'Sprout user',style:const TextStyle(color:AppTheme.textPrimary)),trailing:Checkbox(value:on,onChanged:(_)=>setState(()=>on?selected.remove(id):selected.add(id)),activeColor:AppTheme.primaryGreen));})),\n    Padding(padding:const EdgeInsets.fromLTRB(20,10,20,18),child:SizedBox(width:double.infinity,child:ElevatedButton(onPressed:sending||selected.isEmpty?null:send,child:Text(sending?'Sending…':'Send Invite${selected.isEmpty?'':' (${selected.length})'}')))),\n  ]));\n}\n''')
+
+          wires=[
+            ('lib/presentation/home_screen/widgets/home_circles_strip_widget.dart',"import '../../../widgets/circle_actions_menu.dart';",'c.id','c.name'),
+            ('lib/presentation/profile_screen/profile_screen.dart',"import '../../widgets/circle_actions_menu.dart';",'circle.id','circle.name'),
+            ('lib/presentation/circles_screen/circles_screen_with_cover.dart',"import '../../widgets/circle_actions_menu.dart';",'circle.id','circle.name')]
+          for path,ii,cid,cname in wires:
+            p=Path(path); s=p.read_text()
+            if 'CircleActionsButton' not in s:
+              lines=s.splitlines(); j=0
+              while j<len(lines) and lines[j].startswith('import '): j+=1
+              lines.insert(j,ii); s='\n'.join(lines)+'\n'
+              pat=r'\s*(?:const\s+)?Icon\(\s*Icons\.chevron_right_rounded[\s\S]*?\),'
+              s,n=re.subn(pat,f'\n            CircleActionsButton(circleId: {cid}, circleName: {cname}),',s,count=1)
+              if n!=1: raise SystemExit('Could not wire '+path)
+              p.write_text(s)
+          PY
+          flutter pub get
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add pubspec.yaml pubspec.lock lib/widgets lib/presentation/home_screen/widgets/home_circles_strip_widget.dart lib/presentation/profile_screen/profile_screen.dart lib/presentation/circles_screen/circles_screen_with_cover.dart
+          git commit -m 'Implement circle actions'
+          git push
