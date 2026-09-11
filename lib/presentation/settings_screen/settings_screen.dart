@@ -4,8 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../theme/app_theme.dart';
 import '../../routes/app_routes.dart';
-import '../../services/auth_service.dart';
-import '../../services/firebase_auth_service.dart';
+import '../../services/account_deletion_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -71,16 +70,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     setState(() => _isDeleting = true);
     try {
-      // Phone-auth users also have a Firebase account. Delete that first
-      // so the local Firebase identity cannot survive the Sprout account.
-      await FirebaseAuthService.deleteCurrentUser();
-      await AuthService.deleteAccount();
-      await AuthService.signOut();
-      await FirebaseAuthService.signOut();
+      await AccountDeletionService.deleteCurrentAccount();
 
       if (!mounted) return;
       context.go(AppRoutes.signUpLoginScreen);
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       setState(() => _isDeleting = false);
       ScaffoldMessenger.of(context).showSnackBar(
