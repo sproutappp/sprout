@@ -64,3 +64,5 @@ revoke all on function send_circle_invites(uuid, uuid[]) from public;
 grant execute on function send_circle_invites(uuid, uuid[]) to authenticated;
 
 notify pgrst, 'reload schema';
+
+-- Applied after the existing circle invite and notification schema.
