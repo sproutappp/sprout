@@ -6,6 +6,7 @@ class Memory {
   final String uploadedBy;
   final String imageUrl;
   final String? caption;
+  final String? location;
   final DateTime createdAt;
   final Profile? contributor;
   final String? circleName;
@@ -17,6 +18,7 @@ class Memory {
     required this.uploadedBy,
     required this.imageUrl,
     this.caption,
+    this.location,
     required this.createdAt,
     this.contributor,
     this.circleName,
@@ -28,16 +30,13 @@ class Memory {
     final circleMap = map['circles'] as Map<String, dynamic>?;
     return Memory(
       id: map['id'] as String,
-      // Nullable now — a public memory has no single circle_id. Still
-      // populated for circle-scoped memories as the "primary" (first
-      // selected) circle, for the existing single-badge UI.
       circleId: map['circle_id'] as String?,
       uploadedBy: map['uploaded_by'] as String,
       imageUrl: map['image_url'] as String,
       caption: map['caption'] as String?,
+      location: map['location'] as String?,
       createdAt: DateTime.parse(map['created_at'] as String),
-      contributor:
-          contributorMap != null ? Profile.fromMap(contributorMap) : null,
+      contributor: contributorMap != null ? Profile.fromMap(contributorMap) : null,
       circleName: circleMap != null ? circleMap['name'] as String? : null,
       isPublic: map['is_public'] as bool? ?? false,
     );
