@@ -3,7 +3,7 @@ name: Build APK
 # Runs automatically on every push to main, and can also be triggered
 # manually from the Actions tab (workflow_dispatch) — e.g. for a rebuild
 # without pushing a new commit.
-# Circle menu compilation fixes are now included on main.
+# Discover public-memory fixes are now included on main.
 on:
   push:
     branches: [main]
