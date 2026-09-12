@@ -654,7 +654,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           AppRoutes.circleDetailScreen,
                           extra: c.id,
                         ),
-                        child: _CircleRowItem(circle: c),
+                        child: _CircleRowItem(circle: c, onChanged: _load),
                       ),
                     );
                   }, childCount: _myCircles.length),
@@ -919,8 +919,9 @@ class _MemoryCard extends StatelessWidget {
 
 class _CircleRowItem extends StatelessWidget {
   final _CircleRow circle;
+  final VoidCallback? onChanged;
 
-  const _CircleRowItem({required this.circle});
+  const _CircleRowItem({required this.circle, this.onChanged});
 
   @override
   Widget build(BuildContext context) {
@@ -982,7 +983,7 @@ class _CircleRowItem extends StatelessWidget {
           ),
           CircleActionMenu(
             circle: circle.sourceCircle,
-            onChanged: _load,
+            onChanged: onChanged,
           ),
         ],
       ),

@@ -322,7 +322,7 @@ class _CircleEditFormState extends State<_CircleEditForm> {
                       CachedNetworkImage(imageUrl: widget.circle.coverImageUrl!, fit: BoxFit.cover, errorWidget: (_, __, ___) => _coverPlaceholder())
                     else
                       _coverPlaceholder(),
-                    Positioned(right: 10, bottom: 10, child: Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7), decoration: BoxDecoration(color: Colors.black.withAlpha(170), borderRadius: BorderRadius.circular(10)), child: Text('Change', style: GoogleFonts.manrope(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white))),
+                    Positioned(right: 10, bottom: 10, child: Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7), decoration: BoxDecoration(color: Colors.black.withAlpha(170), borderRadius: BorderRadius.circular(10)), child: Text('Change', style: GoogleFonts.manrope(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white)))),
                   ],
                 ),
               ),
@@ -366,7 +366,7 @@ class _MenuOption extends StatelessWidget {
   const _MenuOption({required this.icon, required this.label, required this.color, required this.onTap});
   @override
   Widget build(BuildContext context) {
-    return Padding(padding: const EdgeInsets.only(bottom: 8), child: GestureDetector(onTap: onTap, child: Container(width: double.infinity, padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14), decoration: BoxDecoration(color: AppTheme.surfaceVariantDark, borderRadius: BorderRadius.circular(14), border: Border.all(color: AppTheme.outline, width: 0.6)), child: Row(children: [Icon(icon, size: 20, color: color), const SizedBox(width: 12), Text(label, style: GoogleFonts.manrope(fontSize: 14, fontWeight: FontWeight.w700, color: color))])));
+    return Padding(padding: const EdgeInsets.only(bottom: 8), child: GestureDetector(onTap: onTap, child: Container(width: double.infinity, padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14), decoration: BoxDecoration(color: AppTheme.surfaceVariantDark, borderRadius: BorderRadius.circular(14), border: Border.all(color: AppTheme.outline, width: 0.6)), child: Row(children: [Icon(icon, size: 20, color: color), const SizedBox(width: 12), Text(label, style: GoogleFonts.manrope(fontSize: 14, fontWeight: FontWeight.w700, color: color))]))));
   }
 }
 

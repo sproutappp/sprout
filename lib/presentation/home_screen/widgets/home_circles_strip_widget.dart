@@ -147,7 +147,7 @@ class _HomeCirclesStripWidgetState extends State<HomeCirclesStripWidget> {
             children: _circles.map((circle) {
               return Padding(
                 padding: const EdgeInsets.only(bottom: 10),
-                child: _CircleRowItem(circle: circle),
+                child: _CircleRowItem(circle: circle, onChanged: _load),
               );
             }).toList(),
           ),
@@ -158,7 +158,8 @@ class _HomeCirclesStripWidgetState extends State<HomeCirclesStripWidget> {
 
 class _CircleRowItem extends StatefulWidget {
   final _CircleModel circle;
-  const _CircleRowItem({required this.circle});
+  final VoidCallback? onChanged;
+  const _CircleRowItem({required this.circle, this.onChanged});
 
   @override
   State<_CircleRowItem> createState() => _CircleRowItemState();
@@ -272,7 +273,7 @@ class _CircleRowItemState extends State<_CircleRowItem> {
             ),
             CircleActionMenu(
               circle: c.sourceCircle,
-              onChanged: _load,
+              onChanged: widget.onChanged,
             ),
           ],
         ),

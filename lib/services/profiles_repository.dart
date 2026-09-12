@@ -40,6 +40,16 @@ class ProfilesRepository {
     return Profile.fromMap(row);
   }
 
+  static Future<List<Profile>> fetchAllUsers() async {
+    final rows = await _client
+        .from('profiles')
+        .select()
+        .order('full_name', ascending: true);
+    return (rows as List)
+        .map((row) => Profile.fromMap(Map<String, dynamic>.from(row)))
+        .toList();
+  }
+
   /// Updates the current user's editable profile fields (currently full
   /// name and date of birth). Relies on the existing "users can update
   /// their own profile" RLS policy (auth.uid() = id) — no RLS change
