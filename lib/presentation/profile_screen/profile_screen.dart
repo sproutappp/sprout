@@ -15,6 +15,7 @@ import '../../services/firebase_auth_service.dart';
 import '../../services/profiles_repository.dart';
 import '../../services/circles_repository.dart';
 import '../../services/memories_repository.dart';
+import '../../widgets/circle_action_menu.dart';
 import '../memories_screen/widgets/memories_grid_widget.dart' show MemoryItem, MemoryPrivacy, MemoryType;
 
 // ── View-model shapes ────────────────────────────────────────────────────
@@ -61,6 +62,7 @@ class _CircleRow {
   final String imageUrl;
   final String semanticLabel;
   final Color accent;
+  final Circle sourceCircle;
 
   const _CircleRow({
     required this.id,
@@ -69,6 +71,7 @@ class _CircleRow {
     required this.imageUrl,
     required this.semanticLabel,
     required this.accent,
+    required this.sourceCircle,
   });
 
   static const _palette = [
@@ -81,6 +84,7 @@ class _CircleRow {
   factory _CircleRow.fromCircle(Circle c, int index) => _CircleRow(
     id: c.id,
     name: c.name,
+    sourceCircle: c,
     memberCount: c.memberCount,
     imageUrl: c.coverImageUrl ??
         'https://images.pexels.com/photos/1128318/pexels-photo-1128318.jpeg?w=120',
@@ -976,10 +980,9 @@ class _CircleRowItem extends StatelessWidget {
               ],
             ),
           ),
-          Icon(
-            Icons.chevron_right_rounded,
-            color: AppTheme.textMuted,
-            size: 18,
+          CircleActionMenu(
+            circle: circle.sourceCircle,
+            onChanged: _load,
           ),
         ],
       ),

@@ -11,6 +11,7 @@ import '../../routes/app_routes.dart';
 import '../../services/circles_repository.dart';
 import '../../services/notifications_repository.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/circle_action_menu.dart';
 
 class CirclesScreenWithCover extends StatefulWidget {
   const CirclesScreenWithCover({super.key});
@@ -261,6 +262,7 @@ class _CirclesScreenWithCoverState extends State<CirclesScreenWithCover> {
                           circle: circle,
                           accentColor: _palette[index % _palette.length],
                           onTap: () => _openCircleDetail(circle),
+                          onChanged: _loadCircles,
                         ),
                       );
                     },
@@ -322,11 +324,13 @@ class _CircleCard extends StatelessWidget {
   final Circle circle;
   final Color accentColor;
   final VoidCallback onTap;
+  final VoidCallback? onChanged;
 
   const _CircleCard({
     required this.circle,
     required this.accentColor,
     required this.onTap,
+    this.onChanged,
   });
 
   @override
@@ -417,11 +421,10 @@ class _CircleCard extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(width: 8),
-            const Icon(
-              Icons.chevron_right_rounded,
-              size: 20,
-              color: AppTheme.textDisabled,
+            const SizedBox(width: 4),
+            CircleActionMenu(
+              circle: circle,
+              onChanged: onChanged,
             ),
           ],
         ),

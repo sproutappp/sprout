@@ -6,11 +6,13 @@ import '../../../theme/app_theme.dart';
 import '../../../routes/app_routes.dart';
 import '../../../models/circle.dart';
 import '../../../services/circles_repository.dart';
+import '../../../widgets/circle_action_menu.dart';
 
 class _CircleModel {
   final String id, name, recentActivity, avatarUrl, semanticLabel;
   final int memberCount;
   final Color color;
+  final Circle sourceCircle;
 
   const _CircleModel({
     required this.id,
@@ -20,6 +22,7 @@ class _CircleModel {
     required this.semanticLabel,
     required this.memberCount,
     required this.color,
+    required this.sourceCircle,
   });
 
   static const _palette = [
@@ -32,6 +35,7 @@ class _CircleModel {
   factory _CircleModel.fromCircle(Circle circle, int index) => _CircleModel(
     id: circle.id,
     name: circle.name,
+    sourceCircle: circle,
     recentActivity:
         '${circle.memberCount} member${circle.memberCount == 1 ? '' : 's'}',
     avatarUrl: circle.coverImageUrl ??
@@ -266,12 +270,9 @@ class _CircleRowItemState extends State<_CircleRowItem> {
                 ],
               ),
             ),
-
-            // Chevron
-            Icon(
-              Icons.chevron_right_rounded,
-              size: 18,
-              color: AppTheme.textDisabled,
+            CircleActionMenu(
+              circle: c.sourceCircle,
+              onChanged: _load,
             ),
           ],
         ),
