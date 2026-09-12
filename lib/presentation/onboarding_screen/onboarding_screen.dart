@@ -102,10 +102,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     context.push(AppRoutes.signUpLoginScreen);
   }
 
-  void _onSignIn() {
-    context.push(AppRoutes.signUpLoginScreen);
-  }
-
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
@@ -161,14 +157,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
                       const Spacer(flex: 2),
 
-                      // CTAs
+                      // CTA
                       FadeTransition(
                         opacity: _ctaFade,
                         child: SlideTransition(
                           position: _ctaSlide,
                           child: OnboardingCtaWidget(
                             onGetStarted: _onGetStarted,
-                            onSignIn: _onSignIn,
                           ),
                         ),
                       ),
