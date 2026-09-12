@@ -14,7 +14,9 @@ jobs:
         run: |
           python3 <<'PY'
           from pathlib import Path
+          import re
 
+          # Home circles: preserve row navigation, add a dedicated three-dot action.
           p = Path('lib/presentation/home_screen/widgets/home_circles_strip_widget.dart')
           s = p.read_text()
           if "import '../../../widgets/circle_action_menu.dart';" not in s:
@@ -24,20 +26,12 @@ jobs:
               s = s.replace('    required this.color,\n', '    required this.color,\n    required this.sourceCircle,\n', 1)
               s = s.replace('    name: circle.name,\n', '    name: circle.name,\n    sourceCircle: circle,\n', 1)
           if 'CircleActionMenu(' not in s:
-              old = '''            // Chevron
-            Icon(
-              Icons.chevron_right_rounded,
-              size: 18,
-              color: AppTheme.textDisabled,
-            ),'''
-              new = '''            CircleActionMenu(
-              circle: c.sourceCircle,
-              onChanged: _load,
-            ),'''
-              if old not in s: raise SystemExit('Home chevron marker not found')
-              s = s.replace(old, new, 1)
+              pattern = r'\s*// Chevron\s*Icon\(\s*Icons\.chevron_right_rounded,\s*size: 18,\s*color: AppTheme\.textDisabled,\s*\),'
+              s, n = re.subn(pattern, '\n            CircleActionMenu(\n              circle: c.sourceCircle,\n              onChanged: _load,\n            ),', s, count=1)
+              if n != 1: raise SystemExit('Home chevron marker not found')
           p.write_text(s)
 
+          # Circles list: add the shared three-dot action to every circle card.
           p = Path('lib/presentation/circles_screen/circles_screen_with_cover.dart')
           s = p.read_text()
           if "import '../../widgets/circle_action_menu.dart';" not in s:
@@ -45,26 +39,14 @@ jobs:
           if 'final VoidCallback? onChanged;' not in s:
               s = s.replace('  final VoidCallback onTap;\n', '  final VoidCallback onTap;\n  final VoidCallback? onChanged;\n', 1)
               s = s.replace('    required this.onTap,\n  });', '    required this.onTap,\n    this.onChanged,\n  });', 1)
-              s = s.replace('''                          onTap: () => _openCircleDetail(circle),
-                        ),''', '''                          onTap: () => _openCircleDetail(circle),
-                          onChanged: _loadCircles,
-                        ),''', 1)
+              s = s.replace('onTap: () => _openCircleDetail(circle),\n                        ),', 'onTap: () => _openCircleDetail(circle),\n                          onChanged: _loadCircles,\n                        ),', 1)
           if 'CircleActionMenu(' not in s:
-              old = '''            const SizedBox(width: 8),
-            const Icon(
-              Icons.chevron_right_rounded,
-              size: 20,
-              color: AppTheme.textDisabled,
-            ),'''
-              new = '''            const SizedBox(width: 4),
-            CircleActionMenu(
-              circle: circle,
-              onChanged: onChanged,
-            ),'''
-              if old not in s: raise SystemExit('Circles chevron marker not found')
-              s = s.replace(old, new, 1)
+              pattern = r'const SizedBox\(width: 8\),\s*const Icon\(\s*Icons\.chevron_right_rounded,\s*size: 20,\s*color: AppTheme\.textDisabled,\s*\),'
+              s, n = re.subn(pattern, 'const SizedBox(width: 4),\n            CircleActionMenu(\n              circle: circle,\n              onChanged: onChanged,\n            ),', s, count=1)
+              if n != 1: raise SystemExit('Circles chevron marker not found')
           p.write_text(s)
 
+          # Profile circle rows: add the same shared action menu.
           p = Path('lib/presentation/profile_screen/profile_screen.dart')
           s = p.read_text()
           if "import '../../widgets/circle_action_menu.dart';" not in s:
@@ -74,18 +56,11 @@ jobs:
               s = s.replace('    required this.accent,\n', '    required this.accent,\n    required this.sourceCircle,\n', 1)
               s = s.replace('    id: c.id,\n    name: c.name,\n', '    id: c.id,\n    name: c.name,\n    sourceCircle: c,\n', 1)
           if 'CircleActionMenu(' not in s:
-              old = '''          Icon(
-            Icons.chevron_right_rounded,
-            color: AppTheme.textMuted,
-            size: 18,
-          ),'''
-              new = '''          CircleActionMenu(
-            circle: circle.sourceCircle,
-            onChanged: _load,
-          ),'''
-              if old not in s: raise SystemExit('Profile chevron marker not found')
-              s = s.replace(old, new, 1)
+              pattern = r'Icon\(\s*Icons\.chevron_right_rounded,\s*color: AppTheme\.textMuted,\s*size: 18,\s*\),'
+              s, n = re.subn(pattern, 'CircleActionMenu(\n            circle: circle.sourceCircle,\n            onChanged: _load,\n          ),', s, count=1)
+              if n != 1: raise SystemExit('Profile chevron marker not found')
           p.write_text(s)
+
           PY
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
