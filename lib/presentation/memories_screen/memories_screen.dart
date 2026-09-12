@@ -59,9 +59,9 @@ class _MemoriesScreenState extends State<MemoriesScreen> {
               date: _formatDate(m.createdAt),
               imageUrl: m.imageUrl,
               semanticLabel: 'Shared memory photo',
-              circle: m.circleName ?? 'Circle',
+              circle: m.isPublic ? 'Public' : (m.circleName ?? 'Circle'),
               circleColor: _palette[(m.circleId ?? m.id).hashCode.abs() % _palette.length],
-              privacy: MemoryPrivacy.circle,
+              privacy: m.isPublic ? MemoryPrivacy.public : MemoryPrivacy.circle,
               type: MemoryType.photo,
             ),
         ];
