@@ -19,24 +19,11 @@ class SignUpLoginScreen extends StatefulWidget {
 
 class _SignUpLoginScreenState extends State<SignUpLoginScreen>
     with SingleTickerProviderStateMixin {
-  // TODO: Replace with [Riverpod/Bloc] for production
-  bool _isLogin = true;
-  bool _isLoading = false;
   String? _errorMessage;
 
   late AnimationController _slideController;
   late Animation<Offset> _slideAnim;
   late Animation<double> _fadeAnim;
-
-  final _loginEmailController = TextEditingController();
-  final _loginPasswordController = TextEditingController();
-  final _signupNameController = TextEditingController();
-  final _signupEmailController = TextEditingController();
-  final _signupPasswordController = TextEditingController();
-  final _signupConfirmController = TextEditingController();
-
-  final _loginFormKey = GlobalKey<FormState>();
-  final _signupFormKey = GlobalKey<FormState>();
 
   @override
   void initState() {
@@ -61,65 +48,7 @@ class _SignUpLoginScreenState extends State<SignUpLoginScreen>
   @override
   void dispose() {
     _slideController.dispose();
-    _loginEmailController.dispose();
-    _loginPasswordController.dispose();
-    _signupNameController.dispose();
-    _signupEmailController.dispose();
-    _signupPasswordController.dispose();
-    _signupConfirmController.dispose();
     super.dispose();
-  }
-
-  void _toggleMode() {
-    setState(() {
-      _isLogin = !_isLogin;
-      _errorMessage = null;
-    });
-    _slideController.forward(from: 0);
-  }
-
-  Future<void> _onSubmit() async {
-    final formKey = _isLogin ? _loginFormKey : _signupFormKey;
-    if (!(formKey.currentState?.validate() ?? false)) return;
-
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-
-    try {
-      if (_isLogin) {
-        await AuthService.signIn(
-          email: _loginEmailController.text.trim(),
-          password: _loginPasswordController.text,
-        );
-      } else {
-        if (_signupPasswordController.text != _signupConfirmController.text) {
-          throw const AuthException('Passwords do not match');
-        }
-        await AuthService.signUp(
-          email: _signupEmailController.text.trim(),
-          password: _signupPasswordController.text,
-          fullName: _signupNameController.text.trim(),
-        );
-      }
-
-      if (!mounted) return;
-      setState(() => _isLoading = false);
-      context.go(AppRoutes.homeScreen);
-    } on AuthException catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _errorMessage = e.message;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _errorMessage = 'Something went wrong. Please try again.';
-      });
-    }
   }
 
   Future<void> _onGoogleSignIn() async {
@@ -216,66 +145,20 @@ class _SignUpLoginScreenState extends State<SignUpLoginScreen>
 
                       const SizedBox(height: 32),
 
-                      // Tab toggle
-                      _AuthToggle(isLogin: _isLogin, onToggle: _toggleMode),
-
-                      const SizedBox(height: 28),
-
                       // Error message
                       if (_errorMessage != null) ...[
                         _ErrorBanner(message: _errorMessage!),
                         const SizedBox(height: 16),
                       ],
 
-                      // Form
+                      // Google + phone OTP login options
                       FadeTransition(
                         opacity: _fadeAnim,
                         child: SlideTransition(
                           position: _slideAnim,
                           child: AuthFormWidget(
-                            isLogin: _isLogin,
-                            isLoading: _isLoading,
-                            loginEmailController: _loginEmailController,
-                            loginPasswordController: _loginPasswordController,
-                            signupNameController: _signupNameController,
-                            signupEmailController: _signupEmailController,
-                            signupPasswordController: _signupPasswordController,
-                            signupConfirmController: _signupConfirmController,
-                            loginFormKey: _loginFormKey,
-                            signupFormKey: _signupFormKey,
-                            onSubmit: _onSubmit,
                             onGoogleSignIn: _onGoogleSignIn,
                             onPhoneVerified: _onPhoneVerified,
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 24),
-
-                      // Toggle link
-                      GestureDetector(
-                        onTap: _toggleMode,
-                        child: RichText(
-                          text: TextSpan(
-                            style: const TextStyle(
-                              fontFamily: 'Manrope',
-                              fontSize: 14,
-                              color: AppTheme.textMuted,
-                            ),
-                            children: [
-                              TextSpan(
-                                text: _isLogin
-                                    ? "Don't have an account? "
-                                    : 'Already have an account? ',
-                              ),
-                              TextSpan(
-                                text: _isLogin ? 'Sign Up' : 'Sign In',
-                                style: const TextStyle(
-                                  color: AppTheme.primaryGreen,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ],
                           ),
                         ),
                       ),
@@ -284,86 +167,6 @@ class _SignUpLoginScreenState extends State<SignUpLoginScreen>
                 ),
               ),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _AuthToggle extends StatelessWidget {
-  final bool isLogin;
-  final VoidCallback onToggle;
-
-  const _AuthToggle({required this.isLogin, required this.onToggle});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 48,
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceVariantDark,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppTheme.outline, width: 0.5),
-      ),
-      child: Stack(
-        children: [
-          // Sliding indicator
-          AnimatedAlign(
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeOutCubic,
-            alignment: isLogin ? Alignment.centerLeft : Alignment.centerRight,
-            child: FractionallySizedBox(
-              widthFactor: 0.5,
-              child: Container(
-                margin: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  gradient: AppTheme.primaryGradient,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            ),
-          ),
-          // Labels
-          Row(
-            children: [
-              Expanded(
-                child: GestureDetector(
-                  onTap: isLogin ? null : onToggle,
-                  behavior: HitTestBehavior.opaque,
-                  child: Center(
-                    child: AnimatedDefaultTextStyle(
-                      duration: const Duration(milliseconds: 200),
-                      style: TextStyle(
-                        fontFamily: 'Manrope',
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: isLogin ? Colors.black : AppTheme.textMuted,
-                      ),
-                      child: const Text('Sign In'),
-                    ),
-                  ),
-                ),
-              ),
-              Expanded(
-                child: GestureDetector(
-                  onTap: !isLogin ? null : onToggle,
-                  behavior: HitTestBehavior.opaque,
-                  child: Center(
-                    child: AnimatedDefaultTextStyle(
-                      duration: const Duration(milliseconds: 200),
-                      style: TextStyle(
-                        fontFamily: 'Manrope',
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: !isLogin ? Colors.black : AppTheme.textMuted,
-                      ),
-                      child: const Text('Sign Up'),
-                    ),
-                  ),
-                ),
-              ),
-            ],
           ),
         ],
       ),
