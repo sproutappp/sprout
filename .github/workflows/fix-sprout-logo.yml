@@ -20,27 +20,48 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          source_png="assets/images/logosprout-1787939643364.png"
-          test -f "$source_png"
+          python3 -m pip install --quiet pillow
+          python3 - <<'PY'
+          from pathlib import Path
+          from PIL import Image
+          import base64
 
-          mkdir -p android/app/src/main/res/mipmap-mdpi \
-                   android/app/src/main/res/mipmap-hdpi \
-                   android/app/src/main/res/mipmap-xhdpi \
-                   android/app/src/main/res/mipmap-xxhdpi \
-                   android/app/src/main/res/mipmap-xxxhdpi
+          source = Path('assets/images/logosprout-1787939643364.png')
+          assert source.is_file(), f'Missing source logo: {source}'
+          image = Image.open(source).convert('RGBA')
 
-          convert "$source_png" -trim -resize 48x48 -gravity center -background none -extent 48x48 android/app/src/main/res/mipmap-mdpi/ic_launcher.png
-          convert "$source_png" -trim -resize 72x72 -gravity center -background none -extent 72x72 android/app/src/main/res/mipmap-hdpi/ic_launcher.png
-          convert "$source_png" -trim -resize 96x96 -gravity center -background none -extent 96x96 android/app/src/main/res/mipmap-xhdpi/ic_launcher.png
-          convert "$source_png" -trim -resize 144x144 -gravity center -background none -extent 144x144 android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png
-          convert "$source_png" -trim -resize 192x192 -gravity center -background none -extent 192x192 android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+          # Remove only fully transparent outer padding, preserving the logo artwork.
+          alpha = image.getchannel('A')
+          bbox = alpha.getbbox()
+          if bbox:
+              image = image.crop(bbox)
 
-          encoded_logo="$(base64 -w 0 "$source_png")"
-          cat > assets/images/img_app_logo.svg <<EOF
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1536">
-            <image width="1024" height="1536" href="data:image/png;base64,$encoded_logo" preserveAspectRatio="xMidYMid meet"/>
-          </svg>
-          EOF
+          sizes = {
+              'mipmap-mdpi': 48,
+              'mipmap-hdpi': 72,
+              'mipmap-xhdpi': 96,
+              'mipmap-xxhdpi': 144,
+              'mipmap-xxxhdpi': 192,
+          }
+          for folder, size in sizes.items():
+              out_dir = Path('android/app/src/main/res') / folder
+              out_dir.mkdir(parents=True, exist_ok=True)
+              icon = image.copy()
+              icon.thumbnail((size, size), Image.Resampling.LANCZOS)
+              canvas = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+              x = (size - icon.width) // 2
+              y = (size - icon.height) // 2
+              canvas.alpha_composite(icon, (x, y))
+              canvas.save(out_dir / 'ic_launcher.png', 'PNG', optimize=True)
+
+          encoded = base64.b64encode(source.read_bytes()).decode('ascii')
+          Path('assets/images/img_app_logo.svg').write_text(
+              '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1536">'
+              f'<image width="1024" height="1536" href="data:image/png;base64,{encoded}" '
+              'preserveAspectRatio="xMidYMid meet"/></svg>\n',
+              encoding='utf-8',
+          )
+          PY
 
       - name: Commit logo changes
         shell: bash
