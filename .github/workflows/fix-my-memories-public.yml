@@ -1,0 +1,111 @@
+name: Fix My Memories Public Memories
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Apply only My Memories changes
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          repo = Path('.')
+
+          repository = repo / 'lib/services/memories_repository.dart'
+          text = repository.read_text()
+          pattern = re.compile(r"  static Future<List<Memory>> fetchAllForUser\(\) async \{.*?\n  \}\n\n  /// Public memories", re.S)
+          replacement = '''  static Future<List<Memory>> fetchAllForUser() async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return [];
+
+    // My Memories contains both public and circle memories created by
+    // the signed-in user. Keep the query on base memory columns to avoid
+    // PostgREST relationship expansion issues.
+    final rows = await _client
+        .from('memories')
+        .select('id, circle_id, uploaded_by, image_url, caption, location, created_at, is_public')
+        .eq('uploaded_by', userId)
+        .order('created_at', ascending: false);
+
+    final memoryMaps = (rows as List)
+        .map((row) => Map<String, dynamic>.from(row as Map))
+        .toList();
+    if (memoryMaps.isEmpty) return [];
+
+    final circleIds = memoryMaps
+        .map((m) => m['circle_id'] as String?)
+        .whereType<String>()
+        .toSet()
+        .toList();
+
+    if (circleIds.isNotEmpty) {
+      final circles = await _client
+          .from('circles')
+          .select('id, name')
+          .inFilter('id', circleIds);
+      final namesById = <String, String>{
+        for (final row in (circles as List))
+          (row['id'] as String): (row['name'] as String),
+      };
+      for (final memory in memoryMaps) {
+        final circleId = memory['circle_id'] as String?;
+        if (circleId != null && namesById.containsKey(circleId)) {
+          memory['circles'] = {
+            'id': circleId,
+            'name': namesById[circleId],
+          };
+        }
+      }
+    }
+
+    return _toMemoriesWithSignedUrls(memoryMaps);
+  }
+
+  /// Public memories'''
+          text, count = pattern.subn(replacement, text, count=1)
+          if count != 1:
+              raise SystemExit('fetchAllForUser block not found')
+          repository.write_text(text)
+
+          screen = repo / 'lib/presentation/memories_screen/memories_screen.dart'
+          text = screen.read_text()
+          old = '''              circle: m.circleName ?? 'Circle',
+              circleColor: _palette[(m.circleId ?? m.id).hashCode.abs() % _palette.length],
+              privacy: MemoryPrivacy.circle,
+              type: MemoryType.photo,'''
+          new = '''              circle: m.isPublic ? 'Public' : (m.circleName ?? 'Circle'),
+              circleColor: m.isPublic
+                  ? AppTheme.cyanAccent
+                  : _palette[(m.circleId ?? m.id).hashCode.abs() % _palette.length],
+              privacy: m.isPublic ? MemoryPrivacy.public : MemoryPrivacy.circle,
+              type: MemoryType.photo,'''
+          if old not in text:
+              raise SystemExit('memory mapping block not found')
+          screen.write_text(text.replace(old, new, 1))
+          PY
+
+      - name: Commit targeted source changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/services/memories_repository.dart lib/presentation/memories_screen/memories_screen.dart
+          git commit -m "Show public memories in My Memories"
+          git push
+
+      - name: Remove one-time workflow
+        run: |
+          git rm .github/workflows/fix-my-memories-public.yml
+          git commit -m "Remove one-time My Memories fix workflow"
+          git push
