@@ -1,0 +1,64 @@
+name: Fix Profile Layout
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix-profile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Apply targeted profile changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('lib/presentation/profile_screen/profile_screen.dart')
+          text = path.read_text()
+
+          text = text.replace(
+              "  List<_CircleRow> _myCircles = [];\n  bool _isLoading = true;",
+              "  List<_CircleRow> _myCircles = [];\n  int _peopleCount = 0;\n  bool _isLoading = true;",
+          )
+
+          old = """      setState(() {\n        _myCircles = [\n          for (var i = 0; i < circles.length; i++)\n            _CircleRow.fromCircle(circles[i], i),\n        ];\n      });"""
+          new = """      final memberProfiles = await CirclesRepository.fetchMembersForCircles(\n        circles.map((circle) => circle.id).toList(),\n      );\n      if (!mounted) return;\n      setState(() {\n        _myCircles = [\n          for (var i = 0; i < circles.length; i++)\n            _CircleRow.fromCircle(circles[i], i),\n        ];\n        _peopleCount = memberProfiles.length;\n      });"""
+          if old not in text:
+              raise SystemExit('circle loading block not found')
+          text = text.replace(old, new, 1)
+
+          old = """                      Text(\n                        profile.displayName,\n                        style: GoogleFonts.manrope(\n                          color: AppTheme.textPrimary,\n                          fontSize: 20,\n                          fontWeight: FontWeight.w700,\n                        ),\n                      ),\n                      const SizedBox(height: 14),"""
+          new = """                      Text(\n                        profile.displayName,\n                        style: GoogleFonts.manrope(\n                          color: AppTheme.textPrimary,\n                          fontSize: 20,\n                          fontWeight: FontWeight.w700,\n                        ),\n                      ),\n                      const SizedBox(height: 4),\n                      Text(\n                        'Collecting little moments that matter.',\n                        textAlign: TextAlign.center,\n                        style: GoogleFonts.manrope(\n                          color: AppTheme.textMuted,\n                          fontSize: 11,\n                        ),\n                      ),\n                      const SizedBox(height: 14),"""
+          if old not in text:
+              raise SystemExit('profile identity block not found')
+          text = text.replace(old, new, 1)
+
+          old = """                        _StatItem(\n                          value: '${_myCircles.length}',\n                          label: 'Circles',\n                        ),\n                      ],"""
+          new = """                        _StatItem(\n                          value: '${_myCircles.length}',\n                          label: 'Circles',\n                        ),\n                        _VerticalDivider(),\n                        _StatItem(\n                          value: '$_peopleCount',\n                          label: 'People',\n                        ),\n                      ],"""
+          if old not in text:
+              raise SystemExit('stats block not found')
+          text = text.replace(old, new, 1)
+
+          path.write_text(text)
+          PY
+
+      - name: Commit targeted changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/presentation/profile_screen/profile_screen.dart
+          git commit -m "Restore profile people stat and identity subtitle"
+          git push
+
+      - name: Remove one-time workflow
+        run: |
+          git rm .github/workflows/fix-profile-layout.yml
+          git commit -m "Remove one-time profile layout workflow"
+          git push
