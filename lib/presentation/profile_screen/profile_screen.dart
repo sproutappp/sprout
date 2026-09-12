@@ -129,6 +129,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Profile? _profile;
   List<_MemoryPreview> _myMemories = [];
   List<_CircleRow> _myCircles = [];
+  int _peopleCount = 0;
   bool _isLoading = true;
   String? _error;
 
@@ -195,11 +196,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       final circles = await CirclesRepository.fetchMyCircles();
       if (!mounted) return;
+      final memberProfiles = await CirclesRepository.fetchMembersForCircles(
+        circles.map((circle) => circle.id).toList(),
+      );
+      if (!mounted) return;
       setState(() {
         _myCircles = [
           for (var i = 0; i < circles.length; i++)
             _CircleRow.fromCircle(circles[i], i),
         ];
+        _peopleCount = memberProfiles.length;
       });
     } catch (e, st) {
       debugPrint('ProfileScreen: circles fetch failed: $e\n$st');
@@ -478,6 +484,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           fontWeight: FontWeight.w700,
                         ),
                       ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Collecting little moments that matter.',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.manrope(
+                          color: AppTheme.textMuted,
+                          fontSize: 11,
+                        ),
+                      ),
                       const SizedBox(height: 14),
                       // Edit profile pill
                       GestureDetector(
@@ -531,6 +546,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         _StatItem(
                           value: '${_myCircles.length}',
                           label: 'Circles',
+                        ),
+                        _VerticalDivider(),
+                        _StatItem(
+                          value: '$_peopleCount',
+                          label: 'People',
                         ),
                       ],
                     ),
