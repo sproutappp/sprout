@@ -3,17 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../../theme/app_theme.dart';
-import '../../routes/app_routes.dart';
 import '../../models/memory.dart';
-import '../../services/memories_repository.dart';
+import '../../routes/app_routes.dart';
 import '../../services/discover_refresh_bus.dart';
-import '../memories_screen/widgets/memories_grid_widget.dart' show MemoryItem, MemoryPrivacy, MemoryType;
+import '../../services/memories_repository.dart';
+import '../../theme/app_theme.dart';
+import '../memories_screen/widgets/memories_grid_widget.dart'
+    show MemoryItem, MemoryPrivacy, MemoryType;
 
-/// Discover shows memories the uploader explicitly marked Public (see
-/// CreateMemoryScreen and MemoriesRepository.fetchPublicMemories) — a real,
-/// separate concept from "your circles", not a recap of your own circle
-/// activity. A memory only ever ends up here if its uploader chose Public.
 class DiscoverScreen extends StatefulWidget {
   const DiscoverScreen({super.key});
 
@@ -23,13 +20,9 @@ class DiscoverScreen extends StatefulWidget {
 
 class _DiscoverScreenState extends State<DiscoverScreen> {
   bool _isLoading = true;
-  // Set only on a genuine fetch failure — never for a successful query
-  // that simply returned zero public memories. Those two cases render
-  // completely different UI (see build()).
   bool _loadFailed = false;
-
-  List<Memory> _publicMemories = [];
-  List<Memory> _onThisDay = [];
+  List<Memory> _memories = [];
+  String _selectedTab = 'For You';
 
   @override
   void initState() {
@@ -49,32 +42,21 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   }
 
   Future<void> _load() async {
-    setState(() {
-      _isLoading = true;
-      _loadFailed = false;
-    });
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+        _loadFailed = false;
+      });
+    }
 
     try {
       final memories = await MemoriesRepository.fetchPublicMemories();
-
-      final now = DateTime.now();
-      final onThisDay = memories.where((m) {
-        return m.createdAt.month == now.month &&
-            m.createdAt.day == now.day &&
-            m.createdAt.year != now.year;
-      }).toList();
-
       if (!mounted) return;
       setState(() {
-        _publicMemories = memories;
-        _onThisDay = onThisDay;
+        _memories = memories;
         _isLoading = false;
       });
     } catch (e, st) {
-      // A genuine failure (network/query/RLS) — logged so the real cause
-      // is visible in device logs, and surfaced as an actual error rather
-      // than the empty-state message below (those two must never be
-      // conflated: zero results is not a failure).
       debugPrint('DiscoverScreen: fetchPublicMemories failed: $e\n$st');
       if (!mounted) return;
       setState(() {
@@ -84,13 +66,16 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     }
   }
 
-  void _openMemory(Memory m) {
+  void _openMemory(Memory memory) {
     final item = MemoryItem(
-      id: m.id,
-      title: m.caption?.isNotEmpty == true ? m.caption! : 'A shared memory',
-      date: '${m.createdAt.day}/${m.createdAt.month}/${m.createdAt.year}',
-      imageUrl: m.imageUrl,
-      semanticLabel: 'Shared memory photo',
+      id: memory.id,
+      title: memory.caption?.isNotEmpty == true
+          ? memory.caption!
+          : 'A shared memory',
+      date:
+          '${memory.createdAt.day}/${memory.createdAt.month}/${memory.createdAt.year}',
+      imageUrl: memory.imageUrl,
+      semanticLabel: 'Public memory photo',
       circle: 'Public',
       circleColor: AppTheme.cyanAccent,
       privacy: MemoryPrivacy.public,
@@ -101,7 +86,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final topPadding = MediaQuery.of(context).padding.top;
+    final top = MediaQuery.of(context).padding.top;
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundDark,
@@ -122,132 +107,148 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                   parent: AlwaysScrollableScrollPhysics(),
                 ),
                 slivers: [
-                  SliverToBoxAdapter(child: SizedBox(height: topPadding + 12)),
+                  SliverToBoxAdapter(child: SizedBox(height: top + 12)),
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: Text(
-                        'Discover',
-                        style: GoogleFonts.manrope(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w800,
-                          color: AppTheme.textPrimary,
-                          letterSpacing: -0.5,
-                        ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Discover',
+                                  style: GoogleFonts.manrope(
+                                    fontSize: 28,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppTheme.textPrimary,
+                                    letterSpacing: -0.7,
+                                  ),
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  'Moments worth remembering, from\naround the world.',
+                                  style: GoogleFonts.manrope(
+                                    fontSize: 12,
+                                    height: 1.35,
+                                    color: AppTheme.textMuted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: AppTheme.surfaceVariantDark,
+                              borderRadius: BorderRadius.circular(13),
+                            ),
+                            child: const Icon(
+                              Icons.search_rounded,
+                              color: AppTheme.textPrimary,
+                              size: 20,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
-                  const SliverToBoxAdapter(child: SizedBox(height: 24)),
-
-                  if (_loadFailed)
-                    // Case B: an actual failure — shown, not hidden.
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 60,
-                        ),
-                        child: Center(
-                          child: Column(
-                            children: [
-                              Text(
-                                "Couldn't load Discover right now.",
-                                textAlign: TextAlign.center,
-                                style: GoogleFonts.manrope(
-                                  fontSize: 13,
-                                  color: AppTheme.textMuted,
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              TextButton(
-                                onPressed: _load,
-                                child: Text(
-                                  'Try again',
-                                  style: GoogleFonts.manrope(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppTheme.primaryGreen,
-                                  ),
-                                ),
-                              ),
-                            ],
+                  const SliverToBoxAdapter(child: SizedBox(height: 18)),
+                  SliverToBoxAdapter(
+                    child: SizedBox(
+                      height: 36,
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        physics: const BouncingScrollPhysics(),
+                        children: [
+                          _DiscoverTab(
+                            label: 'For You',
+                            selected: _selectedTab == 'For You',
+                            onTap: () => setState(() => _selectedTab = 'For You'),
                           ),
-                        ),
-                      ),
-                    )
-                  else if (_publicMemories.isEmpty)
-                    // Case A: the query succeeded — there simply are no
-                    // public memories yet. Not an error.
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 60,
-                        ),
-                        child: Center(
-                          child: Text(
-                            "Add a few public memories to your circle and "
-                            "they'll start showing up here.",
-                            textAlign: TextAlign.center,
-                            style: GoogleFonts.manrope(
-                              fontSize: 13,
-                              color: AppTheme.textMuted,
-                            ),
+                          const SizedBox(width: 8),
+                          _DiscoverTab(
+                            label: 'Nearby',
+                            selected: _selectedTab == 'Nearby',
+                            onTap: () => setState(() => _selectedTab = 'Nearby'),
                           ),
-                        ),
-                      ),
-                    )
-                  else ...[
-                    // ── On This Day ─────────────────────────────────────
-                    if (_onThisDay.isNotEmpty) ...[
-                      const _SectionHeader(title: 'On This Day', emoji: '✨'),
-                      const SliverToBoxAdapter(child: SizedBox(height: 12)),
-                      SliverToBoxAdapter(
-                        child: SizedBox(
-                          height: 200,
-                          child: ListView.separated(
-                            scrollDirection: Axis.horizontal,
-                            physics: const BouncingScrollPhysics(),
-                            padding: const EdgeInsets.symmetric(horizontal: 20),
-                            itemCount: _onThisDay.length,
-                            separatorBuilder: (_, __) => const SizedBox(width: 12),
-                            itemBuilder: (context, i) {
-                              final m = _onThisDay[i];
-                              return _OnThisDayCard(
-                                memory: m,
-                                onTap: () => _openMemory(m),
-                              );
-                            },
+                          const SizedBox(width: 8),
+                          _DiscoverTab(
+                            label: 'Trending',
+                            selected: _selectedTab == 'Trending',
+                            onTap: () => setState(() => _selectedTab = 'Trending'),
                           ),
-                        ),
-                      ),
-                      const SliverToBoxAdapter(child: SizedBox(height: 28)),
-                    ],
-
-                    // ── Public memories grid ────────────────────────────
-                    const _SectionHeader(title: 'Public Memories', emoji: '🌍'),
-                    const SliverToBoxAdapter(child: SizedBox(height: 12)),
-                    SliverPadding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      sliver: SliverGrid(
-                        gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 3,
-                              mainAxisSpacing: 4,
-                              crossAxisSpacing: 4,
-                              childAspectRatio: 1,
-                            ),
-                        delegate: SliverChildBuilderDelegate((context, i) {
-                          final m = _publicMemories[i];
-                          return _GridPhoto(
-                            memory: m,
-                            onTap: () => _openMemory(m),
-                          );
-                        }, childCount: _publicMemories.length),
+                        ],
                       ),
                     ),
-                  ],
-
+                  ),
+                  const SliverToBoxAdapter(child: SizedBox(height: 18)),
+                  if (_loadFailed)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 60,
+                        ),
+                        child: Column(
+                          children: [
+                            Text(
+                              "Couldn't load Discover right now.",
+                              style: GoogleFonts.manrope(
+                                color: AppTheme.textMuted,
+                                fontSize: 13,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            TextButton(
+                              onPressed: _load,
+                              child: const Text('Try again'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  else if (_memories.isEmpty)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 70,
+                        ),
+                        child: Text(
+                          'Public memories will appear here when people share them.',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.manrope(
+                            color: AppTheme.textMuted,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    )
+                  else
+                    SliverPadding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      sliver: SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) {
+                            final memory = _memories[index];
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 16),
+                              child: _PublicMemoryCard(
+                                memory: memory,
+                                onTap: () => _openMemory(memory),
+                              ),
+                            );
+                          },
+                          childCount: _memories.length,
+                        ),
+                      ),
+                    ),
                   SliverToBoxAdapter(
                     child: SizedBox(
                       height: MediaQuery.of(context).padding.bottom + 100,
@@ -260,125 +261,215 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   }
 }
 
-// ── Section header ──────────────────────────────────────────────────────
+class _DiscoverTab extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
 
-class _SectionHeader extends StatelessWidget {
-  final String title;
-  final String emoji;
-
-  const _SectionHeader({required this.title, required this.emoji});
+  const _DiscoverTab({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return SliverToBoxAdapter(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        child: Row(
-          children: [
-            Text(emoji, style: const TextStyle(fontSize: 16)),
-            const SizedBox(width: 8),
-            Text(
-              title,
-              style: GoogleFonts.manrope(
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-                color: AppTheme.textPrimary,
-              ),
-            ),
-          ],
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: selected ? AppTheme.primaryGreen : AppTheme.surfaceVariantDark,
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.manrope(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: selected ? AppTheme.backgroundDark : AppTheme.textMuted,
+          ),
         ),
       ),
     );
   }
 }
 
-// ── On This Day card ─────────────────────────────────────────────────────
-
-class _OnThisDayCard extends StatelessWidget {
+class _PublicMemoryCard extends StatelessWidget {
   final Memory memory;
   final VoidCallback onTap;
 
-  const _OnThisDayCard({required this.memory, required this.onTap});
+  const _PublicMemoryCard({required this.memory, required this.onTap});
+
+  String _timeAgo() {
+    final difference = DateTime.now().difference(memory.createdAt);
+    if (difference.inMinutes < 1) return 'Just now';
+    if (difference.inHours < 1) return '${difference.inMinutes}m ago';
+    if (difference.inDays < 1) return '${difference.inHours}h ago';
+    if (difference.inDays < 7) return '${difference.inDays}d ago';
+    return '${memory.createdAt.day}/${memory.createdAt.month}/${memory.createdAt.year}';
+  }
 
   @override
   Widget build(BuildContext context) {
-    final yearsAgo = DateTime.now().year - memory.createdAt.year;
+    final caption = memory.caption?.trim() ?? '';
+    final parts = caption.split(' — ');
+    final title = parts.first.trim().isEmpty ? 'A shared memory' : parts.first.trim();
+    final description = parts.length > 1 ? parts.sublist(1).join(' — ').trim() : '';
+    final contributor = memory.contributor;
+
     return GestureDetector(
       onTap: onTap,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(18),
-        child: Stack(
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceDark,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppTheme.surfaceVariantDark),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            CachedNetworkImage(
-              imageUrl: memory.imageUrl,
-              width: 150,
-              height: 200,
-              fit: BoxFit.cover,
-              placeholder: (_, __) => Container(
-                width: 150,
-                height: 200,
-                color: AppTheme.surfaceVariantDark,
-              ),
-              errorWidget: (_, __, ___) => Container(
-                width: 150,
-                height: 200,
-                color: AppTheme.surfaceVariantDark,
-              ),
-            ),
-            Positioned.fill(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [Colors.transparent, Colors.black.withAlpha(190)],
+            Stack(
+              children: [
+                AspectRatio(
+                  aspectRatio: 1.12,
+                  child: CachedNetworkImage(
+                    imageUrl: memory.imageUrl,
+                    fit: BoxFit.cover,
+                    placeholder: (_, __) => Container(color: AppTheme.surfaceVariantDark),
+                    errorWidget: (_, __, ___) => Container(
+                      color: AppTheme.surfaceVariantDark,
+                      child: const Icon(Icons.image_not_supported_outlined),
+                    ),
                   ),
                 ),
-              ),
-            ),
-            Positioned(
-              left: 12,
-              right: 12,
-              bottom: 12,
-              child: Text(
-                yearsAgo == 1 ? '1 year ago' : '$yearsAgo years ago',
-                style: GoogleFonts.manrope(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
+                Positioned(
+                  top: 12,
+                  right: 12,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: AppTheme.backgroundDark.withAlpha(210),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.public, size: 11, color: AppTheme.cyanAccent),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Public',
+                          style: GoogleFonts.manrope(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.cyanAccent,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
+                if (memory.location?.trim().isNotEmpty == true)
+                  Positioned(
+                    left: 12,
+                    bottom: 10,
+                    right: 12,
+                    child: Row(
+                      children: [
+                        const Icon(Icons.location_on_outlined, size: 12, color: Colors.white),
+                        const SizedBox(width: 3),
+                        Expanded(
+                          child: Text(
+                            memory.location!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.manrope(
+                              fontSize: 10,
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 15,
+                        backgroundColor: AppTheme.surfaceVariantDark,
+                        backgroundImage: contributor?.avatarUrl?.isNotEmpty == true
+                            ? CachedNetworkImageProvider(contributor!.avatarUrl!)
+                            : null,
+                        child: contributor?.avatarUrl?.isNotEmpty == true
+                            ? null
+                            : const Icon(Icons.person_outline, size: 17, color: AppTheme.textMuted),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          contributor?.displayName ?? 'Sprout member',
+                          style: GoogleFonts.manrope(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.textPrimary,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        _timeAgo(),
+                        style: GoogleFonts.manrope(fontSize: 10, color: AppTheme.textMuted),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 9),
+                  Text(
+                    title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.manrope(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                  if (description.isNotEmpty) ...[
+                    const SizedBox(height: 5),
+                    Text(
+                      description,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.manrope(
+                        fontSize: 11,
+                        height: 1.45,
+                        color: AppTheme.textMuted,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Icon(Icons.favorite_border_rounded, size: 15, color: AppTheme.textMuted),
+                      const SizedBox(width: 4),
+                      Icon(Icons.chat_bubble_outline_rounded, size: 14, color: AppTheme.textMuted),
+                      const Spacer(),
+                      Icon(Icons.arrow_forward_rounded, size: 16, color: AppTheme.primaryGreen),
+                    ],
+                  ),
+                ],
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-// ── Grid photo tile ───────────────────────────────────────────────────────
-
-class _GridPhoto extends StatelessWidget {
-  final Memory memory;
-  final VoidCallback onTap;
-
-  const _GridPhoto({required this.memory, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: CachedNetworkImage(
-        imageUrl: memory.imageUrl,
-        fit: BoxFit.cover,
-        placeholder: (_, __) => Container(color: AppTheme.surfaceVariantDark),
-        errorWidget: (_, __, ___) => Container(
-          color: AppTheme.surfaceVariantDark,
-          child: const Icon(
-            Icons.image_not_supported_rounded,
-            size: 18,
-            color: AppTheme.textMuted,
-          ),
         ),
       ),
     );
