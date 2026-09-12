@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../theme/app_theme.dart';
 import '../../routes/app_routes.dart';
@@ -15,6 +16,14 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _isDeleting = false;
+
+  static final Uri _privacyPolicyUri = Uri.parse(
+    'https://sproutappp.github.io/sprout/privacy-policy.html',
+  );
+
+  Future<void> _openPrivacyPolicy() async {
+    await launchUrl(_privacyPolicyUri, mode: LaunchMode.externalApplication);
+  }
 
   Future<void> _confirmDeleteAccount() async {
     final shouldDelete = await showDialog<bool>(
@@ -140,26 +149,52 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           borderRadius: BorderRadius.circular(18),
                           border: Border.all(color: AppTheme.outline, width: 0.8),
                         ),
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
-                          leading: const Icon(Icons.delete_outline_rounded, color: AppTheme.error),
-                          title: Text(
-                            'Delete Account',
-                            style: GoogleFonts.manrope(
-                              color: AppTheme.error,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
+                        child: Column(
+                          children: [
+                            ListTile(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
+                              leading: const Icon(Icons.privacy_tip_outlined, color: AppTheme.primaryGreen),
+                              title: Text(
+                                'Privacy Policy',
+                                style: GoogleFonts.manrope(
+                                  color: AppTheme.textPrimary,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              subtitle: Text(
+                                'Read how Sprout handles your data.',
+                                style: GoogleFonts.manrope(
+                                  color: AppTheme.textMuted,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              trailing: const Icon(Icons.open_in_new_rounded, color: AppTheme.textMuted, size: 20),
+                              onTap: _openPrivacyPolicy,
                             ),
-                          ),
-                          subtitle: Text(
-                            'Permanently delete your Sprout account and data.',
-                            style: GoogleFonts.manrope(
-                              color: AppTheme.textMuted,
-                              fontSize: 12,
+                            Divider(height: 1, color: AppTheme.outline),
+                            ListTile(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
+                              leading: const Icon(Icons.delete_outline_rounded, color: AppTheme.error),
+                              title: Text(
+                                'Delete Account',
+                                style: GoogleFonts.manrope(
+                                  color: AppTheme.error,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              subtitle: Text(
+                                'Permanently delete your Sprout account and data.',
+                                style: GoogleFonts.manrope(
+                                  color: AppTheme.textMuted,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              trailing: const Icon(Icons.chevron_right_rounded, color: AppTheme.textMuted),
+                              onTap: _isDeleting ? null : _confirmDeleteAccount,
                             ),
-                          ),
-                          trailing: const Icon(Icons.chevron_right_rounded, color: AppTheme.textMuted),
-                          onTap: _isDeleting ? null : _confirmDeleteAccount,
+                          ],
                         ),
                       ),
                     ],
