@@ -1,0 +1,73 @@
+name: Fix Sprout Logo
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  fix-logo:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Replace logo assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_png="assets/images/logosprout-1787939643364.png"
+          test -f "$source_png"
+
+          mkdir -p android/app/src/main/res/mipmap-mdpi \
+                   android/app/src/main/res/mipmap-hdpi \
+                   android/app/src/main/res/mipmap-xhdpi \
+                   android/app/src/main/res/mipmap-xxhdpi \
+                   android/app/src/main/res/mipmap-xxxhdpi
+
+          convert "$source_png" -trim -resize 48x48 -gravity center -background none -extent 48x48 android/app/src/main/res/mipmap-mdpi/ic_launcher.png
+          convert "$source_png" -trim -resize 72x72 -gravity center -background none -extent 72x72 android/app/src/main/res/mipmap-hdpi/ic_launcher.png
+          convert "$source_png" -trim -resize 96x96 -gravity center -background none -extent 96x96 android/app/src/main/res/mipmap-xhdpi/ic_launcher.png
+          convert "$source_png" -trim -resize 144x144 -gravity center -background none -extent 144x144 android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png
+          convert "$source_png" -trim -resize 192x192 -gravity center -background none -extent 192x192 android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+
+          encoded_logo="$(base64 -w 0 "$source_png")"
+          cat > assets/images/img_app_logo.svg <<EOF
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1536">
+            <image width="1024" height="1536" href="data:image/png;base64,$encoded_logo" preserveAspectRatio="xMidYMid meet"/>
+          </svg>
+          EOF
+
+      - name: Commit logo changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/images/img_app_logo.svg android/app/src/main/res/mipmap-*/ic_launcher.png
+          if git diff --cached --quiet; then
+            echo "No logo changes needed"
+            exit 0
+          fi
+          git commit -m "Use exact Sprout logo for app icons"
+          git push
+
+      - name: Trigger fresh Android build
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run build-apk.yml --ref main
+
+      - name: Remove one-time workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git pull --rebase origin main
+          git rm .github/workflows/fix-sprout-logo.yml
+          git commit -m "Remove one-time logo fix workflow"
+          git push
