@@ -40,9 +40,45 @@ class MemoriesRepository {
     return _toMemoriesWithSignedUrls(memoryMaps);
   }
 
+  /// Public memories are queried from the base memories table first rather
+  /// than using PostgREST relationship expansion. This keeps Discover
+  /// independent of relationship/RLS behavior while still enriching each
+  /// memory with the uploader's public profile data in a separate query.
   static Future<List<Memory>> fetchPublicMemories() async {
-    final rows = await _client.from('memories').select('*, profiles(id, full_name, avatar_url), circles(id, name)').eq('is_public', true).order('created_at', ascending: false);
-    return _toMemoriesWithSignedUrls(rows as List);
+    final rows = await _client
+        .from('memories')
+        .select('id, circle_id, uploaded_by, image_url, caption, location, created_at, is_public')
+        .eq('is_public', true)
+        .order('created_at', ascending: false);
+
+    final memoryMaps = (rows as List)
+        .map((row) => Map<String, dynamic>.from(row as Map))
+        .toList();
+    if (memoryMaps.isEmpty) return [];
+
+    final uploaderIds = memoryMaps
+        .map((m) => m['uploaded_by'] as String?)
+        .whereType<String>()
+        .toSet()
+        .toList();
+
+    if (uploaderIds.isNotEmpty) {
+      final profiles = await _client
+          .from('profiles')
+          .select('id, full_name, avatar_url')
+          .inFilter('id', uploaderIds);
+      final profilesById = <String, Map<String, dynamic>>{
+        for (final row in (profiles as List))
+          (row['id'] as String): Map<String, dynamic>.from(row as Map),
+      };
+      for (final memory in memoryMaps) {
+        final uploaderId = memory['uploaded_by'] as String?;
+        final profile = uploaderId == null ? null : profilesById[uploaderId];
+        if (profile != null) memory['profiles'] = profile;
+      }
+    }
+
+    return _toMemoriesWithSignedUrls(memoryMaps);
   }
 
   static Future<List<Memory>> _toMemoriesWithSignedUrls(List rows) async {
@@ -110,9 +146,6 @@ class MemoriesRepository {
       rethrow;
     }
 
-    // Do not use relationship expansion here. A successful insert/share/upload
-    // must not be reported as a failed save because a related profile row is
-    // unavailable under RLS. The memory itself is already persisted.
     final row = await _client.from('memories').select('id, circle_id, uploaded_by, image_url, caption, location, created_at, is_public').eq('id', id).single();
     final resolved = await _toMemoriesWithSignedUrls([row]);
     return resolved.first;
