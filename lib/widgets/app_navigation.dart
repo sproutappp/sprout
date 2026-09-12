@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../theme/app_theme.dart';
+import '../services/discover_refresh_bus.dart';
 
 // V4 — 5-item nav: Home | Memories | Discover | Circles | Profile
 // Create Memory is now a floating circular FAB on each screen
@@ -105,6 +106,10 @@ class _AppNavigationState extends State<AppNavigation>
       tab.branchIndex!,
       initialLocation: tab.branchIndex == widget.navigationShell.currentIndex,
     );
+
+    if (tab.branchIndex == 2) {
+      DiscoverRefreshBus.requestRefresh();
+    }
   }
 
   int _resolveVisualIndex() {

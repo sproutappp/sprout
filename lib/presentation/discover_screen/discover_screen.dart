@@ -7,6 +7,7 @@ import '../../theme/app_theme.dart';
 import '../../routes/app_routes.dart';
 import '../../models/memory.dart';
 import '../../services/memories_repository.dart';
+import '../../services/discover_refresh_bus.dart';
 import '../memories_screen/widgets/memories_grid_widget.dart' show MemoryItem, MemoryPrivacy, MemoryType;
 
 /// Discover shows memories the uploader explicitly marked Public (see
@@ -33,7 +34,18 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   @override
   void initState() {
     super.initState();
+    DiscoverRefreshBus.signal.addListener(_onRefreshRequested);
     _load();
+  }
+
+  @override
+  void dispose() {
+    DiscoverRefreshBus.signal.removeListener(_onRefreshRequested);
+    super.dispose();
+  }
+
+  void _onRefreshRequested() {
+    if (mounted) _load();
   }
 
   Future<void> _load() async {
