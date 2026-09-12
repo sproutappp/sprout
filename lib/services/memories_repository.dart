@@ -24,19 +24,46 @@ class MemoriesRepository {
     return resolved.isEmpty ? null : resolved.first;
   }
 
+  /// Returns the signed-in user's own memories, including both public and
+  /// circle-shared memories.
   static Future<List<Memory>> fetchAllForUser() async {
-    final rows = await _client.from('memories').select('id, circle_id, uploaded_by, image_url, caption, location, created_at, is_public').eq('is_public', false).order('created_at', ascending: false);
-    final memoryMaps = (rows as List).map((row) => Map<String, dynamic>.from(row as Map)).toList();
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) throw StateError('Must be signed in to load memories');
+
+    final rows = await _client
+        .from('memories')
+        .select('id, circle_id, uploaded_by, image_url, caption, location, created_at, is_public')
+        .eq('uploaded_by', userId)
+        .order('created_at', ascending: false);
+
+    final memoryMaps = (rows as List)
+        .map((row) => Map<String, dynamic>.from(row as Map))
+        .toList();
     if (memoryMaps.isEmpty) return [];
-    final circleIds = memoryMaps.map((m) => m['circle_id'] as String?).whereType<String>().toSet().toList();
+
+    final circleIds = memoryMaps
+        .where((m) => m['is_public'] != true)
+        .map((m) => m['circle_id'] as String?)
+        .whereType<String>()
+        .toSet()
+        .toList();
+
     if (circleIds.isNotEmpty) {
       final circles = await _client.from('circles').select('id, name').inFilter('id', circleIds);
-      final namesById = <String, String>{for (final row in (circles as List)) (row['id'] as String): (row['name'] as String)};
+      final namesById = <String, String>{
+        for (final row in (circles as List))
+          (row['id'] as String): (row['name'] as String),
+      };
       for (final memory in memoryMaps) {
         final circleId = memory['circle_id'] as String?;
-        if (circleId != null && namesById.containsKey(circleId)) memory['circles'] = {'id': circleId, 'name': namesById[circleId]};
+        if (memory['is_public'] != true &&
+            circleId != null &&
+            namesById.containsKey(circleId)) {
+          memory['circles'] = {'id': circleId, 'name': namesById[circleId]};
+        }
       }
     }
+
     return _toMemoriesWithSignedUrls(memoryMaps);
   }
 
