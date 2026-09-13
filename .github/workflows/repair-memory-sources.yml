@@ -15,10 +15,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Apply narrowly scoped repairs
+        shell: bash
         run: |
           python3 <<'PY'
           from pathlib import Path
+          import re
+
           p = Path('lib/presentation/home_screen/widgets/home_recent_memories_widget.dart')
           s = p.read_text()
           s = s.replace("circle: m.circleName ?? 'Circle',", "circle: m.isPublic ? 'Public' : (m.circleName ?? 'Circle'),")
@@ -37,7 +41,9 @@ jobs:
         for (final m in memories.take(2))
           _ExperiencePreview(
             circleId: m.id,
-            circleName: m.caption?.isNotEmpty == true ? m.caption! : 'Public Memory',
+            circleName: m.caption?.isNotEmpty == true
+                ? m.caption!
+                : 'Public Memory',
             coverImageUrl: m.imageUrl,
             memoryCount: 1,
           ),
@@ -58,12 +64,8 @@ jobs:
 
           p = Path('lib/services/memories_repository.dart')
           s = p.read_text()
-          old = """  static Future<List<Memory>> fetchByUploader(String uploaderId) async {
-    final rows = await _client.from('memories').select('*, profiles(id, full_name, avatar_url), circles(id, name)').eq('uploaded_by', uploaderId).order('created_at', ascending: false);
-    return _toMemoriesWithSignedUrls(rows as List);
-  }
-"""
-          new = """  static Future<List<Memory>> fetchByUploader(String uploaderId) async {
+          pattern = r"  static Future<List<Memory>> fetchByUploader\(String uploaderId\) async \{.*?\n  \}\n\n  static final _rng"
+          replacement = '''  static Future<List<Memory>> fetchByUploader(String uploaderId) async {
     if (_client.auth.currentUser?.id == uploaderId) {
       return fetchAllForUser();
     }
@@ -74,18 +76,20 @@ jobs:
         .order('created_at', ascending: false);
     return _toMemoriesWithSignedUrls(rows as List);
   }
-"""
-          if old not in s:
+
+  static final _rng'''
+          updated, count = re.subn(pattern, replacement, s, count=1, flags=re.S)
+          if count != 1:
               raise SystemExit('fetchByUploader target not found')
-          s = s.replace(old, new)
-          p.write_text(s)
+          p.write_text(updated)
           PY
+
       - name: Commit changes and remove one-time workflow
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add lib/presentation/home_screen/widgets/home_recent_memories_widget.dart lib/presentation/home_screen/widgets/home_discover_teaser_widget.dart lib/services/memories_repository.dart
-          git commit -m "Repair public and circle memory sources"
+          git diff --cached --quiet || git commit -m "Repair public and circle memory sources"
           git rm .github/workflows/repair-memory-sources.yml
           git commit -m "Remove one-time memory repair workflow"
           git push
