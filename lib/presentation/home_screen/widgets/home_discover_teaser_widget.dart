@@ -4,21 +4,17 @@ import 'package:go_router/go_router.dart';
 
 import '../../../theme/app_theme.dart';
 import '../../../routes/app_routes.dart';
-import '../../../services/circles_repository.dart';
 import '../../../services/memories_repository.dart';
 
-/// A small preview of "Your Experiences" (circles with memories in them),
-/// linking into the full Discover screen. Replaces an earlier version that
-/// showed fake public content ("From the World") from the old public-feed
-/// concept — there's no such feature in this app anymore.
+/// A small preview of public memories, linking into the full Discover screen.
 class _ExperiencePreview {
-  final String circleId;
+  final String memoryId;
   final String circleName;
   final String coverImageUrl;
   final int memoryCount;
 
   const _ExperiencePreview({
-    required this.circleId,
+    required this.memoryId,
     required this.circleName,
     required this.coverImageUrl,
     required this.memoryCount,
@@ -46,32 +42,16 @@ class _HomeDiscoverTeaserWidgetState extends State<HomeDiscoverTeaserWidget> {
 
   Future<void> _load() async {
     try {
-      final circles = await CirclesRepository.fetchMyCircles();
-      final memories = await MemoriesRepository.fetchAllForUser();
-
-      final byCircle = <String, int>{};
-      final coverByCircle = <String, String>{};
-      for (final m in memories) {
-        // Public memories have no circleId — irrelevant to a "your
-        // circles" teaser, so they're simply skipped here.
-        final cid = m.circleId;
-        if (cid == null) continue;
-        byCircle[cid] = (byCircle[cid] ?? 0) + 1;
-        coverByCircle.putIfAbsent(cid, () => m.imageUrl);
-      }
-
+      final memories = await MemoriesRepository.fetchPublicMemories();
       final experiences = [
-        for (final c in circles)
-          if (byCircle.containsKey(c.id))
-            _ExperiencePreview(
-              circleId: c.id,
-              circleName: c.name,
-              coverImageUrl: coverByCircle[c.id]!,
-              memoryCount: byCircle[c.id]!,
-            ),
+        for (final m in memories.take(2))
+          _ExperiencePreview(
+            memoryId: m.id,
+            circleName: 'Public',
+            coverImageUrl: m.imageUrl,
+            memoryCount: 1,
+          ),
       ];
-      // Show at most 2 here — it's a teaser, not the full list.
-      experiences.length = experiences.length > 2 ? 2 : experiences.length;
 
       if (!mounted) return;
       setState(() {
@@ -87,7 +67,6 @@ class _HomeDiscoverTeaserWidgetState extends State<HomeDiscoverTeaserWidget> {
   @override
   Widget build(BuildContext context) {
     if (!_isLoading && _experiences.isEmpty) {
-      // Nothing to preview yet — don't show an empty/broken-looking section.
       return const SizedBox.shrink();
     }
 
@@ -183,7 +162,7 @@ class _ExperiencePreviewCardState extends State<_ExperiencePreviewCard> {
       onTapUp: (_) => setState(() => _pressed = false),
       onTapCancel: () => setState(() => _pressed = false),
       onTap: () {
-        context.push(AppRoutes.circleDetailScreen, extra: e.circleId);
+        context.go(AppRoutes.discoverScreen);
       },
       child: AnimatedScale(
         scale: _pressed ? 0.97 : 1.0,
