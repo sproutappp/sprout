@@ -123,7 +123,16 @@ class MemoriesRepository {
   }
 
   static Future<List<Memory>> fetchByUploader(String uploaderId) async {
-    final rows = await _client.from('memories').select('*, profiles(id, full_name, avatar_url), circles(id, name)').eq('uploaded_by', uploaderId).order('created_at', ascending: false);
+    final currentUserId = _client.auth.currentUser?.id;
+    if (currentUserId != null && currentUserId == uploaderId) {
+      return fetchAllForUser();
+    }
+
+    final rows = await _client
+        .from('memories')
+        .select('id, circle_id, uploaded_by, image_url, caption, location, created_at, is_public')
+        .eq('uploaded_by', uploaderId)
+        .order('created_at', ascending: false);
     return _toMemoriesWithSignedUrls(rows as List);
   }
 
