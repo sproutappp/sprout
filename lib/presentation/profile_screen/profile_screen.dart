@@ -50,7 +50,7 @@ class _MemoryPreview {
       date: '${months[m.createdAt.month - 1]} ${m.createdAt.day}',
       imageUrl: m.imageUrl,
       semanticLabel: 'Shared memory photo',
-      circleName: m.circleName ?? 'Circle',
+      circleName: m.isPublic ? 'Public' : (m.circleName ?? 'Circle'),
     );
   }
 }
@@ -616,7 +616,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               semanticLabel: m.semanticLabel,
                               circle: m.circleName,
                               circleColor: AppTheme.primaryGreen,
-                              privacy: MemoryPrivacy.circle,
+                              privacy: m.isPublic ? MemoryPrivacy.public : MemoryPrivacy.circle,
                               type: MemoryType.photo,
                             ),
                           ),
