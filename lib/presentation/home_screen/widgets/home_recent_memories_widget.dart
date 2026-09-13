@@ -43,11 +43,9 @@ class _MemoryCard {
       date: m.createdAt.toIso8601String(),
       imageUrl: m.imageUrl,
       semanticLabel: 'Shared memory photo',
-      circle: m.circleName ?? 'Circle',
+      circle: m.isPublic ? 'Public' : (m.circleName ?? 'Circle'),
       circleColor: _palette[index % _palette.length],
-      // All memories are circle-scoped for now — there's no "public"
-      // sharing concept in the schema yet.
-      privacy: MemoryPrivacy.circle,
+      privacy: m.isPublic ? MemoryPrivacy.public : MemoryPrivacy.circle,
       // Reactions/comments aren't tracked yet — showing 0 rather than
       // a fake number.
       reactionCount: 0,
@@ -181,29 +179,29 @@ class _HomeRecentMemoriesWidgetState extends State<HomeRecentMemoriesWidget>
               ),
               itemCount: _memories.length,
               separatorBuilder: (_, __) => const SizedBox(width: 14),
-            itemBuilder: (context, index) {
-              final delay = index * 80;
-              final anim = CurvedAnimation(
-                parent: _entranceController,
-                curve: Interval(
-                  (delay / 600).clamp(0.0, 1.0),
-                  ((delay + 400) / 600).clamp(0.0, 1.0),
-                  curve: Curves.easeOutCubic,
-                ),
-              );
-              return FadeTransition(
-                opacity: anim,
-                child: SlideTransition(
-                  position: Tween<Offset>(
-                    begin: const Offset(0.06, 0),
-                    end: Offset.zero,
-                  ).animate(anim),
-                  child: _MemoryCardWidget(memory: _memories[index]),
-                ),
-              );
-            },
+              itemBuilder: (context, index) {
+                final delay = index * 80;
+                final anim = CurvedAnimation(
+                  parent: _entranceController,
+                  curve: Interval(
+                    (delay / 600).clamp(0.0, 1.0),
+                    ((delay + 400) / 600).clamp(0.0, 1.0),
+                    curve: Curves.easeOutCubic,
+                  ),
+                );
+                return FadeTransition(
+                  opacity: anim,
+                  child: SlideTransition(
+                    position: Tween<Offset>(
+                      begin: const Offset(0.06, 0),
+                      end: Offset.zero,
+                    ).animate(anim),
+                    child: _MemoryCardWidget(memory: _memories[index]),
+                  ),
+                );
+              },
+            ),
           ),
-        ),
       ],
     );
   }
@@ -256,7 +254,6 @@ class _MemoryCardWidgetState extends State<_MemoryCardWidget> {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                // Photo
                 CachedNetworkImage(
                   imageUrl: m.imageUrl,
                   fit: BoxFit.cover,
@@ -274,15 +271,11 @@ class _MemoryCardWidgetState extends State<_MemoryCardWidget> {
                     ),
                   ),
                 ),
-
-                // Gradient overlay
                 const DecoratedBox(
                   decoration: BoxDecoration(
                     gradient: AppTheme.cardOverlayGradient,
                   ),
                 ),
-
-                // Content
                 Positioned(
                   bottom: 0,
                   left: 0,
@@ -293,10 +286,8 @@ class _MemoryCardWidgetState extends State<_MemoryCardWidget> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // Circle tag
                         CircleTagWidget(name: m.circle, color: m.circleColor),
                         const SizedBox(height: 6),
-                        // Title
                         Text(
                           m.title,
                           maxLines: 2,
@@ -310,7 +301,6 @@ class _MemoryCardWidgetState extends State<_MemoryCardWidget> {
                           ),
                         ),
                         const SizedBox(height: 6),
-                        // Date + reactions
                         Row(
                           children: [
                             Icon(
@@ -350,8 +340,6 @@ class _MemoryCardWidgetState extends State<_MemoryCardWidget> {
                     ),
                   ),
                 ),
-
-                // Privacy badge top-right
                 Positioned(
                   top: 10,
                   right: 10,
@@ -369,18 +357,8 @@ class _MemoryCardWidgetState extends State<_MemoryCardWidget> {
     final dt = DateTime.tryParse(iso);
     if (dt == null) return iso;
     const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
     ];
     return '${months[dt.month - 1]} ${dt.day}';
   }
