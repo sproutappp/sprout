@@ -616,7 +616,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               semanticLabel: m.semanticLabel,
                               circle: m.circleName,
                               circleColor: AppTheme.primaryGreen,
-                              privacy: m.isPublic ? MemoryPrivacy.public : MemoryPrivacy.circle,
+                              privacy: m.circleName == 'Public' ? MemoryPrivacy.public : MemoryPrivacy.circle,
                               type: MemoryType.photo,
                             ),
                           ),
