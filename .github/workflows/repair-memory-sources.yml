@@ -21,20 +21,33 @@ jobs:
         run: |
           python3 <<'PY'
           from pathlib import Path
-          import re
 
-          p = Path('lib/presentation/home_screen/widgets/home_recent_memories_widget.dart')
-          s = p.read_text()
-          s = s.replace("circle: m.circleName ?? 'Circle',", "circle: m.isPublic ? 'Public' : (m.circleName ?? 'Circle'),")
-          s = s.replace("privacy: MemoryPrivacy.circle,", "privacy: m.isPublic ? MemoryPrivacy.public : MemoryPrivacy.circle,")
-          p.write_text(s)
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f'target not found in {path}: {old[:80]!r}')
+              if text.count(old) != 1:
+                  raise SystemExit(f'target occurs {text.count(old)} times in {path}')
+              p.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              'lib/presentation/home_screen/widgets/home_recent_memories_widget.dart',
+              "      circle: m.circleName ?? 'Circle',\n      circleColor: _palette[index % _palette.length],\n      // All memories are circle-scoped for now — there's no \"public\"\n      // sharing concept in the schema yet.\n      privacy: MemoryPrivacy.circle,",
+              "      circle: m.isPublic ? 'Public' : (m.circleName ?? 'Circle'),\n      circleColor: _palette[index % _palette.length],\n      privacy: m.isPublic ? MemoryPrivacy.public : MemoryPrivacy.circle,",
+          )
+
+          replace_once(
+              'lib/presentation/home_screen/widgets/home_discover_teaser_widget.dart',
+              "import '../../../services/circles_repository.dart';\n",
+              '',
+          )
 
           p = Path('lib/presentation/home_screen/widgets/home_discover_teaser_widget.dart')
-          s = p.read_text()
-          s = s.replace("import '../../../services/circles_repository.dart';\n", "")
-          start = s.index('  Future<void> _load() async {')
-          end = s.index('\n  @override\n  Widget build', start)
-          replacement = '''  Future<void> _load() async {
+          text = p.read_text()
+          start = text.index('  Future<void> _load() async {')
+          end = text.index('\n  @override\n  Widget build', start)
+          new_load = '''  Future<void> _load() async {
     try {
       final memories = await MemoriesRepository.fetchPublicMemories();
       final experiences = [
@@ -59,13 +72,12 @@ jobs:
     }
   }
 '''
-          s = s[:start] + replacement + s[end:]
-          p.write_text(s)
+          p.write_text(text[:start] + new_load + text[end:])
 
-          p = Path('lib/services/memories_repository.dart')
-          s = p.read_text()
-          pattern = r"  static Future<List<Memory>> fetchByUploader\(String uploaderId\) async \{.*?\n  \}\n\n  static final _rng"
-          replacement = '''  static Future<List<Memory>> fetchByUploader(String uploaderId) async {
+          replace_once(
+              'lib/services/memories_repository.dart',
+              "  static Future<List<Memory>> fetchByUploader(String uploaderId) async {\n    final rows = await _client.from('memories').select('*, profiles(id, full_name, avatar_url), circles(id, name)').eq('uploaded_by', uploaderId).order('created_at', ascending: false);\n    return _toMemoriesWithSignedUrls(rows as List);\n  }",
+              """  static Future<List<Memory>> fetchByUploader(String uploaderId) async {
     if (_client.auth.currentUser?.id == uploaderId) {
       return fetchAllForUser();
     }
@@ -75,14 +87,16 @@ jobs:
         .eq('uploaded_by', uploaderId)
         .order('created_at', ascending: false);
     return _toMemoriesWithSignedUrls(rows as List);
-  }
-
-  static final _rng'''
-          updated, count = re.subn(pattern, replacement, s, count=1, flags=re.S)
-          if count != 1:
-              raise SystemExit('fetchByUploader target not found')
-          p.write_text(updated)
+  }""",
+          )
           PY
+
+      - name: Validate targeted changes
+        shell: bash
+        run: |
+          grep -q "m.isPublic ? 'Public'" lib/presentation/home_screen/widgets/home_recent_memories_widget.dart
+          grep -q "fetchPublicMemories" lib/presentation/home_screen/widgets/home_discover_teaser_widget.dart
+          grep -q "return fetchAllForUser();" lib/services/memories_repository.dart
 
       - name: Commit changes and remove one-time workflow
         run: |
