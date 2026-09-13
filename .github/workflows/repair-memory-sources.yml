@@ -1,6 +1,10 @@
 name: Repair memory sources
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/repair-memory-sources.yml'
   workflow_dispatch:
 
 jobs:
@@ -11,27 +15,19 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Apply narrowly scoped repairs
         run: |
           python3 <<'PY'
           from pathlib import Path
-          import re
-
-          # 1) Home memory cards: preserve the UI, but derive the label from
-          # the actual memory visibility instead of hardcoding Circle.
           p = Path('lib/presentation/home_screen/widgets/home_recent_memories_widget.dart')
           s = p.read_text()
           s = s.replace("circle: m.circleName ?? 'Circle',", "circle: m.isPublic ? 'Public' : (m.circleName ?? 'Circle'),")
           s = s.replace("privacy: MemoryPrivacy.circle,", "privacy: m.isPublic ? MemoryPrivacy.public : MemoryPrivacy.circle,")
           p.write_text(s)
 
-          # 2) Home Discover teaser: use the actual public feed rather than
-          # circle memories. Keep the existing visual card and dimensions.
           p = Path('lib/presentation/home_screen/widgets/home_discover_teaser_widget.dart')
           s = p.read_text()
           s = s.replace("import '../../../services/circles_repository.dart';\n", "")
-          s = s.replace("import '../../../services/memories_repository.dart';\n", "import '../../../services/memories_repository.dart';\n")
           start = s.index('  Future<void> _load() async {')
           end = s.index('\n  @override\n  Widget build', start)
           replacement = '''  Future<void> _load() async {
@@ -46,7 +42,6 @@ jobs:
             memoryCount: 1,
           ),
       ];
-
       if (!mounted) return;
       setState(() {
         _experiences = experiences;
@@ -61,8 +56,6 @@ jobs:
           s = s[:start] + replacement + s[end:]
           p.write_text(s)
 
-          # 3) Profile's own memories: avoid the relationship-expanded query
-          # that can fail under RLS. Reuse the already-safe own-memory query.
           p = Path('lib/services/memories_repository.dart')
           s = p.read_text()
           old = """  static Future<List<Memory>> fetchByUploader(String uploaderId) async {
@@ -71,12 +64,9 @@ jobs:
   }
 """
           new = """  static Future<List<Memory>> fetchByUploader(String uploaderId) async {
-    // The profile screen requests the signed-in user's own memories. Use the
-    // RLS-safe base-table query so public and circle memories both load.
     if (_client.auth.currentUser?.id == uploaderId) {
       return fetchAllForUser();
     }
-
     final rows = await _client
         .from('memories')
         .select('id, circle_id, uploaded_by, image_url, caption, location, created_at, is_public')
@@ -90,7 +80,6 @@ jobs:
           s = s.replace(old, new)
           p.write_text(s)
           PY
-
       - name: Commit changes and remove one-time workflow
         run: |
           git config user.name "github-actions[bot]"
