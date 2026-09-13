@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../core/supabase/supabase_service.dart';
 import '../../models/circle.dart';
 import '../../models/profile.dart';
 import '../../routes/app_routes.dart';
@@ -30,6 +31,7 @@ class _CircleDetailScreenState extends State<CircleDetailScreen> {
   List<MemoryItem> _memories = [];
   bool _isLoading = true;
   String? _error;
+  bool _notificationsEnabled = true;
 
   @override
   void initState() {
@@ -121,7 +123,132 @@ class _CircleDetailScreenState extends State<CircleDetailScreen> {
         builder: (_) => _CircleEditSheet(circle: circle),
       );
       if (saved == true) await _load();
+    } else if (action == 'notifications') {
+      await _openNotificationsDialog();
+    } else if (action == 'leave') {
+      await _confirmLeaveCircle(circle);
     }
+  }
+
+  Future<void> _openNotificationsDialog() async {
+    final enabled = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppTheme.surfaceDark,
+        title: Text(
+          'Notifications',
+          style: GoogleFonts.manrope(
+            color: AppTheme.textPrimary,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        content: StatefulBuilder(
+          builder: (context, setDialogState) => SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(
+              'Circle notifications',
+              style: GoogleFonts.manrope(color: AppTheme.textPrimary),
+            ),
+            subtitle: Text(
+              'Receive updates from this circle',
+              style: GoogleFonts.manrope(color: AppTheme.textMuted, fontSize: 12),
+            ),
+            value: _notificationsEnabled,
+            activeColor: AppTheme.primaryGreen,
+            onChanged: (value) {
+              setDialogState(() => _notificationsEnabled = value);
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, _notificationsEnabled),
+            child: Text(
+              'Done',
+              style: GoogleFonts.manrope(
+                color: AppTheme.primaryGreen,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (enabled != null && mounted) {
+      setState(() => _notificationsEnabled = enabled);
+    }
+  }
+
+  Future<void> _confirmLeaveCircle(Circle circle) async {
+    final leave = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppTheme.surfaceDark,
+        title: Text(
+          'Leave ${circle.name}?',
+          style: GoogleFonts.manrope(
+            color: AppTheme.textPrimary,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        content: Text(
+          'You will no longer have access to this circle or its shared memories.',
+          style: GoogleFonts.manrope(color: AppTheme.textMuted, fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text('Cancel', style: GoogleFonts.manrope(color: AppTheme.textMuted)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(
+              'Leave Circle',
+              style: GoogleFonts.manrope(
+                color: AppTheme.error,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (leave != true || !mounted) return;
+
+    final userId = CirclesRepository.currentUserId;
+    if (userId == null) return;
+
+    try {
+      await SupabaseService.client
+          .from('circle_members')
+          .delete()
+          .eq('circle_id', circle.id)
+          .eq('user_id', userId);
+      if (!mounted) return;
+      context.pop();
+    } catch (e, st) {
+      debugPrint('CircleDetailScreen: leave circle failed: $e\\n$st');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            "Couldn't leave this circle. Please try again.",
+            style: GoogleFonts.manrope(color: Colors.white),
+          ),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+    }
+  }
+
+  void _openMembersSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _MembersSheet(members: _members),
+    );
   }
 
   void _openInviteSheet(Circle circle) {
@@ -210,6 +337,7 @@ class _CircleDetailScreenState extends State<CircleDetailScreen> {
                 topPadding: topPadding,
                 onBack: () => context.pop(),
                 onMenu: _openMenu,
+                onInvite: () => _openInviteSheet(circle),
               ),
             ),
             SliverToBoxAdapter(
@@ -217,9 +345,19 @@ class _CircleDetailScreenState extends State<CircleDetailScreen> {
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
                 child: Row(
                   children: [
-                    _Stat(value: '${_members.length}', label: 'Members'),
-                    const SizedBox(width: 28),
-                    _Stat(value: '${_memories.length}', label: 'Memories'),
+                    Expanded(
+                      child: _Stat(value: '${_memories.length}', label: 'Memories'),
+                    ),
+                    Expanded(
+                      child: _Stat(value: '${_members.length}', label: 'Members'),
+                    ),
+                    Expanded(
+                      child: _Stat(
+                        value: '• Active',
+                        label: 'recently',
+                        valueColor: AppTheme.primaryGreen,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -273,13 +411,29 @@ class _CircleDetailScreenState extends State<CircleDetailScreen> {
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Text(
-                  'People in this Circle',
-                  style: GoogleFonts.manrope(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    color: AppTheme.textPrimary,
-                  ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'People in this Circle',
+                      style: GoogleFonts.manrope(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: _openMembersSheet,
+                      child: Text(
+                        'See all',
+                        style: GoogleFonts.manrope(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.primaryGreen,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -363,6 +517,7 @@ class _Header extends StatelessWidget {
   final double topPadding;
   final VoidCallback onBack;
   final VoidCallback onMenu;
+  final VoidCallback onInvite;
 
   const _Header({
     required this.circle,
@@ -370,6 +525,7 @@ class _Header extends StatelessWidget {
     required this.topPadding,
     required this.onBack,
     required this.onMenu,
+    required this.onInvite,
   });
 
   @override
@@ -443,8 +599,34 @@ class _Header extends StatelessWidget {
                     ],
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
                 _MemberCount(count: members.length),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: onInvite,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryGreen,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.person_add_alt_1_rounded, size: 14, color: Colors.black),
+                        const SizedBox(width: 5),
+                        Text(
+                          'Invite',
+                          style: GoogleFonts.manrope(
+                            color: Colors.black,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -518,7 +700,8 @@ class _MemberCount extends StatelessWidget {
 class _Stat extends StatelessWidget {
   final String value;
   final String label;
-  const _Stat({required this.value, required this.label});
+  final Color? valueColor;
+  const _Stat({required this.value, required this.label, this.valueColor});
 
   @override
   Widget build(BuildContext context) {
@@ -530,7 +713,7 @@ class _Stat extends StatelessWidget {
           style: GoogleFonts.manrope(
             fontSize: 20,
             fontWeight: FontWeight.w800,
-            color: AppTheme.textPrimary,
+            color: valueColor ?? AppTheme.textPrimary,
           ),
         ),
         Text(
@@ -692,6 +875,75 @@ class _MembersRow extends StatelessWidget {
       );
 }
 
+class _MembersSheet extends StatelessWidget {
+  final List<Profile> members;
+
+  const _MembersSheet({required this.members});
+
+  @override
+  Widget build(BuildContext context) {
+    return _SheetContainer(
+      bottomPadding: MediaQuery.of(context).padding.bottom,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'People in this Circle',
+            style: GoogleFonts.manrope(
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              color: AppTheme.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 16),
+          ...members.map(
+            (member) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                children: [
+                  ClipOval(
+                    child: member.avatarUrl?.isNotEmpty == true
+                        ? CachedNetworkImage(
+                            imageUrl: member.avatarUrl!,
+                            width: 42,
+                            height: 42,
+                            fit: BoxFit.cover,
+                            errorWidget: (_, __, ___) => _avatarPlaceholder(),
+                          )
+                        : _avatarPlaceholder(),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      member.displayName,
+                      style: GoogleFonts.manrope(
+                        color: AppTheme.textPrimary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _avatarPlaceholder() => Container(
+        width: 42,
+        height: 42,
+        color: AppTheme.surfaceVariantDark,
+        child: const Icon(
+          Icons.person_rounded,
+          size: 22,
+          color: AppTheme.textDisabled,
+        ),
+      );
+}
+
 class _CircleMenuSheet extends StatelessWidget {
   final String circleName;
   const _CircleMenuSheet({required this.circleName});
@@ -719,16 +971,28 @@ class _CircleMenuSheet extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           _MenuOption(
-            icon: Icons.person_add_rounded,
-            label: 'Invite',
-            color: AppTheme.primaryGreen,
-            onTap: () => Navigator.pop(context, 'invite'),
-          ),
-          _MenuOption(
             icon: Icons.edit_rounded,
             label: 'Edit Circle',
             color: AppTheme.textPrimary,
             onTap: () => Navigator.pop(context, 'edit'),
+          ),
+          _MenuOption(
+            icon: Icons.person_add_rounded,
+            label: 'Invite People',
+            color: AppTheme.primaryGreen,
+            onTap: () => Navigator.pop(context, 'invite'),
+          ),
+          _MenuOption(
+            icon: Icons.notifications_rounded,
+            label: 'Notifications',
+            color: AppTheme.textPrimary,
+            onTap: () => Navigator.pop(context, 'notifications'),
+          ),
+          _MenuOption(
+            icon: Icons.logout_rounded,
+            label: 'Leave Circle',
+            color: AppTheme.error,
+            onTap: () => Navigator.pop(context, 'leave'),
           ),
         ],
       ),
