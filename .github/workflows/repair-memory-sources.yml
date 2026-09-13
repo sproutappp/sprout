@@ -1,0 +1,102 @@
+name: Repair memory sources
+
+on:
+  workflow_dispatch:
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Apply narrowly scoped repairs
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+
+          # 1) Home memory cards: preserve the UI, but derive the label from
+          # the actual memory visibility instead of hardcoding Circle.
+          p = Path('lib/presentation/home_screen/widgets/home_recent_memories_widget.dart')
+          s = p.read_text()
+          s = s.replace("circle: m.circleName ?? 'Circle',", "circle: m.isPublic ? 'Public' : (m.circleName ?? 'Circle'),")
+          s = s.replace("privacy: MemoryPrivacy.circle,", "privacy: m.isPublic ? MemoryPrivacy.public : MemoryPrivacy.circle,")
+          p.write_text(s)
+
+          # 2) Home Discover teaser: use the actual public feed rather than
+          # circle memories. Keep the existing visual card and dimensions.
+          p = Path('lib/presentation/home_screen/widgets/home_discover_teaser_widget.dart')
+          s = p.read_text()
+          s = s.replace("import '../../../services/circles_repository.dart';\n", "")
+          s = s.replace("import '../../../services/memories_repository.dart';\n", "import '../../../services/memories_repository.dart';\n")
+          start = s.index('  Future<void> _load() async {')
+          end = s.index('\n  @override\n  Widget build', start)
+          replacement = '''  Future<void> _load() async {
+    try {
+      final memories = await MemoriesRepository.fetchPublicMemories();
+      final experiences = [
+        for (final m in memories.take(2))
+          _ExperiencePreview(
+            circleId: m.id,
+            circleName: m.caption?.isNotEmpty == true ? m.caption! : 'Public Memory',
+            coverImageUrl: m.imageUrl,
+            memoryCount: 1,
+          ),
+      ];
+
+      if (!mounted) return;
+      setState(() {
+        _experiences = experiences;
+        _isLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+    }
+  }
+'''
+          s = s[:start] + replacement + s[end:]
+          p.write_text(s)
+
+          # 3) Profile's own memories: avoid the relationship-expanded query
+          # that can fail under RLS. Reuse the already-safe own-memory query.
+          p = Path('lib/services/memories_repository.dart')
+          s = p.read_text()
+          old = """  static Future<List<Memory>> fetchByUploader(String uploaderId) async {
+    final rows = await _client.from('memories').select('*, profiles(id, full_name, avatar_url), circles(id, name)').eq('uploaded_by', uploaderId).order('created_at', ascending: false);
+    return _toMemoriesWithSignedUrls(rows as List);
+  }
+"""
+          new = """  static Future<List<Memory>> fetchByUploader(String uploaderId) async {
+    // The profile screen requests the signed-in user's own memories. Use the
+    // RLS-safe base-table query so public and circle memories both load.
+    if (_client.auth.currentUser?.id == uploaderId) {
+      return fetchAllForUser();
+    }
+
+    final rows = await _client
+        .from('memories')
+        .select('id, circle_id, uploaded_by, image_url, caption, location, created_at, is_public')
+        .eq('uploaded_by', uploaderId)
+        .order('created_at', ascending: false);
+    return _toMemoriesWithSignedUrls(rows as List);
+  }
+"""
+          if old not in s:
+              raise SystemExit('fetchByUploader target not found')
+          s = s.replace(old, new)
+          p.write_text(s)
+          PY
+
+      - name: Commit changes and remove one-time workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/presentation/home_screen/widgets/home_recent_memories_widget.dart lib/presentation/home_screen/widgets/home_discover_teaser_widget.dart lib/services/memories_repository.dart
+          git commit -m "Repair public and circle memory sources"
+          git rm .github/workflows/repair-memory-sources.yml
+          git commit -m "Remove one-time memory repair workflow"
+          git push
