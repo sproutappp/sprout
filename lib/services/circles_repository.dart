@@ -103,10 +103,20 @@ class CirclesRepository {
 
   static Future<({Circle circle, List<Profile> members})> fetchCircleDetail(String circleId) async {
     final circleRow = await _client.from('circles').select().eq('id', circleId).single();
-    final memberRows = await _client.from('circle_members').select('profiles(id, full_name, avatar_url)').eq('circle_id', circleId);
-    final members = (memberRows as List).map((row) => Profile.fromMap(Map<String, dynamic>.from(row['profiles'] as Map))).toList();
+    final memberRows = await _client.from('circle_members').select('user_id, profiles(id, full_name, avatar_url)').eq('circle_id', circleId);
+    final members = <Profile>[];
+    for (final row in (memberRows as List)) {
+      final rawProfile = row['profiles'];
+      if (rawProfile is Map) {
+        try {
+          members.add(Profile.fromMap(Map<String, dynamic>.from(rawProfile)));
+        } catch (_) {
+          // Keep the circle page usable even if one profile row is incomplete.
+        }
+      }
+    }
     circleRow['member_count'] = members.length;
-    return (circle: Circle.fromMap(circleRow), members: members);
+    return (circle: Circle.fromMap(Map<String, dynamic>.from(circleRow)), members: members);
   }
 
   static Future<List<Circle>> fetchSharedCircles(String otherUserId) async {
