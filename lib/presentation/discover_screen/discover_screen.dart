@@ -346,32 +346,6 @@ class _PublicMemoryCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                Positioned(
-                  top: 12,
-                  right: 12,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: AppTheme.backgroundDark.withAlpha(210),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.public, size: 11, color: AppTheme.cyanAccent),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Public',
-                          style: GoogleFonts.manrope(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: AppTheme.cyanAccent,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
                 if (memory.location?.trim().isNotEmpty == true)
                   Positioned(
                     left: 12,
