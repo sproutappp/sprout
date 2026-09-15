@@ -41,7 +41,10 @@ class _CircleDetailScreenState extends State<CircleDetailScreen> {
 
   Future<void> _load() async {
     final circleId = widget.circleId;
-    if (circleId == null) {
+
+    if (circleId == null || circleId.trim().isEmpty) {
+      if (!mounted) return;
+
       setState(() {
         _error = 'No circle selected.';
         _isLoading = false;
@@ -49,44 +52,61 @@ class _CircleDetailScreenState extends State<CircleDetailScreen> {
       return;
     }
 
+    if (!mounted) return;
+
     setState(() {
       _isLoading = true;
       _error = null;
     });
 
     try {
+      // Load circle information independently from memories.
       final detail = await CirclesRepository.fetchCircleDetail(circleId);
-      final memories = await MemoriesRepository.fetchForCircle(circleId);
 
       final items = <MemoryItem>[];
-      for (final memory in memories) {
-        items.add(
-          MemoryItem(
-            id: memory.id,
-            title: memory.caption?.isNotEmpty == true
-                ? memory.caption!
-                : 'A shared memory',
-            date: _formatDate(memory.createdAt),
-            imageUrl: memory.imageUrl,
-            semanticLabel: 'Shared memory photo',
-            circle: detail.circle.name,
-            circleColor: AppTheme.primaryGreen,
-            privacy: MemoryPrivacy.circle,
-            type: MemoryType.photo,
-          ),
+
+      // A memory-query failure must not break the entire Circle Detail page.
+      try {
+        final memories = await MemoriesRepository.fetchForCircle(circleId);
+
+        for (final memory in memories) {
+          items.add(
+            MemoryItem(
+              id: memory.id,
+              title: memory.caption?.isNotEmpty == true
+                  ? memory.caption!
+                  : 'A shared memory',
+              date: _formatDate(memory.createdAt),
+              imageUrl: memory.imageUrl,
+              semanticLabel: 'Shared memory photo',
+              circle: detail.circle.name,
+              circleColor: AppTheme.primaryGreen,
+              privacy: MemoryPrivacy.circle,
+              type: MemoryType.photo,
+            ),
+          );
+        }
+      } catch (memoryError, memoryStackTrace) {
+        debugPrint(
+          'CircleDetailScreen: memories failed: '
+          '$memoryError\\n$memoryStackTrace',
         );
       }
 
       if (!mounted) return;
+
       setState(() {
         _circle = detail.circle;
         _members = detail.members;
         _memories = items;
         _isLoading = false;
+        _error = null;
       });
     } catch (e, st) {
-      debugPrint('CircleDetailScreen: load failed: $e\n$st');
+      debugPrint('CircleDetailScreen: circle load failed: $e\\n$st');
+
       if (!mounted) return;
+
       setState(() {
         _error = "Couldn't load this circle. Pull to refresh to try again.";
         _isLoading = false;

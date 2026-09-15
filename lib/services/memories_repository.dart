@@ -11,9 +11,36 @@ class MemoriesRepository {
   static const _signedUrlExpirySeconds = 60 * 60 * 24 * 7;
 
   static Future<List<Memory>> fetchForCircle(String circleId) async {
-    final rows = await _client.from('memory_circles').select('memories(*, profiles(id, full_name, avatar_url))').eq('circle_id', circleId);
-    final memoryMaps = (rows as List).map((row) => Map<String, dynamic>.from(row['memories'] as Map)).toList();
-    memoryMaps.sort((a, b) => (b['created_at'] as String).compareTo(a['created_at'] as String));
+    final rows = await _client
+        .from('memory_circles')
+        .select('memories(*)')
+        .eq('circle_id', circleId);
+
+    final memoryMaps = <Map<String, dynamic>>[];
+
+    for (final row in (rows as List)) {
+      if (row is! Map) continue;
+
+      final rawMemory = row['memories'];
+
+      if (rawMemory is Map) {
+        memoryMaps.add(
+          Map<String, dynamic>.from(rawMemory),
+        );
+      }
+    }
+
+    memoryMaps.sort((a, b) {
+      final aCreatedAt = a['created_at'];
+      final bCreatedAt = b['created_at'];
+
+      if (aCreatedAt is! String || bCreatedAt is! String) {
+        return 0;
+      }
+
+      return bCreatedAt.compareTo(aCreatedAt);
+    });
+
     return _toMemoriesWithSignedUrls(memoryMaps);
   }
 
