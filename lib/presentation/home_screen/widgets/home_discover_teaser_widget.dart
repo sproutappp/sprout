@@ -47,7 +47,7 @@ class _HomeDiscoverTeaserWidgetState extends State<HomeDiscoverTeaserWidget> {
         for (final m in memories.take(2))
           _ExperiencePreview(
             memoryId: m.id,
-            circleName: 'Public',
+            circleName: 'Discover',
             coverImageUrl: m.imageUrl,
             memoryCount: 1,
           ),
