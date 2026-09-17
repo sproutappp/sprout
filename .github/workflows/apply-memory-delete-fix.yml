@@ -1,0 +1,137 @@
+name: Apply memory deletion fix
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch-memory-delete:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+
+      - name: Patch memory deletion flow
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          detail = Path('lib/presentation/memory_detail_screen/memory_detail_screen.dart')
+          text = detail.read_text()
+
+          old_import = "import '../../services/comments_repository.dart';\n"
+          new_import = old_import + "import '../../services/memories_repository.dart';\n"
+          if "import '../../services/memories_repository.dart';" not in text:
+              if old_import not in text:
+                  raise SystemExit('Expected detail import marker not found')
+              text = text.replace(old_import, new_import, 1)
+
+          old_delete = '''  void _showDeleteConfirm(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (_) => _DeleteConfirmDialog(
+        onConfirm: () {
+          Navigator.pop(context);
+          Navigator.pop(context);
+        },
+      ),
+    );
+  }
+'''
+          new_delete = '''  void _showDeleteConfirm(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (_) => _DeleteConfirmDialog(
+        onConfirm: () {
+          Navigator.pop(context);
+          _deleteMemory();
+        },
+      ),
+    );
+  }
+
+  Future<void> _deleteMemory() async {
+    try {
+      await MemoriesRepository.deleteMemory(widget.memory.id);
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } catch (e, st) {
+      debugPrint('MemoryDetailScreen: delete failed: $e\\n$st');
+      if (!mounted) return;
+      _showSnack("Couldn't delete this memory. Please try again.");
+    }
+  }
+'''
+          if old_delete in text:
+              text = text.replace(old_delete, new_delete, 1)
+          elif '_deleteMemory()' not in text:
+              raise SystemExit('Expected detail delete handler marker not found')
+          detail.write_text(text)
+
+          discover = Path('lib/presentation/discover_screen/discover_screen.dart')
+          text = discover.read_text()
+          old_open = '''  void _openMemory(Memory memory) {
+    final item = MemoryItem(
+'''
+          new_open = '''  Future<void> _openMemory(Memory memory) async {
+    final item = MemoryItem(
+'''
+          if old_open not in text:
+              raise SystemExit('Expected Discover open handler marker not found')
+          text = text.replace(old_open, new_open, 1)
+          old_push = '''    context.push(AppRoutes.memoryDetailScreen, extra: item);
+  }
+'''
+          new_push = '''    final deleted = await context.push<bool>(
+      AppRoutes.memoryDetailScreen,
+      extra: item,
+    );
+    if (deleted == true && mounted) {
+      await _load();
+    }
+  }
+'''
+          if old_push not in text:
+              raise SystemExit('Expected Discover push marker not found')
+          text = text.replace(old_push, new_push, 1)
+          discover.write_text(text)
+
+          circle = Path('lib/presentation/circle_detail_screen/circle_detail_screen.dart')
+          text = circle.read_text()
+          old_circle = '''  void _openMemory(MemoryItem memory) {
+    context.push(AppRoutes.memoryDetailScreen, extra: memory);
+  }
+'''
+          new_circle = '''  Future<void> _openMemory(MemoryItem memory) async {
+    final deleted = await context.push<bool>(
+      AppRoutes.memoryDetailScreen,
+      extra: memory,
+    );
+    if (deleted == true && mounted) {
+      await _load();
+    }
+  }
+'''
+          if old_circle not in text:
+              raise SystemExit('Expected Circle open handler marker not found')
+          text = text.replace(old_circle, new_circle, 1)
+          circle.write_text(text)
+          PY
+
+      - name: Verify patched files
+        run: |
+          grep -q "MemoriesRepository.deleteMemory(widget.memory.id)" lib/presentation/memory_detail_screen/memory_detail_screen.dart
+          grep -q "final deleted = await context.push<bool>" lib/presentation/discover_screen/discover_screen.dart
+          grep -q "final deleted = await context.push<bool>" lib/presentation/circle_detail_screen/circle_detail_screen.dart
+
+      - name: Commit and push source changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/presentation/memory_detail_screen/memory_detail_screen.dart lib/presentation/discover_screen/discover_screen.dart lib/presentation/circle_detail_screen/circle_detail_screen.dart .github/workflows/apply-memory-delete-fix.yml
+          git rm .github/workflows/apply-memory-delete-fix.yml
+          git commit -m "Fix memory deletion for public and circle memories"
+          git push origin HEAD:main
