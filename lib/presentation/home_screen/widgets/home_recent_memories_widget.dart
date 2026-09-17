@@ -286,8 +286,10 @@ class _MemoryCardWidgetState extends State<_MemoryCardWidget> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        CircleTagWidget(name: m.circle, color: m.circleColor),
-                        const SizedBox(height: 6),
+                        if (m.privacy != MemoryPrivacy.public) ...[
+                          CircleTagWidget(name: m.circle, color: m.circleColor),
+                          const SizedBox(height: 6),
+                        ],
                         Text(
                           m.title,
                           maxLines: 2,
