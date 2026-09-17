@@ -10,6 +10,7 @@ import '../../routes/app_routes.dart';
 import '../../models/comment.dart';
 import '../../services/reactions_repository.dart';
 import '../../services/comments_repository.dart';
+import '../../services/memories_repository.dart';
 
 // ── Sample detail data ────────────────────────────────────────────────────────
 
@@ -187,10 +188,22 @@ class _MemoryDetailScreenState extends State<MemoryDetailScreen>
       builder: (_) => _DeleteConfirmDialog(
         onConfirm: () {
           Navigator.pop(context);
-          Navigator.pop(context);
+          _deleteMemory();
         },
       ),
     );
+  }
+
+  Future<void> _deleteMemory() async {
+    try {
+      await MemoriesRepository.deleteMemory(widget.memory.id);
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } catch (e, st) {
+      debugPrint('MemoryDetailScreen: delete failed: $e\n$st');
+      if (!mounted) return;
+      _showSnack("Couldn't delete this memory. Please try again.");
+    }
   }
 
   void _showSnack(String msg) {
