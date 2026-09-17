@@ -7,17 +7,16 @@ import '../../../routes/app_routes.dart';
 import '../../../services/memories_repository.dart';
 
 /// A small preview of public memories, linking into the full Discover screen.
+///
+/// Public memories intentionally have no circle-name/tag/count embossed on
+/// the card. Circle names are reserved for private circle memories.
 class _ExperiencePreview {
   final String memoryId;
-  final String circleName;
   final String coverImageUrl;
-  final int memoryCount;
 
   const _ExperiencePreview({
     required this.memoryId,
-    required this.circleName,
     required this.coverImageUrl,
-    required this.memoryCount,
   });
 }
 
@@ -47,9 +46,7 @@ class _HomeDiscoverTeaserWidgetState extends State<HomeDiscoverTeaserWidget> {
         for (final m in memories.take(2))
           _ExperiencePreview(
             memoryId: m.id,
-            circleName: 'Discover',
             coverImageUrl: m.imageUrl,
-            memoryCount: 1,
           ),
       ];
 
@@ -190,46 +187,6 @@ class _ExperiencePreviewCardState extends State<_ExperiencePreviewCard> {
                       color: AppTheme.textMuted,
                       size: 40,
                     ),
-                  ),
-                ),
-                const DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [Colors.transparent, Color(0xE60A0F0D)],
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      stops: [0.4, 1.0],
-                    ),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        e.circleName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontFamily: 'Manrope',
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${e.memoryCount} ${e.memoryCount == 1 ? 'memory' : 'memories'}',
-                        style: TextStyle(
-                          fontFamily: 'Manrope',
-                          fontSize: 12,
-                          color: Colors.white.withAlpha(179),
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
                   ),
                 ),
               ],
