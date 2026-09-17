@@ -280,8 +280,14 @@ class _CircleDetailScreenState extends State<CircleDetailScreen> {
     );
   }
 
-  void _openMemory(MemoryItem memory) {
-    context.push(AppRoutes.memoryDetailScreen, extra: memory);
+  Future<void> _openMemory(MemoryItem memory) async {
+    final deleted = await context.push<bool>(
+      AppRoutes.memoryDetailScreen,
+      extra: memory,
+    );
+    if (deleted == true && mounted) {
+      await _load();
+    }
   }
 
   @override
