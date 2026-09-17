@@ -66,7 +66,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     }
   }
 
-  void _openMemory(Memory memory) {
+  Future<void> _openMemory(Memory memory) async {
     final item = MemoryItem(
       id: memory.id,
       title: memory.caption?.isNotEmpty == true
@@ -81,7 +81,13 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       privacy: MemoryPrivacy.public,
       type: MemoryType.photo,
     );
-    context.push(AppRoutes.memoryDetailScreen, extra: item);
+    final deleted = await context.push<bool>(
+      AppRoutes.memoryDetailScreen,
+      extra: item,
+    );
+    if (deleted == true && mounted) {
+      await _load();
+    }
   }
 
   @override
