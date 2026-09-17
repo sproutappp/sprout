@@ -163,6 +163,41 @@ class MemoriesRepository {
     return _toMemoriesWithSignedUrls(rows as List);
   }
 
+  /// Deletes a memory owned by the current user.
+  ///
+  /// The database row is protected by the owner-only DELETE RLS policy.
+  /// The original storage path is read before deleting the row because the
+  /// normal Memory model contains a signed URL rather than the storage path.
+  /// Storage cleanup is attempted first; the database delete remains the
+  /// authoritative operation and cascades memory_circles/reactions/comments.
+  static Future<void> deleteMemory(String memoryId) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) throw StateError('Must be signed in to delete a memory');
+
+    final row = await _client
+        .from('memories')
+        .select('id, image_url, uploaded_by')
+        .eq('id', memoryId)
+        .eq('uploaded_by', userId)
+        .maybeSingle();
+
+    if (row == null) {
+      throw StateError('Memory not found or you do not own it');
+    }
+
+    final imagePath = row['image_url'] as String?;
+    if (imagePath != null && imagePath.isNotEmpty) {
+      try {
+        await _client.storage.from(_bucket).remove([imagePath]);
+      } catch (_) {
+        // A stale/missing storage object must not prevent the memory row
+        // from being removed. The row is the source of truth for visibility.
+      }
+    }
+
+    await _client.from('memories').delete().eq('id', memoryId).eq('uploaded_by', userId);
+  }
+
   static final _rng = Random.secure();
   static String _generateUuidV4() {
     final bytes = List<int>.generate(16, (_) => _rng.nextInt(256));
