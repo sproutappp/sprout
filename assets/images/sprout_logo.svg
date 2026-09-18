@@ -1,6 +1,31 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1024" height="1024" viewBox="0 0 1024 1024">
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" fill="none">
   <title>Sprout App Logo</title>
-  <desc>Sprout camera and memory logo.</desc>
-  <image width="1024" height="1024" preserveAspectRatio="xMidYMid meet" href="data:image/png;base64,PLACEHOLDER" xlink:href="data:image/png;base64,PLACEHOLDER"/>
+  <desc>A camera with a small stack of photographs, representing capturing and preserving memories.</desc>
+  <defs>
+    <linearGradient id="bg" x1="150" y1="80" x2="870" y2="940" gradientUnits="userSpaceOnUse"><stop stop-color="#FFF8D9"/><stop offset="0.5" stop-color="#F7F0D7"/><stop offset="1" stop-color="#EAF7D9"/></linearGradient>
+    <linearGradient id="body" x1="270" y1="350" x2="740" y2="820" gradientUnits="userSpaceOnUse"><stop stop-color="#FFFDF5"/><stop offset="0.42" stop-color="#DDE8D6"/><stop offset="1" stop-color="#087F83"/></linearGradient>
+    <linearGradient id="lens" x1="410" y1="500" x2="650" y2="760" gradientUnits="userSpaceOnUse"><stop stop-color="#153A35"/><stop offset="0.35" stop-color="#005D62"/><stop offset="0.7" stop-color="#0A9C8C"/><stop offset="1" stop-color="#173F42"/></linearGradient>
+    <linearGradient id="photo" x1="690" y1="270" x2="880" y2="650" gradientUnits="userSpaceOnUse"><stop stop-color="#FFE8A5"/><stop offset="0.55" stop-color="#F6B45A"/><stop offset="1" stop-color="#31535B"/></linearGradient>
+    <filter id="shadow" x="120" y="210" width="800" height="690" filterUnits="userSpaceOnUse"><feDropShadow dx="0" dy="28" stdDeviation="28" flood-opacity="0.2"/></filter>
+    <filter id="soft" x="0" y="0" width="1024" height="1024" filterUnits="userSpaceOnUse"><feGaussianBlur stdDeviation="45"/></filter>
+  </defs>
+  <rect x="42" y="42" width="940" height="940" rx="210" fill="url(#bg)"/>
+  <circle cx="180" cy="250" r="150" fill="#B8F1A0" opacity="0.35" filter="url(#soft)"/>
+  <circle cx="825" cy="790" r="170" fill="#A7F0D0" opacity="0.32" filter="url(#soft)"/>
+  <circle cx="620" cy="190" r="140" fill="#FFE7A0" opacity="0.32" filter="url(#soft)"/>
+  <g transform="translate(585 220) rotate(9 150 220)" filter="url(#shadow)"><rect width="300" height="430" rx="22" fill="#F9F8F1" stroke="#FFFFFF" stroke-width="5"/><rect x="27" y="28" width="246" height="310" rx="10" fill="#477B71"/></g>
+  <g transform="translate(625 205) rotate(17 150 220)" filter="url(#shadow)"><rect width="300" height="430" rx="22" fill="#FBFAF4" stroke="#FFFFFF" stroke-width="5"/><rect x="28" y="30" width="244" height="312" rx="10" fill="url(#photo)"/><circle cx="220" cy="100" r="34" fill="#FFF8D0" opacity="0.95"/><path d="M28 295L92 218L145 260L198 190L272 285V342H28Z" fill="#455B55" opacity="0.92"/></g>
+  <g filter="url(#shadow)">
+    <path d="M250 360C250 320 282 288 322 288H414L446 250H565L596 288H706C746 288 778 320 778 360V704C778 744 746 776 706 776H322C282 776 250 744 250 704V360Z" fill="url(#body)" stroke="#FFFFFF" stroke-width="7"/>
+    <rect x="392" y="245" width="118" height="45" rx="16" fill="#202A2A"/>
+    <circle cx="320" cy="365" r="31" fill="#263331" stroke="#D8D8C8" stroke-width="5"/>
+    <circle cx="540" cy="555" r="190" fill="#F8F4E9" stroke="#FFFFFF" stroke-width="7"/>
+    <circle cx="540" cy="555" r="162" fill="#142A2A"/>
+    <circle cx="540" cy="555" r="143" fill="url(#lens)" stroke="#071E20" stroke-width="8"/>
+    <circle cx="540" cy="555" r="108" fill="#083F45" opacity="0.72" stroke="#18B7A9" stroke-width="5"/>
+    <circle cx="540" cy="555" r="74" fill="#06373F" opacity="0.8"/>
+    <circle cx="604" cy="493" r="35" fill="#FFF7A4" opacity="0.9"/>
+    <circle cx="577" cy="518" r="14" fill="#DFFFF0" opacity="0.85"/>
+  </g>
 </svg>
