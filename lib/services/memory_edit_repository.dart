@@ -66,6 +66,17 @@ class MemoryEditRepository {
       throw StateError('You can only add your own memory to a circle.');
     }
 
+    // A circle memory is private by definition. Adding a public memory to a
+    // circle therefore changes its audience from Public to Private.
+    await _client
+        .from('memories')
+        .update({
+          'is_public': false,
+          'circle_id': circleId,
+        })
+        .eq('id', memoryId)
+        .eq('uploaded_by', userId);
+
     await _client.from('memory_circles').upsert({
       'memory_id': memoryId,
       'circle_id': circleId,
