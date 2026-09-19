@@ -1,5 +1,51 @@
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <title>Sprout app icon</title>
-  <desc>Sprout camera and photographs app icon with a dark green rounded border and sunlit green background.</desc>
-  <image x="0" y="0" width="1024" height="1024" preserveAspectRatio="xMidYMid slice" href="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAIBAQIBAQICAgICAgICAwUDAwMDAwYEBAMFBwYHBwcGBwcI..." />
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" fill="none">
+  <title>Sprout App Logo</title>
+  <desc>Final Sprout app icon: a camera and photographs inside a deep green rounded frame with a warm sunlit green background.</desc>
+  <defs>
+    <linearGradient id="frame" x1="120" y1="70" x2="900" y2="950" gradientUnits="userSpaceOnUse"><stop stop-color="#0A5A3E"/><stop offset="0.55" stop-color="#064A35"/><stop offset="1" stop-color="#022F25"/></linearGradient>
+    <linearGradient id="bg" x1="150" y1="100" x2="860" y2="930" gradientUnits="userSpaceOnUse"><stop stop-color="#FFF7B8"/><stop offset="0.25" stop-color="#DDF3A8"/><stop offset="0.55" stop-color="#B8E99B"/><stop offset="0.82" stop-color="#D9F38D"/><stop offset="1" stop-color="#A6D86E"/></linearGradient>
+    <linearGradient id="body" x1="285" y1="350" x2="735" y2="790" gradientUnits="userSpaceOnUse"><stop stop-color="#FFFDF4"/><stop offset="0.38" stop-color="#E6E9D1"/><stop offset="0.7" stop-color="#78A98C"/><stop offset="1" stop-color="#087A73"/></linearGradient>
+    <linearGradient id="lens" x1="410" y1="475" x2="670" y2="750" gradientUnits="userSpaceOnUse"><stop stop-color="#071E22"/><stop offset="0.28" stop-color="#004F58"/><stop offset="0.58" stop-color="#0C9F93"/><stop offset="0.78" stop-color="#075A55"/><stop offset="1" stop-color="#071B21"/></linearGradient>
+    <linearGradient id="photo" x1="690" y1="270" x2="900" y2="650" gradientUnits="userSpaceOnUse"><stop stop-color="#FFD58A"/><stop offset="0.48" stop-color="#F6A95B"/><stop offset="0.72" stop-color="#50625B"/><stop offset="1" stop-color="#263C3B"/></linearGradient>
+    <filter id="shadow" x="120" y="200" width="820" height="720" filterUnits="userSpaceOnUse"><feDropShadow dx="0" dy="24" stdDeviation="24" flood-color="#174A32" flood-opacity="0.28"/></filter>
+    <filter id="blur" x="-100" y="-100" width="1224" height="1224" filterUnits="userSpaceOnUse"><feGaussianBlur stdDeviation="42"/></filter>
+    <filter id="glow" x="-100" y="-100" width="1224" height="1224" filterUnits="userSpaceOnUse"><feGaussianBlur stdDeviation="20"/></filter>
+  </defs>
+
+  <rect x="28" y="28" width="968" height="968" rx="224" fill="url(#frame)"/>
+  <rect x="74" y="74" width="876" height="876" rx="184" fill="url(#bg)"/>
+
+  <circle cx="170" cy="245" r="150" fill="#B7EF83" opacity="0.5" filter="url(#blur)"/>
+  <circle cx="850" cy="785" r="190" fill="#D4F36C" opacity="0.48" filter="url(#blur)"/>
+  <circle cx="650" cy="185" r="155" fill="#FFF2A2" opacity="0.52" filter="url(#blur)"/>
+  <circle cx="120" cy="820" r="115" fill="#9DD76D" opacity="0.38" filter="url(#blur)"/>
+  <circle cx="210" cy="155" r="54" fill="#FFFBD2" opacity="0.58" filter="url(#glow)"/>
+  <circle cx="820" cy="220" r="38" fill="#FFF6B5" opacity="0.45" filter="url(#glow)"/>
+  <circle cx="870" cy="690" r="58" fill="#FFF8B0" opacity="0.35" filter="url(#glow)"/>
+
+  <g transform="translate(585 220) rotate(9 150 220)" filter="url(#shadow)">
+    <rect width="300" height="430" rx="22" fill="#F9F8F1" stroke="#FFFFFF" stroke-width="5"/>
+    <rect x="27" y="28" width="246" height="310" rx="10" fill="#477B71"/>
+  </g>
+  <g transform="translate(625 205) rotate(17 150 220)" filter="url(#shadow)">
+    <rect width="300" height="430" rx="22" fill="#FBFAF4" stroke="#FFFFFF" stroke-width="5"/>
+    <rect x="28" y="30" width="244" height="312" rx="10" fill="url(#photo)"/>
+    <circle cx="220" cy="100" r="34" fill="#FFF8D0" opacity="0.95"/>
+    <path d="M28 295L92 218L145 260L198 190L272 285V342H28Z" fill="#455B55" opacity="0.92"/>
+  </g>
+
+  <g filter="url(#shadow)">
+    <path d="M250 360C250 320 282 288 322 288H414L446 250H565L596 288H706C746 288 778 320 778 360V704C778 744 746 776 706 776H322C282 776 250 744 250 704V360Z" fill="url(#body)" stroke="#FFFDF3" stroke-width="7"/>
+    <rect x="392" y="245" width="118" height="45" rx="16" fill="#202A2A"/>
+    <circle cx="320" cy="365" r="31" fill="#263331" stroke="#D8D8C8" stroke-width="5"/>
+    <circle cx="540" cy="555" r="190" fill="#F8F4E9" stroke="#FFFFFF" stroke-width="7"/>
+    <circle cx="540" cy="555" r="162" fill="#142A2A"/>
+    <circle cx="540" cy="555" r="143" fill="url(#lens)" stroke="#071E20" stroke-width="8"/>
+    <circle cx="540" cy="555" r="108" fill="#083F45" opacity="0.72" stroke="#18B7A9" stroke-width="5"/>
+    <circle cx="540" cy="555" r="74" fill="#06373F" opacity="0.8"/>
+    <circle cx="604" cy="493" r="35" fill="#FFF7A4" opacity="0.9"/>
+    <circle cx="577" cy="518" r="14" fill="#DFFFF0" opacity="0.85"/>
+  </g>
+
+  <rect x="74" y="74" width="876" height="876" rx="184" stroke="#063B2D" stroke-width="6" opacity="0.55"/>
 </svg>
