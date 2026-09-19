@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../theme/app_theme.dart';
 
@@ -9,7 +10,7 @@ class AuthHeaderWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // Logo
+        // Canonical Sprout logo
         Container(
           width: 64,
           height: 64,
@@ -25,12 +26,12 @@ class AuthHeaderWidget extends StatelessWidget {
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(18),
-            child: Image.asset(
-              'assets/images/logosprout-1787939643364.png',
+            child: SvgPicture.asset(
+              'assets/images/sprout_logo.svg',
               width: 64,
               height: 64,
               fit: BoxFit.contain,
-              semanticLabel: 'Sprout logo',
+              semanticsLabel: 'Sprout camera and photographs logo',
             ),
           ),
         ),
