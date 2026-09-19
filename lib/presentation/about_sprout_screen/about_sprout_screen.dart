@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 
@@ -40,20 +41,15 @@ class AboutSproutScreen extends StatelessWidget {
             ),
             child: Column(
               children: [
-                Container(
-                  width: 72,
-                  height: 72,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: AppTheme.primaryGreen.withAlpha(25),
-                    border: Border.all(
-                      color: AppTheme.primaryGreen.withAlpha(90),
-                    ),
-                  ),
-                  child: const Icon(
-                    Icons.spa_rounded,
-                    color: AppTheme.primaryGreen,
-                    size: 36,
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(22),
+                  child: SvgPicture.asset(
+                    'assets/images/sprout_logo.svg',
+                    width: 96,
+                    height: 96,
+                    fit: BoxFit.contain,
+                    semanticsLabel:
+                        'Sprout camera and photographs logo representing capturing and preserving memories',
                   ),
                 ),
                 const SizedBox(height: 18),
