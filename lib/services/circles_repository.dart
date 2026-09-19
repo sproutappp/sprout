@@ -101,6 +101,35 @@ class CirclesRepository {
     }
   }
 
+  static Future<void> deleteCircle(Circle circle) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) throw StateError('Must be signed in to delete a circle');
+
+    // Delete the circle row first. The database's ON DELETE CASCADE removes
+    // its members, memories, reactions, comments, tags, and notifications.
+    await _client.from('circles').delete().eq('id', circle.id);
+
+    // Circle covers live in Storage and are not part of the SQL cascade.
+    // Remove the known cover object as a best-effort cleanup after the row
+    // is gone. Failure here must not make a successfully deleted circle
+    // appear to have failed.
+    final coverUrl = circle.coverImageUrl;
+    if (coverUrl != null && coverUrl.isNotEmpty) {
+      final marker = '/storage/v1/object/public/$_circleCoverBucket/';
+      final markerIndex = coverUrl.indexOf(marker);
+      if (markerIndex >= 0) {
+        final objectPath = coverUrl.substring(markerIndex + marker.length);
+        if (objectPath.isNotEmpty) {
+          try {
+            await _client.storage.from(_circleCoverBucket).remove([objectPath]);
+          } catch (_) {
+            // Storage cleanup is best-effort; the database deletion is final.
+          }
+        }
+      }
+    }
+  }
+
   static Future<({Circle circle, List<Profile> members})> fetchCircleDetail(String circleId) async {
     final circleRow = await _client.from('circles').select().eq('id', circleId).single();
     final memberRows = await _client.from('circle_members').select('user_id, profiles(id, full_name, avatar_url)').eq('circle_id', circleId);
@@ -110,9 +139,7 @@ class CirclesRepository {
       if (rawProfile is Map) {
         try {
           members.add(Profile.fromMap(Map<String, dynamic>.from(rawProfile)));
-        } catch (_) {
-          // Keep the circle page usable even if one profile row is incomplete.
-        }
+        } catch (_) {}
       }
     }
     circleRow['member_count'] = members.length;
