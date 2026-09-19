@@ -276,58 +276,337 @@ class _CircleEditFormState extends State<_CircleEditForm> {
   late final TextEditingController _description;
   File? _cover;
   bool _saving = false;
+
   @override
-  void initState() { super.initState(); _name = TextEditingController(text: widget.circle.name); _description = TextEditingController(text: widget.circle.description ?? ''); }
+  void initState() {
+    super.initState();
+    _name = TextEditingController(text: widget.circle.name);
+    _description = TextEditingController(text: widget.circle.description ?? '');
+  }
+
   @override
-  void dispose() { _name.dispose(); _description.dispose(); super.dispose(); }
-  Future<void> _pickCover() async { final picked = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85); if (picked == null || !mounted) return; setState(() => _cover = File(picked.path)); }
+  void dispose() {
+    _name.dispose();
+    _description.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickCover() async {
+    final picked = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85);
+    if (picked == null || !mounted) return;
+    setState(() => _cover = File(picked.path));
+  }
+
   Future<void> _save() async {
     final name = _name.text.trim();
-    if (name.isEmpty) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter a circle name.'))); return; }
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter a circle name.')));
+      return;
+    }
     setState(() => _saving = true);
-    try { await CirclesRepository.updateCircle(circleId: widget.circle.id, name: name, description: _description.text.trim().isEmpty ? null : _description.text.trim(), coverFile: _cover); if (!mounted) return; Navigator.pop(context, true); }
-    catch (_) { if (!mounted) return; setState(() => _saving = false); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Couldn't save circle — try again."))); }
+    try {
+      await CirclesRepository.updateCircle(
+        circleId: widget.circle.id,
+        name: name,
+        description: _description.text.trim().isEmpty ? null : _description.text.trim(),
+        coverFile: _cover,
+      );
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Couldn't save circle — try again.")));
+    }
   }
+
   @override
   Widget build(BuildContext context) {
-    final bottom = MediaQuery.of(context).padding.bottom; final keyboard = MediaQuery.of(context).viewInsets.bottom;
-    return _SheetContainer(bottomPadding: bottom + keyboard, child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('Edit Circle', style: GoogleFonts.manrope(fontSize: 20, fontWeight: FontWeight.w800, color: AppTheme.textPrimary)), const SizedBox(height: 4), Text('Update your circle details', style: GoogleFonts.manrope(fontSize: 13, color: AppTheme.textMuted)), const SizedBox(height: 22), const _FieldLabel('Circle name'), const SizedBox(height: 8), _FormField(controller: _name, hint: 'Circle name', icon: Icons.group_rounded), const SizedBox(height: 16), const _FieldLabel('Description (optional)'), const SizedBox(height: 8), _FormField(controller: _description, hint: "What's this circle about?", icon: Icons.notes_rounded, maxLines: 2), const SizedBox(height: 20), const _FieldLabel('Circle cover'), const SizedBox(height: 8), GestureDetector(onTap: _saving ? null : _pickCover, child: Container(height: 150, width: double.infinity, clipBehavior: Clip.antiAlias, decoration: BoxDecoration(color: AppTheme.surfaceVariantDark, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppTheme.outline, width: 0.8)), child: Stack(fit: StackFit.expand, children: [if (_cover != null) Image.file(_cover!, fit: BoxFit.cover) else if (widget.circle.coverImageUrl?.isNotEmpty == true) CachedNetworkImage(imageUrl: widget.circle.coverImageUrl!, fit: BoxFit.cover, errorWidget: (_, __, ___) => _coverPlaceholder()) else _coverPlaceholder(), Positioned(right: 10, bottom: 10, child: Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7), decoration: BoxDecoration(color: Colors.black.withAlpha(170), borderRadius: BorderRadius.circular(10)), child: Text('Change', style: GoogleFonts.manrope(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white)) ))])), const SizedBox(height: 26), SizedBox(width: double.infinity, child: ElevatedButton(onPressed: _saving ? null : _save, style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryGreen, foregroundColor: Colors.black, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), elevation: 0), child: _saving ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black)) : Text('Save', style: GoogleFonts.manrope(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.black))))]));
+    final bottom = MediaQuery.of(context).padding.bottom;
+    final keyboard = MediaQuery.of(context).viewInsets.bottom;
+
+    return _SheetContainer(
+      bottomPadding: bottom + keyboard,
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Edit Circle',
+              style: GoogleFonts.manrope(
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                color: AppTheme.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Update your circle details',
+              style: GoogleFonts.manrope(fontSize: 13, color: AppTheme.textMuted),
+            ),
+            const SizedBox(height: 22),
+            const _FieldLabel('Circle name'),
+            const SizedBox(height: 8),
+            _FormField(controller: _name, hint: 'Circle name', icon: Icons.group_rounded),
+            const SizedBox(height: 16),
+            const _FieldLabel('Description (optional)'),
+            const SizedBox(height: 8),
+            _FormField(
+              controller: _description,
+              hint: "What's this circle about?",
+              icon: Icons.notes_rounded,
+              maxLines: 2,
+            ),
+            const SizedBox(height: 20),
+            const _FieldLabel('Circle cover'),
+            const SizedBox(height: 8),
+            GestureDetector(
+              onTap: _saving ? null : _pickCover,
+              child: Container(
+                height: 150,
+                width: double.infinity,
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  color: AppTheme.surfaceVariantDark,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppTheme.outline, width: 0.8),
+                ),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (_cover != null)
+                      Image.file(_cover!, fit: BoxFit.cover)
+                    else if (widget.circle.coverImageUrl?.isNotEmpty == true)
+                      CachedNetworkImage(
+                        imageUrl: widget.circle.coverImageUrl!,
+                        fit: BoxFit.cover,
+                        errorWidget: (_, __, ___) => _coverPlaceholder(),
+                      )
+                    else
+                      _coverPlaceholder(),
+                    Positioned(
+                      right: 10,
+                      bottom: 10,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withAlpha(170),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          'Change',
+                          style: GoogleFonts.manrope(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 26),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _saving ? null : _save,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primaryGreen,
+                  foregroundColor: Colors.black,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  elevation: 0,
+                ),
+                child: _saving
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
+                      )
+                    : Text(
+                        'Save',
+                        style: GoogleFonts.manrope(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.black,
+                        ),
+                      ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
-  Widget _coverPlaceholder() => Container(color: AppTheme.surfaceVariantDark, child: const Center(child: Icon(Icons.add_photo_alternate_rounded, size: 34, color: AppTheme.textDisabled)));
+
+  Widget _coverPlaceholder() => Container(
+        color: AppTheme.surfaceVariantDark,
+        child: const Center(
+          child: Icon(Icons.add_photo_alternate_rounded, size: 34, color: AppTheme.textDisabled),
+        ),
+      );
 }
 
 class _Avatar extends StatelessWidget {
   final String? url;
   const _Avatar({required this.url});
+
   @override
-  Widget build(BuildContext context) => Container(width: 42, height: 42, decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: AppTheme.outline)), child: ClipOval(child: url?.isNotEmpty == true ? CachedNetworkImage(imageUrl: url!, fit: BoxFit.cover, errorWidget: (_, __, ___) => _placeholder()) : _placeholder()));
-  Widget _placeholder() => Container(color: AppTheme.surfaceVariantDark, child: const Icon(Icons.person_rounded, size: 20, color: AppTheme.textDisabled));
+  Widget build(BuildContext context) => Container(
+        width: 42,
+        height: 42,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: AppTheme.outline),
+        ),
+        child: ClipOval(
+          child: url?.isNotEmpty == true
+              ? CachedNetworkImage(
+                  imageUrl: url!,
+                  fit: BoxFit.cover,
+                  errorWidget: (_, __, ___) => _placeholder(),
+                )
+              : _placeholder(),
+        ),
+      );
+
+  Widget _placeholder() => Container(
+        color: AppTheme.surfaceVariantDark,
+        child: const Icon(Icons.person_rounded, size: 20, color: AppTheme.textDisabled),
+      );
 }
 
 class _SheetContainer extends StatelessWidget {
-  final double bottomPadding; final Widget child;
+  final double bottomPadding;
+  final Widget child;
   const _SheetContainer({required this.bottomPadding, required this.child});
+
   @override
-  Widget build(BuildContext context) => Container(margin: const EdgeInsets.fromLTRB(12, 0, 12, 12), padding: EdgeInsets.fromLTRB(20, 0, 20, bottomPadding + 16), decoration: BoxDecoration(color: AppTheme.surfaceDark, borderRadius: BorderRadius.circular(28), border: Border.all(color: AppTheme.outline, width: 0.5)), child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [Center(child: Container(margin: const EdgeInsets.only(top: 12, bottom: 20), width: 36, height: 4, decoration: BoxDecoration(color: AppTheme.outline, borderRadius: BorderRadius.circular(2)))), child]));
+  Widget build(BuildContext context) => Container(
+        margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        padding: EdgeInsets.fromLTRB(20, 0, 20, bottomPadding + 16),
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceDark,
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: AppTheme.outline, width: 0.5),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                margin: const EdgeInsets.only(top: 12, bottom: 20),
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppTheme.outline,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            child,
+          ],
+        ),
+      );
 }
 
 class _MenuOption extends StatelessWidget {
-  final IconData icon; final String label; final Color color; final VoidCallback onTap;
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
   const _MenuOption({required this.icon, required this.label, required this.color, required this.onTap});
+
   @override
-  Widget build(BuildContext context) => Padding(padding: const EdgeInsets.only(bottom: 8), child: GestureDetector(onTap: onTap, child: Container(width: double.infinity, padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14), decoration: BoxDecoration(color: AppTheme.surfaceVariantDark, borderRadius: BorderRadius.circular(14), border: Border.all(color: AppTheme.outline, width: 0.6)), child: Row(children: [Icon(icon, size: 20, color: color), const SizedBox(width: 12), Text(label, style: GoogleFonts.manrope(fontSize: 14, fontWeight: FontWeight.w700, color: color))]))));
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: GestureDetector(
+          onTap: onTap,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: AppTheme.surfaceVariantDark,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppTheme.outline, width: 0.6),
+            ),
+            child: Row(
+              children: [
+                Icon(icon, size: 20, color: color),
+                const SizedBox(width: 12),
+                Text(
+                  label,
+                  style: GoogleFonts.manrope(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: color,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
 }
 
 class _FieldLabel extends StatelessWidget {
-  final String text; const _FieldLabel(this.text);
+  final String text;
+  const _FieldLabel(this.text);
+
   @override
-  Widget build(BuildContext context) => Text(text, style: GoogleFonts.manrope(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textMuted, letterSpacing: 0.3));
+  Widget build(BuildContext context) => Text(
+        text,
+        style: GoogleFonts.manrope(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: AppTheme.textMuted,
+          letterSpacing: 0.3,
+        ),
+      );
 }
 
 class _FormField extends StatelessWidget {
-  final TextEditingController controller; final String hint; final IconData icon; final int maxLines;
+  final TextEditingController controller;
+  final String hint;
+  final IconData icon;
+  final int maxLines;
   const _FormField({required this.controller, required this.hint, required this.icon, this.maxLines = 1});
+
   @override
-  Widget build(BuildContext context) => Container(decoration: BoxDecoration(color: AppTheme.surfaceVariantDark, borderRadius: BorderRadius.circular(14), border: Border.all(color: AppTheme.outline, width: 0.8)), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Padding(padding: EdgeInsets.fromLTRB(14, maxLines > 1 ? 14 : 0, 0, 0), child: Icon(icon, size: 18, color: AppTheme.textDisabled)), Expanded(child: TextField(controller: controller, maxLines: maxLines, style: GoogleFonts.manrope(fontSize: 14, color: AppTheme.textPrimary), decoration: InputDecoration(hintText: hint, hintStyle: GoogleFonts.manrope(fontSize: 14, color: AppTheme.textDisabled), border: InputBorder.none, enabledBorder: InputBorder.none, focusedBorder: InputBorder.none, contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14), isDense: true)))]));
+  Widget build(BuildContext context) => Container(
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceVariantDark,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppTheme.outline, width: 0.8),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: EdgeInsets.fromLTRB(14, maxLines > 1 ? 14 : 0, 0, 0),
+              child: Icon(icon, size: 18, color: AppTheme.textDisabled),
+            ),
+            Expanded(
+              child: TextField(
+                controller: controller,
+                maxLines: maxLines,
+                style: GoogleFonts.manrope(fontSize: 14, color: AppTheme.textPrimary),
+                decoration: InputDecoration(
+                  hintText: hint,
+                  hintStyle: GoogleFonts.manrope(fontSize: 14, color: AppTheme.textDisabled),
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                  isDense: true,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
 }
