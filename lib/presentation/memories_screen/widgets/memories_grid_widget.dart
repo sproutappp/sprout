@@ -4,11 +4,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../../theme/app_theme.dart';
 
-// ── Mock Data ─────────────────────────────────────────────────────────────────
-
-
 enum MemoryPrivacy { public, circle, private }
-enum MemoryType { photo, video, story }
+
+enum MemoryType { photo }
 
 class MemoryItem {
   final String id;
@@ -34,63 +32,15 @@ class MemoryItem {
   });
 }
 
-// ── Legacy mock data ─────────────────────────────────────────────────────
-// Still used by home_recent_memories_widget, home_discover_teaser_widget,
-// and notifications_screen — those aren't wired to real Supabase data yet.
-// The real feed (MemoriesScreen) no longer uses this.
-final List<MemoryItem> allMemories = [
-  MemoryItem(
-    id: 'm01',
-    title: 'Sunrise at Mullayanagiri',
-    date: 'Aug 26, 2026',
-    imageUrl:
-        'https://images.pexels.com/photos/1261728/pexels-photo-1261728.jpeg?w=600',
-    semanticLabel:
-        'Golden sunrise breaking over misty mountain peaks with silhouetted trees',
-    circle: 'Adventure Crew',
-    circleColor: AppTheme.primaryGreen,
-    privacy: MemoryPrivacy.circle,
-    type: MemoryType.photo,
-  ),
-  MemoryItem(
-    id: 'm02',
-    title: 'Grandma\'s 80th birthday',
-    date: 'Aug 22, 2026',
-    imageUrl:
-        'https://images.pexels.com/photos/1729931/pexels-photo-1729931.jpeg?w=600',
-    semanticLabel:
-        'Elderly woman smiling warmly surrounded by family at birthday celebration',
-    circle: 'Family',
-    circleColor: const Color(0xFFFFB84D),
-    privacy: MemoryPrivacy.circle,
-    type: MemoryType.photo,
-  ),
-  MemoryItem(
-    id: 'm03',
-    title: 'Late night café talks',
-    date: 'Aug 10, 2026',
-    imageUrl:
-        'https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?w=600',
-    semanticLabel: 'Friends gathered around a table at a dimly lit café',
-    circle: 'College Friends',
-    circleColor: AppTheme.cyanAccent,
-    privacy: MemoryPrivacy.circle,
-    type: MemoryType.photo,
-  ),
-];
-
-// Group memories by month — preserving insertion order
 Map<String, List<MemoryItem>> groupMemoriesByMonth(List<MemoryItem> memories) {
-  final Map<String, List<MemoryItem>> grouped = {};
-  for (final m in memories) {
-    final parts = m.date.split(' ');
-    final key = '${parts[0]} ${parts[2]}';
-    grouped.putIfAbsent(key, () => []).add(m);
+  final grouped = <String, List<MemoryItem>>{};
+  for (final memory in memories) {
+    final parts = memory.date.split(' ');
+    final key = parts.length >= 3 ? '${parts[0]} ${parts[2]}' : memory.date;
+    grouped.putIfAbsent(key, () => []).add(memory);
   }
   return grouped;
 }
-
-// ── List Widget ───────────────────────────────────────────────────────────────
 
 class MemoriesGridWidget extends StatelessWidget {
   final List<MemoryItem> memories;
@@ -99,23 +49,20 @@ class MemoriesGridWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (memories.isEmpty) {
-      return const _EmptyMemories();
-    }
+    if (memories.isEmpty) return const _EmptyMemories();
 
     final grouped = groupMemoriesByMonth(memories);
-    final sections = grouped.entries.toList();
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: sections.map((entry) {
-        return _MonthSection(monthLabel: entry.key, memories: entry.value);
-      }).toList(),
+      children: grouped.entries
+          .map((entry) => _MonthSection(
+                monthLabel: entry.key,
+                memories: entry.value,
+              ))
+          .toList(),
     );
   }
 }
-
-// ── Month Section ─────────────────────────────────────────────────────────────
 
 class _MonthSection extends StatelessWidget {
   final String monthLabel;
@@ -128,12 +75,10 @@ class _MonthSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Month separator
         Padding(
           padding: const EdgeInsets.only(bottom: 14),
           child: Row(
             children: [
-              // Accent dot
               Container(
                 width: 6,
                 height: 6,
@@ -175,22 +120,17 @@ class _MonthSection extends StatelessWidget {
             ],
           ),
         ),
-
-        // Horizontal memory list
         ...memories.map(
-          (m) => Padding(
+          (memory) => Padding(
             padding: const EdgeInsets.only(bottom: 10),
-            child: _MemoryHorizontalCard(memory: m),
+            child: _MemoryHorizontalCard(memory: memory),
           ),
         ),
-
         const SizedBox(height: 20),
       ],
     );
   }
 }
-
-// ── Horizontal Memory Card ────────────────────────────────────────────────────
 
 class _MemoryHorizontalCard extends StatefulWidget {
   final MemoryItem memory;
@@ -206,15 +146,13 @@ class _MemoryHorizontalCardState extends State<_MemoryHorizontalCard> {
 
   @override
   Widget build(BuildContext context) {
-    final m = widget.memory;
+    final memory = widget.memory;
 
     return GestureDetector(
       onTapDown: (_) => setState(() => _pressed = true),
       onTapUp: (_) => setState(() => _pressed = false),
       onTapCancel: () => setState(() => _pressed = false),
-      onTap: () {
-        context.push('/memory-detail-screen', extra: m);
-      },
+      onTap: () => context.push('/memory-detail-screen', extra: memory),
       child: AnimatedScale(
         scale: _pressed ? 0.97 : 1.0,
         duration: const Duration(milliseconds: 110),
@@ -229,88 +167,24 @@ class _MemoryHorizontalCardState extends State<_MemoryHorizontalCard> {
           clipBehavior: Clip.antiAlias,
           child: Row(
             children: [
-              // ── Thumbnail ──────────────────────────────────────────────────
               SizedBox(
                 width: 96,
                 height: 96,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    CachedNetworkImage(
-                      imageUrl: m.imageUrl,
-                      fit: BoxFit.cover,
-                      placeholder: (_, __) =>
-                          Container(color: AppTheme.surfaceVariantDark),
-                      errorWidget: (_, __, ___) => Container(
-                        color: AppTheme.surfaceVariantDark,
-                        child: const Icon(
-                          Icons.image_outlined,
-                          color: AppTheme.textDisabled,
-                          size: 24,
-                        ),
-                      ),
+                child: CachedNetworkImage(
+                  imageUrl: memory.imageUrl,
+                  fit: BoxFit.cover,
+                  placeholder: (_, __) =>
+                      Container(color: AppTheme.surfaceVariantDark),
+                  errorWidget: (_, __, ___) => Container(
+                    color: AppTheme.surfaceVariantDark,
+                    child: const Icon(
+                      Icons.image_outlined,
+                      color: AppTheme.textDisabled,
+                      size: 24,
                     ),
-
-                    // Subtle right-edge fade for seamless blend into card body
-                    Positioned.fill(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.centerLeft,
-                            end: Alignment.centerRight,
-                            colors: [
-                              Colors.transparent,
-                              AppTheme.cardDark.withAlpha(180),
-                            ],
-                            stops: const [0.6, 1.0],
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    // Type badge (video / story)
-                    if (m.type != MemoryType.photo)
-                      Positioned(
-                        bottom: 6,
-                        left: 6,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withAlpha(170),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                m.type == MemoryType.video
-                                    ? Icons.play_circle_filled_rounded
-                                    : Icons.auto_stories_rounded,
-                                size: 9,
-                                color: AppTheme.primaryGreen,
-                              ),
-                              const SizedBox(width: 3),
-                              Text(
-                                m.type == MemoryType.video ? 'Video' : 'Story',
-                                style: const TextStyle(
-                                  fontFamily: 'Manrope',
-                                  fontSize: 8,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppTheme.textPrimary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                  ],
+                  ),
                 ),
               ),
-
-              // ── Content ────────────────────────────────────────────────────
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(12, 12, 14, 12),
@@ -318,9 +192,8 @@ class _MemoryHorizontalCardState extends State<_MemoryHorizontalCard> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      // Title
                       Text(
-                        m.title,
+                        memory.title,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -331,8 +204,6 @@ class _MemoryHorizontalCardState extends State<_MemoryHorizontalCard> {
                           height: 1.3,
                         ),
                       ),
-
-                      // Date row
                       Row(
                         children: [
                           const Icon(
@@ -342,7 +213,7 @@ class _MemoryHorizontalCardState extends State<_MemoryHorizontalCard> {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            m.date,
+                            memory.date,
                             style: const TextStyle(
                               fontFamily: 'Manrope',
                               fontSize: 11,
@@ -351,11 +222,8 @@ class _MemoryHorizontalCardState extends State<_MemoryHorizontalCard> {
                           ),
                         ],
                       ),
-
-                      // Bottom row: circle + indicators
                       Row(
                         children: [
-                          // Circle chip
                           Expanded(
                             child: Row(
                               children: [
@@ -363,47 +231,36 @@ class _MemoryHorizontalCardState extends State<_MemoryHorizontalCard> {
                                   width: 7,
                                   height: 7,
                                   decoration: BoxDecoration(
-                                    color: m.circleColor,
+                                    color: memory.circleColor,
                                     shape: BoxShape.circle,
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: m.circleColor.withAlpha(100),
-                                        blurRadius: 4,
-                                      ),
-                                    ],
                                   ),
                                 ),
                                 const SizedBox(width: 5),
                                 Flexible(
                                   child: Text(
-                                    m.circle,
+                                    memory.circle,
                                     overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
                                       fontFamily: 'Manrope',
                                       fontSize: 11,
                                       fontWeight: FontWeight.w600,
-                                      color: m.circleColor.withAlpha(210),
+                                      color: memory.circleColor.withAlpha(210),
                                     ),
                                   ),
                                 ),
                               ],
                             ),
                           ),
-
                           const SizedBox(width: 8),
-
-                          // Privacy indicator
-                          _PrivacyPill(privacy: m.privacy),
+                          _PrivacyPill(privacy: memory.privacy),
                         ],
                       ),
                     ],
                   ),
                 ),
               ),
-
-              // ── Chevron ────────────────────────────────────────────────────
-              Padding(
-                padding: const EdgeInsets.only(right: 10),
+              const Padding(
+                padding: EdgeInsets.only(right: 10),
                 child: Icon(
                   Icons.chevron_right_rounded,
                   size: 18,
@@ -418,8 +275,6 @@ class _MemoryHorizontalCardState extends State<_MemoryHorizontalCard> {
   }
 }
 
-// ── Privacy Pill ──────────────────────────────────────────────────────────────
-
 class _PrivacyPill extends StatelessWidget {
   final MemoryPrivacy privacy;
 
@@ -427,26 +282,23 @@ class _PrivacyPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    IconData icon;
-    Color color;
-    String label;
+    late final IconData icon;
+    late final Color color;
+    late final String label;
 
     switch (privacy) {
       case MemoryPrivacy.public:
         icon = Icons.public_rounded;
         color = AppTheme.cyanAccent;
         label = 'Public';
-        break;
       case MemoryPrivacy.circle:
         icon = Icons.group_rounded;
         color = AppTheme.primaryGreen;
         label = 'Circle';
-        break;
       case MemoryPrivacy.private:
         icon = Icons.lock_rounded;
         color = AppTheme.textMuted;
         label = 'Private';
-        break;
     }
 
     return Container(
@@ -475,8 +327,6 @@ class _PrivacyPill extends StatelessWidget {
     );
   }
 }
-
-// ── Empty State ───────────────────────────────────────────────────────────────
 
 class _EmptyMemories extends StatelessWidget {
   const _EmptyMemories();
