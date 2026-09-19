@@ -22,7 +22,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   bool _isLoading = true;
   bool _loadFailed = false;
   List<Memory> _memories = [];
-  String _selectedTab = 'For You';
 
   @override
   void initState() {
@@ -164,36 +163,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                     ),
                   ),
                   const SliverToBoxAdapter(child: SizedBox(height: 18)),
-                  SliverToBoxAdapter(
-                    child: SizedBox(
-                      height: 36,
-                      child: ListView(
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        physics: const BouncingScrollPhysics(),
-                        children: [
-                          _DiscoverTab(
-                            label: 'For You',
-                            selected: _selectedTab == 'For You',
-                            onTap: () => setState(() => _selectedTab = 'For You'),
-                          ),
-                          const SizedBox(width: 8),
-                          _DiscoverTab(
-                            label: 'Nearby',
-                            selected: _selectedTab == 'Nearby',
-                            onTap: () => setState(() => _selectedTab = 'Nearby'),
-                          ),
-                          const SizedBox(width: 8),
-                          _DiscoverTab(
-                            label: 'Trending',
-                            selected: _selectedTab == 'Trending',
-                            onTap: () => setState(() => _selectedTab = 'Trending'),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SliverToBoxAdapter(child: SizedBox(height: 18)),
                   if (_loadFailed)
                     SliverToBoxAdapter(
                       child: Padding(
@@ -263,42 +232,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                 ],
               ),
             ),
-    );
-  }
-}
-
-class _DiscoverTab extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _DiscoverTab({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: selected ? AppTheme.primaryGreen : AppTheme.surfaceVariantDark,
-          borderRadius: BorderRadius.circular(18),
-        ),
-        child: Text(
-          label,
-          style: GoogleFonts.manrope(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            color: selected ? AppTheme.backgroundDark : AppTheme.textMuted,
-          ),
-        ),
-      ),
     );
   }
 }
