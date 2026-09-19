@@ -1,0 +1,46 @@
+name: One-time fix circle action syntax
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Patch malformed SizedBox closing parenthesis
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('lib/widgets/circle_action_menu.dart')
+          lines = p.read_text().splitlines()
+          changed = False
+          for i, line in enumerate(lines):
+              if 'SizedBox(width: double.infinity, child: ElevatedButton(onPressed: _selected.isEmpty' in line and line.rstrip().endswith('))),'):
+                  lines[i] = line.rstrip()[:-4] + ')))), '
+                  lines[i] = lines[i].rstrip()
+                  changed = True
+                  break
+          if not changed:
+              raise SystemExit('Target syntax line not found or already fixed')
+          p.write_text('\n'.join(lines) + '\n')
+          PY
+          git diff --check
+          git diff -- lib/widgets/circle_action_menu.dart
+
+      - name: Commit and push
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add lib/widgets/circle_action_menu.dart
+          git commit -m 'Fix circle action menu closing parenthesis [skip ci]'
+          git push
