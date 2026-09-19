@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../theme/app_theme.dart';
@@ -41,12 +42,13 @@ class HomeAppBarWidget extends StatelessWidget {
             padding: EdgeInsets.only(top: topPadding, left: 20, right: 20),
             child: Row(
               children: [
-                // Logo
-                Image.asset(
-                  'assets/images/logosprout-1787939643364.png',
+                // Canonical Sprout logo
+                SvgPicture.asset(
+                  'assets/images/sprout_logo.svg',
                   height: 32,
+                  width: 32,
                   fit: BoxFit.contain,
-                  semanticLabel: 'Sprout',
+                  semanticsLabel: 'Sprout',
                 ),
 
                 const Spacer(),
