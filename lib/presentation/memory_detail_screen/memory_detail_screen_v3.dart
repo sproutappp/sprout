@@ -10,7 +10,6 @@ import '../../presentation/memories_screen/widgets/memories_grid_widget.dart';
 import '../../services/circles_repository.dart';
 import '../../services/comments_repository.dart';
 import '../../services/memory_edit_repository.dart';
-import '../../services/memory_people_repository.dart';
 import '../../services/memories_repository.dart';
 import '../../services/reactions_repository.dart';
 import '../../theme/app_theme.dart';
@@ -29,7 +28,6 @@ class MemoryDetailScreenV3 extends StatefulWidget {
 class _MemoryDetailScreenV3State extends State<MemoryDetailScreenV3> {
   Memory? _memory;
   List<MemoryComment> _comments = [];
-  List<Profile> _taggedPeople = [];
   ReactionSummary _reactions = ReactionSummary.empty;
   bool _loading = true;
   bool _loadingSocial = true;
@@ -57,7 +55,6 @@ class _MemoryDetailScreenV3State extends State<MemoryDetailScreenV3> {
         _loading = false;
       });
       await _loadSocial();
-      await _loadPeople();
     } catch (_) {
       if (mounted) setState(() => _loading = false);
     }
@@ -76,19 +73,6 @@ class _MemoryDetailScreenV3State extends State<MemoryDetailScreenV3> {
     } catch (_) {
       if (mounted) setState(() => _loadingSocial = false);
     }
-  }
-
-  Future<void> _loadPeople() async {
-    try {
-      final circleIds = await MemoryEditRepository.fetchCircleIds(_id);
-      final people = await MemoryPeopleRepository.fetchForMemory(_id);
-      if (!mounted) return;
-      setState(() {
-        _taggedPeople = people
-            .where((person) => circleIds.isEmpty || circleIds.isNotEmpty)
-            .toList();
-      });
-    } catch (_) {}
   }
 
   Future<void> _share() async {
@@ -122,16 +106,10 @@ class _MemoryDetailScreenV3State extends State<MemoryDetailScreenV3> {
       builder: (_) => AlertDialog(
         backgroundColor: AppTheme.surfaceDark,
         title: const Text('Delete memory?', style: TextStyle(color: AppTheme.textPrimary)),
-        content: const Text(
-          'This memory and its circle shares will be removed.',
-          style: TextStyle(color: AppTheme.textMuted),
-        ),
+        content: const Text('This memory and its circle shares will be removed.', style: TextStyle(color: AppTheme.textMuted)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete', style: TextStyle(color: AppTheme.error)),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete', style: TextStyle(color: AppTheme.error))),
         ],
       ),
     );
@@ -163,19 +141,14 @@ class _MemoryDetailScreenV3State extends State<MemoryDetailScreenV3> {
               children: [
                 Text('Add to Circle', style: GoogleFonts.manrope(fontSize: 20, fontWeight: FontWeight.w800, color: AppTheme.textPrimary)),
                 const SizedBox(height: 12),
-                if (circles.isEmpty)
-                  const Text("You don't have any circles yet.", style: TextStyle(color: AppTheme.textMuted)),
+                if (circles.isEmpty) const Text("You don't have any circles yet.", style: TextStyle(color: AppTheme.textMuted)),
                 ...circles.map((circle) => CheckboxListTile(
                   contentPadding: EdgeInsets.zero,
                   title: Text(circle.name, style: const TextStyle(color: AppTheme.textPrimary)),
                   activeColor: AppTheme.primaryGreen,
                   value: selected.contains(circle.id),
                   onChanged: (value) => setSheetState(() {
-                    if (value == true) {
-                      selected.add(circle.id);
-                    } else {
-                      selected.remove(circle.id);
-                    }
+                    if (value == true) selected.add(circle.id); else selected.remove(circle.id);
                   }),
                 )),
                 const SizedBox(height: 8),
@@ -287,12 +260,8 @@ class _MemoryDetailScreenV3State extends State<MemoryDetailScreenV3> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(
-        backgroundColor: AppTheme.backgroundDark,
-        body: Center(child: CircularProgressIndicator(color: AppTheme.primaryGreen)),
-      );
+      return const Scaffold(backgroundColor: AppTheme.backgroundDark, body: Center(child: CircularProgressIndicator(color: AppTheme.primaryGreen)));
     }
-
     final memory = _memory;
     if (memory == null) {
       return Scaffold(
@@ -305,7 +274,6 @@ class _MemoryDetailScreenV3State extends State<MemoryDetailScreenV3> {
     final title = _title(memory);
     final story = _story(memory);
     final publicMemory = memory.isPublic;
-
     return Scaffold(
       backgroundColor: AppTheme.backgroundDark,
       appBar: AppBar(
@@ -338,10 +306,7 @@ class _MemoryDetailScreenV3State extends State<MemoryDetailScreenV3> {
             child: CachedNetworkImage(
               imageUrl: memory.imageUrl,
               fit: BoxFit.cover,
-              errorWidget: (_, __, ___) => Container(
-                color: AppTheme.surfaceVariantDark,
-                child: const Icon(Icons.image_outlined, color: AppTheme.textDisabled, size: 48),
-              ),
+              errorWidget: (_, __, ___) => Container(color: AppTheme.surfaceVariantDark, child: const Icon(Icons.image_outlined, color: AppTheme.textDisabled, size: 48)),
             ),
           ),
           Padding(
@@ -351,17 +316,15 @@ class _MemoryDetailScreenV3State extends State<MemoryDetailScreenV3> {
               children: [
                 Text(title, style: GoogleFonts.manrope(fontSize: 24, fontWeight: FontWeight.w800, color: AppTheme.textPrimary)),
                 const SizedBox(height: 8),
-                Row(
-                  children: [
-                    const Icon(Icons.calendar_today_rounded, size: 13, color: AppTheme.textMuted),
-                    const SizedBox(width: 6),
-                    Text('${memory.createdAt.day}/${memory.createdAt.month}/${memory.createdAt.year}', style: const TextStyle(color: AppTheme.textMuted)),
-                    const SizedBox(width: 16),
-                    Icon(publicMemory ? Icons.public_rounded : Icons.group_rounded, size: 14, color: publicMemory ? AppTheme.cyanAccent : AppTheme.primaryGreen),
-                    const SizedBox(width: 5),
-                    Text(publicMemory ? 'Public' : (memory.circleName ?? 'Circle'), style: TextStyle(color: publicMemory ? AppTheme.cyanAccent : AppTheme.primaryGreen, fontWeight: FontWeight.w700)),
-                  ],
-                ),
+                Row(children: [
+                  const Icon(Icons.calendar_today_rounded, size: 13, color: AppTheme.textMuted),
+                  const SizedBox(width: 6),
+                  Text('${memory.createdAt.day}/${memory.createdAt.month}/${memory.createdAt.year}', style: const TextStyle(color: AppTheme.textMuted)),
+                  const SizedBox(width: 16),
+                  Icon(publicMemory ? Icons.public_rounded : Icons.group_rounded, size: 14, color: publicMemory ? AppTheme.cyanAccent : AppTheme.primaryGreen),
+                  const SizedBox(width: 5),
+                  Text(publicMemory ? 'Public' : (memory.circleName ?? 'Circle'), style: TextStyle(color: publicMemory ? AppTheme.cyanAccent : AppTheme.primaryGreen, fontWeight: FontWeight.w700)),
+                ]),
                 if ((memory.location ?? '').trim().isNotEmpty) ...[
                   const SizedBox(height: 8),
                   Row(children: [const Icon(Icons.location_on_outlined, size: 14, color: AppTheme.textMuted), const SizedBox(width: 5), Expanded(child: Text(memory.location!, style: const TextStyle(color: AppTheme.textMuted)))]),
@@ -370,29 +333,14 @@ class _MemoryDetailScreenV3State extends State<MemoryDetailScreenV3> {
                   const SizedBox(height: 18),
                   Text(story, style: GoogleFonts.manrope(fontSize: 15, height: 1.5, color: AppTheme.textPrimary)),
                 ],
-                if (_taggedPeople.isNotEmpty) ...[
-                  const SizedBox(height: 20),
-                  Text('People in this memory', style: GoogleFonts.manrope(fontSize: 16, fontWeight: FontWeight.w800, color: AppTheme.textPrimary)),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: _taggedPeople.map((person) => Chip(
-                      avatar: person.avatarUrl == null ? null : CircleAvatar(backgroundImage: NetworkImage(person.avatarUrl!)),
-                      label: Text(person.displayName),
-                    )).toList(),
-                  ),
-                ],
                 const SizedBox(height: 22),
-                Row(
-                  children: [
-                    OutlinedButton.icon(onPressed: _toggleReaction, icon: const Icon(Icons.favorite_border_rounded, size: 17), label: Text('${_reactions.totalCount}')),
-                    const SizedBox(width: 10),
-                    OutlinedButton.icon(onPressed: _showComments, icon: const Icon(Icons.chat_bubble_outline_rounded, size: 17), label: Text('${_comments.length}')),
-                    const Spacer(),
-                    OutlinedButton.icon(onPressed: _share, icon: const Icon(Icons.share_rounded, size: 17), label: const Text('Share')),
-                  ],
-                ),
+                Row(children: [
+                  OutlinedButton.icon(onPressed: _toggleReaction, icon: const Icon(Icons.favorite_border_rounded, size: 17), label: Text('${_reactions.totalCount}')),
+                  const SizedBox(width: 10),
+                  OutlinedButton.icon(onPressed: _showComments, icon: const Icon(Icons.chat_bubble_outline_rounded, size: 17), label: Text('${_comments.length}')),
+                  const Spacer(),
+                  OutlinedButton.icon(onPressed: _share, icon: const Icon(Icons.share_rounded, size: 17), label: const Text('Share')),
+                ]),
                 const SizedBox(height: 24),
                 if (!_loadingSocial && _comments.isNotEmpty) ...[
                   Text('Comments', style: GoogleFonts.manrope(fontSize: 16, fontWeight: FontWeight.w800, color: AppTheme.textPrimary)),
