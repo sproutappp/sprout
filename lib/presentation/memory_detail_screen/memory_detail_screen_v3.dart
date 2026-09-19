@@ -6,10 +6,12 @@ import 'package:share_plus/share_plus.dart';
 import '../../core/supabase/supabase_service.dart';
 import '../../models/comment.dart';
 import '../../models/memory.dart';
+import '../../models/profile.dart';
 import '../../presentation/memories_screen/widgets/memories_grid_widget.dart';
 import '../../services/circles_repository.dart';
 import '../../services/comments_repository.dart';
 import '../../services/memory_edit_repository.dart';
+import '../../services/memory_people_repository.dart';
 import '../../services/memories_repository.dart';
 import '../../services/reactions_repository.dart';
 import '../../theme/app_theme.dart';
@@ -28,6 +30,7 @@ class MemoryDetailScreenV3 extends StatefulWidget {
 class _MemoryDetailScreenV3State extends State<MemoryDetailScreenV3> {
   Memory? _memory;
   List<MemoryComment> _comments = [];
+  List<Profile> _taggedPeople = [];
   ReactionSummary _reactions = ReactionSummary.empty;
   bool _loading = true;
   bool _loadingSocial = true;
@@ -55,6 +58,7 @@ class _MemoryDetailScreenV3State extends State<MemoryDetailScreenV3> {
         _loading = false;
       });
       await _loadSocial();
+      await _loadPeople();
     } catch (_) {
       if (mounted) setState(() => _loading = false);
     }
@@ -72,6 +76,16 @@ class _MemoryDetailScreenV3State extends State<MemoryDetailScreenV3> {
       });
     } catch (_) {
       if (mounted) setState(() => _loadingSocial = false);
+    }
+  }
+
+  Future<void> _loadPeople() async {
+    try {
+      final people = await MemoryPeopleRepository.fetchForMemory(_id);
+      if (!mounted) return;
+      setState(() => _taggedPeople = people);
+    } catch (_) {
+      if (mounted) setState(() => _taggedPeople = []);
     }
   }
 
@@ -172,7 +186,7 @@ class _MemoryDetailScreenV3State extends State<MemoryDetailScreenV3> {
       for (final circleId in result) {
         await MemoryEditRepository.addToCircle(memoryId: _id, circleId: circleId);
       }
-      if (mounted) _snack('Memory added to ${result.length == 1 ? 'the circle' : '${result.length} circles'}.');
+      if (mounted) _snack('Memory added to ${result.length == 1 ? 'the circle' : '${result.length} circles'}. It is now private to those circles.');
       await _load();
     } catch (_) {
       if (mounted) _snack("Couldn't add this memory to the circle.");
@@ -332,6 +346,21 @@ class _MemoryDetailScreenV3State extends State<MemoryDetailScreenV3> {
                 if (story.isNotEmpty) ...[
                   const SizedBox(height: 18),
                   Text(story, style: GoogleFonts.manrope(fontSize: 15, height: 1.5, color: AppTheme.textPrimary)),
+                ],
+                if (!publicMemory && _taggedPeople.isNotEmpty) ...[
+                  const SizedBox(height: 20),
+                  Text('People in this memory', style: GoogleFonts.manrope(fontSize: 16, fontWeight: FontWeight.w800, color: AppTheme.textPrimary)),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: _taggedPeople.map((person) => Chip(
+                      avatar: person.avatarUrl == null
+                          ? null
+                          : CircleAvatar(backgroundImage: NetworkImage(person.avatarUrl!)),
+                      label: Text(person.displayName),
+                    )).toList(),
+                  ),
                 ],
                 const SizedBox(height: 22),
                 Row(children: [
