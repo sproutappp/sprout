@@ -6,7 +6,7 @@ import '../presentation/memories_screen/memories_screen.dart';
 import '../presentation/onboarding_screen/onboarding_screen.dart';
 import '../presentation/sign_up_login_screen/sign_up_login_screen.dart';
 import '../presentation/create_memory_screen/create_memory_screen_fixed.dart';
-import '../presentation/memory_detail_screen/memory_detail_screen.dart';
+import '../presentation/memory_detail_screen/memory_detail_screen_v3.dart';
 import '../presentation/circles_screen/circles_screen_with_cover.dart';
 import '../presentation/circle_detail_screen/circle_detail_screen.dart';
 import '../presentation/memories_screen/widgets/memories_grid_widget.dart';
@@ -40,6 +40,8 @@ class AppRoutes {
   static const String aboutSproutScreen = '/about-sprout-screen';
   static const String settingsScreen = '/settings-screen';
   static const String joinCircleScreen = '/join-circle-screen';
+
+  static const String sharedMemory = '/memory/:id';
 }
 
 final GoRouter appRouter = GoRouter(
@@ -48,26 +50,18 @@ final GoRouter appRouter = GoRouter(
     GoRoute(path: AppRoutes.initial, builder: (context, state) => const OnboardingScreen()),
     GoRoute(path: AppRoutes.onboardingScreen, builder: (context, state) => const OnboardingScreen()),
     GoRoute(path: AppRoutes.signUpLoginScreen, builder: (context, state) => const SignUpLoginScreen()),
-    GoRoute(
-      path: AppRoutes.createMemoryScreen,
-      builder: (context, state) => CreateMemoryScreenFixed(initialCircleId: state.extra as String?),
-    ),
-    GoRoute(
-      path: AppRoutes.joinCircleScreen,
-      builder: (context, state) => JoinCircleScreen(initialToken: state.extra as String?),
-    ),
-    GoRoute(
-      path: '/join/:token',
-      builder: (context, state) => JoinCircleScreen(initialToken: state.pathParameters['token'], autoJoin: true),
-    ),
+    GoRoute(path: AppRoutes.createMemoryScreen, builder: (context, state) => CreateMemoryScreenFixed(initialCircleId: state.extra as String?)),
+    GoRoute(path: AppRoutes.joinCircleScreen, builder: (context, state) => JoinCircleScreen(initialToken: state.extra as String?)),
+    GoRoute(path: '/join/:token', builder: (context, state) => JoinCircleScreen(initialToken: state.pathParameters['token'], autoJoin: true)),
     GoRoute(
       path: AppRoutes.memoryDetailScreen,
-      builder: (context, state) => MemoryDetailScreen(memory: state.extra as MemoryItem),
+      builder: (context, state) => MemoryDetailScreenV3(initialMemory: state.extra as MemoryItem?),
     ),
     GoRoute(
-      path: AppRoutes.circleDetailScreen,
-      builder: (context, state) => CircleDetailScreen(circleId: state.extra as String?),
+      path: AppRoutes.sharedMemory,
+      builder: (context, state) => MemoryDetailScreenV3(memoryId: state.pathParameters['id']),
     ),
+    GoRoute(path: AppRoutes.circleDetailScreen, builder: (context, state) => CircleDetailScreen(circleId: state.extra as String?)),
     GoRoute(path: AppRoutes.editProfileScreen, builder: (context, state) => const EditProfileScreen()),
     GoRoute(
       path: AppRoutes.memberProfileScreen,
