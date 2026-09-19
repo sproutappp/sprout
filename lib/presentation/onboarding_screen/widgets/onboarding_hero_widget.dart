@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../theme/app_theme.dart';
 
@@ -36,7 +37,6 @@ class _OnboardingHeroWidgetState extends State<OnboardingHeroWidget>
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // Logo with glow pulse
         AnimatedBuilder(
           animation: _pulseAnim,
           builder: (context, child) {
@@ -67,20 +67,17 @@ class _OnboardingHeroWidgetState extends State<OnboardingHeroWidget>
           },
           child: ClipRRect(
             borderRadius: BorderRadius.circular(28),
-            child: Image.asset(
-              'assets/images/logosprout-1787939643364.png',
+            child: SvgPicture.asset(
+              'assets/images/sprout_logo.svg',
               width: 100,
               height: 100,
               fit: BoxFit.contain,
-              semanticLabel:
-                  'Sprout — continuous S loop with central dot representing the person at the heart of every memory',
+              semanticsLabel:
+                  'Sprout camera and photographs logo representing capturing and preserving memories',
             ),
           ),
         ),
-
         const SizedBox(height: 28),
-
-        // App name
         const Text(
           'Sprout',
           style: TextStyle(
@@ -92,10 +89,7 @@ class _OnboardingHeroWidgetState extends State<OnboardingHeroWidget>
             height: 1.0,
           ),
         ),
-
         const SizedBox(height: 10),
-
-        // Tagline with gradient
         ShaderMask(
           shaderCallback: (bounds) =>
               AppTheme.primaryGradient.createShader(bounds),
