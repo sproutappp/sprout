@@ -1,7 +1,7 @@
 name: Build APK
 
 # Runs automatically on every push to main, and can also be triggered
-# manually from the Actions tab (workflow_dispatch).
+# manually from the Actions tab.
 on:
   push:
     branches: [main]
@@ -24,8 +24,15 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      # Keep all Android/iOS/web launcher icons generated from the single
-      # canonical Sprout camera-memory brand asset in assets/images.
+      # The canonical brand asset is maintained as SVG. flutter_launcher_icons
+      # expects a raster image_path, so render the SVG to the required PNG
+      # inside CI before generating Android/iOS/web launcher icons.
+      - name: Install SVG renderer
+        run: sudo apt-get update && sudo apt-get install -y librsvg2-bin
+
+      - name: Render canonical Sprout logo to PNG
+        run: rsvg-convert -w 1024 -h 1024 assets/images/sprout_logo.svg -o assets/images/sprout_logo.png
+
       - name: Generate launcher icons
         run: dart run flutter_launcher_icons
 
