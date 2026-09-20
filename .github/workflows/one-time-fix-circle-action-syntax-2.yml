@@ -1,0 +1,43 @@
+name: One-time fix circle action syntax
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fix malformed invite button closing parentheses
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('lib/widgets/circle_action_menu.dart')
+          text = path.read_text()
+          lines = text.splitlines(keepends=True)
+          changed = False
+          for i, line in enumerate(lines):
+              if 'SizedBox(width: double.infinity, child: ElevatedButton' in line and 'Send Invite' in line:
+                  fixed = re.sub(r'\)+,(\s*)$', '))),\\1', line)
+                  if fixed != line:
+                      lines[i] = fixed
+                      changed = True
+          if not changed:
+              raise SystemExit('Target invite-button line was not found or is already fixed.')
+          path.write_text(''.join(lines))
+          PY
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/widgets/circle_action_menu.dart
+          git commit -m "Fix circle action menu syntax" || exit 0
+          git push
