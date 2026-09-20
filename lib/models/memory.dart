@@ -21,7 +21,7 @@ class Memory {
     this.mediaUrls = const [],
     this.caption,
     this.location,
-    required this.createdAt,
+    this.createdAt,
     this.contributor,
     this.circleName,
     this.isPublic = false,
@@ -50,3 +50,5 @@ class Memory {
     );
   }
 }
+
+typedef MemoryItem = Memory;
