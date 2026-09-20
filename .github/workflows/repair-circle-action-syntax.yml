@@ -76,3 +76,5 @@ jobs:
           git diff --cached --quiet && { echo "No repair diff produced."; exit 1; }
           git commit -m "Repair circle action syntax"
           git push origin HEAD:main
+
+      # Keep this workflow source stable; APK build is triggered by user commits.
