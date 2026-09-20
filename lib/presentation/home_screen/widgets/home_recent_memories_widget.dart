@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../../theme/app_theme.dart';
 import '../../../routes/app_routes.dart';
 import '../../../services/memories_repository.dart';
+import '../../../services/reactions_repository.dart';
 import '../../../widgets/loading_skeleton_widget.dart';
 import '../../../widgets/status_badge_widget.dart';
 import '../../memories_screen/widgets/memories_grid_widget.dart';
@@ -36,7 +37,7 @@ class _MemoryCard {
     Color(0xFFB839FF),
   ];
 
-  factory _MemoryCard.fromMemory(Memory m, int index) {
+  factory _MemoryCard.fromMemory(Memory m, int index, {int reactionCount = 0}) {
     return _MemoryCard(
       id: m.id,
       title: m.caption?.isNotEmpty == true ? m.caption! : 'A shared memory',
@@ -46,9 +47,7 @@ class _MemoryCard {
       circle: m.isPublic ? 'Public' : (m.circleName ?? 'Circle'),
       circleColor: _palette[index % _palette.length],
       privacy: m.isPublic ? MemoryPrivacy.public : MemoryPrivacy.circle,
-      // Reactions/comments aren't tracked yet — showing 0 rather than
-      // a fake number.
-      reactionCount: 0,
+      reactionCount: reactionCount,
       commentCount: 0,
     );
   }
@@ -82,11 +81,18 @@ class _HomeRecentMemoriesWidgetState extends State<HomeRecentMemoriesWidget>
   Future<void> _load() async {
     try {
       final memories = await MemoriesRepository.fetchAllForUser();
+      final likeCounts = await ReactionsRepository.fetchLikeCounts(
+        memories.map((memory) => memory.id).toList(),
+      );
       if (!mounted) return;
       setState(() {
         _memories = [
           for (var i = 0; i < memories.length && i < 8; i++)
-            _MemoryCard.fromMemory(memories[i], i),
+            _MemoryCard.fromMemory(
+              memories[i],
+              i,
+              reactionCount: likeCounts[memories[i].id] ?? 0,
+            ),
         ];
         _isLoading = false;
       });
