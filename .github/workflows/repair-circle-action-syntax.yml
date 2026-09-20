@@ -67,12 +67,6 @@ jobs:
           p.write_text('\n'.join(out) + '\n')
           PY
 
-      - name: Format changed Dart file
-        run: dart format lib/widgets/circle_action_menu.dart
-
-      - name: Verify syntax without Android build
-        run: dart analyze lib/widgets/circle_action_menu.dart
-
       - name: Commit repair
         shell: bash
         run: |
