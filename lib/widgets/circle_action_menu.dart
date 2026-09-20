@@ -257,7 +257,7 @@ class _CircleInvitePickerState extends State<_CircleInvitePicker> {
               ),
             ),
           const SizedBox(height: 18),
-          SizedBox(width: double.infinity, child: ElevatedButton(onPressed: _selected.isEmpty || _sending ? null : _send, style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryGreen, foregroundColor: Colors.black, padding: const EdgeInsets.symmetric(vertical: 15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), elevation: 0), child: _sending ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black)) : Text(_selected.isEmpty ? 'Send Invite' : 'Send Invite (${_selected.length})', style: GoogleFonts.manrope(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.black))))),
+          SizedBox(width: double.infinity, child: ElevatedButton(onPressed: _selected.isEmpty || _sending ? null : _send, style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryGreen, foregroundColor: Colors.black, padding: const EdgeInsets.symmetric(vertical: 15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), elevation: 0), child: _sending ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black)) : Text(_selected.isEmpty ? 'Send Invite' : 'Send Invite (${_selected.length})', style: GoogleFonts.manrope(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.black)))))),
         ],
       ),
     );
