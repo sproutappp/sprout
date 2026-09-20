@@ -184,7 +184,7 @@ class MemoriesRepository {
   }
 
   static Future<Memory> addMemory({
-    required File file,
+    required List<File> files,
     String? caption,
     String? location,
     bool isPublic = false,
@@ -192,30 +192,44 @@ class MemoriesRepository {
   }) async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) throw StateError('Must be signed in to add a memory');
+    if (files.isEmpty) throw ArgumentError('Add at least one photo.');
     if (!isPublic && circleIds.isEmpty) throw ArgumentError('Choose Public or at least one circle to share with.');
+
     final id = _generateUuidV4();
-    final ext = file.path.split('.').last.toLowerCase();
-    final path = '$id/${DateTime.now().millisecondsSinceEpoch}.$ext';
+    final mediaPaths = <String>[];
+    for (final file in files) {
+      final ext = file.path.split('.').last.toLowerCase();
+      mediaPaths.add('$id/${DateTime.now().microsecondsSinceEpoch}_${mediaPaths.length}.$ext');
+    }
+    final primaryPath = mediaPaths.first;
 
     await _client.from('memories').insert({
       'id': id,
       'circle_id': isPublic ? null : circleIds.first,
       'uploaded_by': userId,
-      'image_url': path,
-      'media_urls': [path],
+      'image_url': primaryPath,
+      'media_urls': mediaPaths,
       'caption': caption,
       'location': location,
       'is_public': isPublic,
     });
 
+    final uploadedPaths = <String>[];
     try {
       if (!isPublic) {
         await _client.from('memory_circles').insert([
           for (final circleId in circleIds) {'memory_id': id, 'circle_id': circleId},
         ]);
       }
-      await _client.storage.from(_bucket).upload(path, file);
+      for (var i = 0; i < files.length; i++) {
+        await _client.storage.from(_bucket).upload(mediaPaths[i], files[i]);
+        uploadedPaths.add(mediaPaths[i]);
+      }
     } catch (e) {
+      if (uploadedPaths.isNotEmpty) {
+        try { await _client.storage.from(_bucket).remove(uploadedPaths); } catch (_) {}
+      }
+      try { await _client.from('memory_circles').delete().eq('memory_id', id); } catch (_) {}
       try { await _client.from('memories').delete().eq('id', id); } catch (_) {}
       rethrow;
     }
