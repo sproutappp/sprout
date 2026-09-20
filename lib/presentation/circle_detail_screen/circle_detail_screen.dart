@@ -1072,12 +1072,13 @@ class _CircleMenuSheet extends StatelessWidget {
             style: GoogleFonts.manrope(fontSize: 13, color: AppTheme.textMuted),
           ),
           const SizedBox(height: 20),
-          _MenuOption(
-            icon: Icons.edit_rounded,
-            label: 'Edit Circle',
-            color: AppTheme.textPrimary,
-            onTap: () => Navigator.pop(context, 'edit'),
-          ),
+          if (isOwner)
+            _MenuOption(
+              icon: Icons.edit_rounded,
+              label: 'Edit Circle',
+              color: AppTheme.textPrimary,
+              onTap: () => Navigator.pop(context, 'edit'),
+            ),
           _MenuOption(
             icon: Icons.person_add_rounded,
             label: 'Invite People',
