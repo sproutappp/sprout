@@ -7,6 +7,7 @@ import '../../core/supabase/supabase_service.dart';
 import '../../models/comment.dart';
 import '../../models/memory.dart';
 import '../../models/profile.dart';
+import '../../presentation/memories_screen/widgets/memories_grid_widget.dart';
 import '../../services/circles_repository.dart';
 import '../../services/comments_repository.dart';
 import '../../services/memory_edit_repository.dart';
