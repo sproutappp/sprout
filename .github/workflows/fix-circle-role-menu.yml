@@ -1,0 +1,193 @@
+name: Fix circle role menu
+
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-circle-role-menu.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Patch circle detail role menu
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('lib/presentation/circle_detail_screen/circle_detail_screen.dart')
+          text = path.read_text()
+
+          old = """      builder: (_) => _CircleMenuSheet(circleName: circle.name),"""
+          new = """      builder: (_) => _CircleMenuSheet(
+            circleName: circle.name,
+            isAdmin: circle.createdBy == CirclesRepository.currentUserId,
+          ),"""
+          if old not in text:
+              raise SystemExit('Menu builder target not found')
+          text = text.replace(old, new, 1)
+
+          old = """    } else if (action == 'leave') {
+          await _confirmLeaveCircle(circle);
+        }
+      }
+"""
+          new = """    } else if (action == 'leave') {
+          await _confirmLeaveCircle(circle);
+        } else if (action == 'delete') {
+          final confirmed = await showDialog<bool>(
+            context: context,
+            builder: (dialogContext) => AlertDialog(
+              backgroundColor: AppTheme.surfaceDark,
+              title: Text(
+                'Delete ${circle.name}?',
+                style: GoogleFonts.manrope(
+                  color: AppTheme.textPrimary,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              content: Text(
+                'This permanently deletes the circle and its shared memories. This cannot be undone.',
+                style: GoogleFonts.manrope(
+                  color: AppTheme.textMuted,
+                  fontSize: 13,
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  child: Text(
+                    'Cancel',
+                    style: GoogleFonts.manrope(color: AppTheme.textMuted),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, true),
+                  child: Text(
+                    'Delete Circle',
+                    style: GoogleFonts.manrope(
+                      color: AppTheme.error,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+
+          if (confirmed != true || !mounted) return;
+
+          try {
+            await CirclesRepository.deleteCircle(circle);
+            if (!mounted) return;
+            context.pop(true);
+          } catch (e, st) {
+            debugPrint('CircleDetailScreen: delete circle failed: $e\\n$st');
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  "Couldn't delete this circle. Please try again.",
+                  style: GoogleFonts.manrope(color: Colors.white),
+                ),
+                backgroundColor: AppTheme.error,
+              ),
+            );
+          }
+        }
+      }
+"""
+          if old not in text:
+              raise SystemExit('Menu action target not found')
+          text = text.replace(old, new, 1)
+
+          start = text.index('class _CircleMenuSheet extends StatelessWidget {')
+          end = text.index('class _MenuOption extends StatelessWidget {', start)
+          old_class = text[start:end]
+          new_class = """class _CircleMenuSheet extends StatelessWidget {
+            final String circleName;
+            final bool isAdmin;
+
+            const _CircleMenuSheet({
+              required this.circleName,
+              required this.isAdmin,
+            });
+
+            @override
+            Widget build(BuildContext context) {
+              final bottom = MediaQuery.of(context).padding.bottom;
+              return _SheetContainer(
+                bottomPadding: bottom,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      circleName,
+                      style: GoogleFonts.manrope(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Circle options',
+                      style: GoogleFonts.manrope(fontSize: 13, color: AppTheme.textMuted),
+                    ),
+                    const SizedBox(height: 20),
+                    if (isAdmin)
+                      _MenuOption(
+                        icon: Icons.edit_rounded,
+                        label: 'Edit Circle',
+                        color: AppTheme.textPrimary,
+                        onTap: () => Navigator.pop(context, 'edit'),
+                      ),
+                    _MenuOption(
+                      icon: Icons.person_add_rounded,
+                      label: 'Invite People',
+                      color: AppTheme.primaryGreen,
+                      onTap: () => Navigator.pop(context, 'invite'),
+                    ),
+                    _MenuOption(
+                      icon: Icons.notifications_rounded,
+                      label: 'Notifications',
+                      color: AppTheme.textPrimary,
+                      onTap: () => Navigator.pop(context, 'notifications'),
+                    ),
+                    _MenuOption(
+                      icon: isAdmin ? Icons.delete_outline_rounded : Icons.logout_rounded,
+                      label: isAdmin ? 'Delete Circle' : 'Leave Circle',
+                      color: AppTheme.error,
+                      onTap: () => Navigator.pop(context, isAdmin ? 'delete' : 'leave'),
+                    ),
+                  ],
+                ),
+              );
+            }
+          }
+
+          """
+          if not old_class.strip():
+              raise SystemExit('Menu class target is empty')
+          text = text[:start] + new_class + text[end:]
+          path.write_text(text)
+          PY
+
+      - name: Verify Dart syntax formatting
+        run: dart format --output=none --set-exit-if-changed lib/presentation/circle_detail_screen/circle_detail_screen.dart
+
+      - name: Commit patch and remove temporary workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/presentation/circle_detail_screen/circle_detail_screen.dart .github/workflows/fix-circle-role-menu.yml
+          git commit -m "Implement admin and member circle menu roles"
+          git rm .github/workflows/fix-circle-role-menu.yml
+          git commit -m "Remove temporary circle role menu workflow"
+          git push
