@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -55,31 +56,12 @@ class _SignUpLoginScreenState extends State<SignUpLoginScreen>
     setState(() => _errorMessage = null);
     try {
       await AuthService.signInWithGoogle();
-      // Supabase OAuth completes via deep link redirect; the
-      // onAuthStateChange listener (wired at the router/app level)
-      // should handle navigation once the session lands. If this
-      // screen is still mounted after the redirect flow returns
-      // control here, fall through without forcing navigation.
     } on AuthException catch (e) {
       if (!mounted) return;
       setState(() => _errorMessage = e.message);
     }
   }
 
-  /// Called once Firebase has genuinely verified the phone number —
-  /// that part is real, not faked.
-  ///
-  /// IMPORTANT — read before changing this: there is currently no
-  /// Supabase session for phone-verified users. Every RLS-protected
-  /// query in this app (circles, memories, notifications, reactions,
-  /// comments — all of it) checks Supabase's own auth.uid(), which will
-  /// be null here. Bridging Firebase identity into a real Supabase
-  /// session is a genuine open architecture question, not a missing
-  /// dashboard toggle — see the conversation/report for why Supabase's
-  /// documented Third-Party Auth mechanism can't just be turned on
-  /// without further decisions. Navigating home is still correct for
-  /// now (the login itself succeeded), but screens past this point
-  /// will not show this user's real data until that's resolved.
   void _onPhoneVerified() {
     if (!mounted) return;
     context.go(AppRoutes.homeScreen);
@@ -113,7 +95,6 @@ class _SignUpLoginScreenState extends State<SignUpLoginScreen>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      // Back button
                       Align(
                         alignment: Alignment.centerLeft,
                         child: GestureDetector(
@@ -137,21 +118,13 @@ class _SignUpLoginScreenState extends State<SignUpLoginScreen>
                           ),
                         ),
                       ),
-
                       const SizedBox(height: 28),
-
-                      // Header: logo + title
                       const AuthHeaderWidget(),
-
                       const SizedBox(height: 32),
-
-                      // Error message
                       if (_errorMessage != null) ...[
                         _ErrorBanner(message: _errorMessage!),
                         const SizedBox(height: 16),
                       ],
-
-                      // Google + phone OTP login options
                       FadeTransition(
                         opacity: _fadeAnim,
                         child: SlideTransition(
@@ -162,12 +135,65 @@ class _SignUpLoginScreenState extends State<SignUpLoginScreen>
                           ),
                         ),
                       ),
+                      const SizedBox(height: 24),
+                      FadeTransition(
+                        opacity: _fadeAnim,
+                        child: _LegalLinks(
+                          onTerms: () => context.push(AppRoutes.termsOfUseScreen),
+                          onPrivacy: () => context.push(AppRoutes.privacyPolicyScreen),
+                        ),
+                      ),
                     ],
                   ),
                 ),
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LegalLinks extends StatelessWidget {
+  final VoidCallback onTerms;
+  final VoidCallback onPrivacy;
+
+  const _LegalLinks({required this.onTerms, required this.onPrivacy});
+
+  @override
+  Widget build(BuildContext context) {
+    return RichText(
+      textAlign: TextAlign.center,
+      text: TextSpan(
+        style: const TextStyle(
+          fontFamily: 'Manrope',
+          fontSize: 11,
+          color: AppTheme.textDisabled,
+          height: 1.5,
+        ),
+        children: [
+          const TextSpan(text: 'By logging in you choose to accept the '),
+          TextSpan(
+            text: 'Terms of Use',
+            style: const TextStyle(
+              color: AppTheme.primaryGreen,
+              fontWeight: FontWeight.w700,
+              decoration: TextDecoration.underline,
+            ),
+            recognizer: TapGestureRecognizer()..onTap = onTerms,
+          ),
+          const TextSpan(text: ' and '),
+          TextSpan(
+            text: 'Privacy Policy',
+            style: const TextStyle(
+              color: AppTheme.primaryGreen,
+              fontWeight: FontWeight.w700,
+              decoration: TextDecoration.underline,
+            ),
+            recognizer: TapGestureRecognizer()..onTap = onPrivacy,
+          ),
+          const TextSpan(text: '.'),
         ],
       ),
     );
