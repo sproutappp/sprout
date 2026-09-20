@@ -7,7 +7,6 @@ import '../../core/supabase/supabase_service.dart';
 import '../../models/comment.dart';
 import '../../models/memory.dart';
 import '../../models/profile.dart';
-import '../../presentation/memories_screen/widgets/memories_grid_widget.dart';
 import '../../services/circles_repository.dart';
 import '../../services/comments_repository.dart';
 import '../../services/memory_edit_repository.dart';
@@ -16,6 +15,7 @@ import '../../services/memories_repository.dart';
 import '../../services/reactions_repository.dart';
 import '../../theme/app_theme.dart';
 import '../edit_memory_screen/edit_memory_screen.dart';
+import 'memory_photo_viewer_screen.dart';
 
 class MemoryDetailScreenV3 extends StatefulWidget {
   final MemoryItem? initialMemory;
@@ -34,6 +34,7 @@ class _MemoryDetailScreenV3State extends State<MemoryDetailScreenV3> {
   ReactionSummary _reactions = ReactionSummary.empty;
   bool _loading = true;
   bool _loadingSocial = true;
+  bool _addingToCircle = false;
 
   String get _id => widget.memoryId ?? widget.initialMemory?.id ?? '';
   bool get _isOwner => _memory != null &&
@@ -57,9 +58,10 @@ class _MemoryDetailScreenV3State extends State<MemoryDetailScreenV3> {
         _memory = memory;
         _loading = false;
       });
-      await _loadSocial();
-      await _loadPeople();
-    } catch (_) {
+      if (memory == null) return;
+      await Future.wait([_loadSocial(), _loadPeople()]);
+    } catch (e) {
+      debugPrint('MemoryDetailScreenV3: load failed: $e');
       if (mounted) setState(() => _loading = false);
     }
   }
@@ -94,13 +96,11 @@ class _MemoryDetailScreenV3State extends State<MemoryDetailScreenV3> {
     if (memory == null) return;
     final title = (memory.caption ?? '').split(' — ').first.trim();
     try {
-      await SharePlus.instance.share(
-        ShareParams(
-          uri: Uri.parse('https://sproutapp.in/memory/${memory.id}'),
-          title: title.isEmpty ? 'A memory on Sprout' : title,
-          subject: 'A memory on Sprout',
-        ),
-      );
+      await SharePlus.instance.share(ShareParams(
+        uri: Uri.parse('https://sproutapp.in/memory/${memory.id}'),
+        title: title.isEmpty ? 'A memory on Sprout' : title,
+        subject: 'A memory on Sprout',
+      ));
     } catch (_) {
       if (mounted) _snack("Couldn't open sharing. Please try again.");
     }
@@ -137,59 +137,113 @@ class _MemoryDetailScreenV3State extends State<MemoryDetailScreenV3> {
   }
 
   Future<void> _addToCircle() async {
-    if (!_isOwner) return;
-    final circles = await CirclesRepository.fetchMyCircles();
-    if (!mounted) return;
-    final selected = <String>{};
-    final result = await showModalBottomSheet<List<String>>(
-      context: context,
-      backgroundColor: AppTheme.surfaceDark,
-      isScrollControlled: true,
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (context, setSheetState) => SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Add to Circle', style: GoogleFonts.manrope(fontSize: 20, fontWeight: FontWeight.w800, color: AppTheme.textPrimary)),
-                const SizedBox(height: 12),
-                if (circles.isEmpty) const Text("You don't have any circles yet.", style: TextStyle(color: AppTheme.textMuted)),
-                ...circles.map((circle) => CheckboxListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(circle.name, style: const TextStyle(color: AppTheme.textPrimary)),
-                  activeColor: AppTheme.primaryGreen,
-                  value: selected.contains(circle.id),
-                  onChanged: (value) => setSheetState(() {
-                    if (value == true) selected.add(circle.id); else selected.remove(circle.id);
-                  }),
-                )),
-                const SizedBox(height: 8),
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: FilledButton(
-                    onPressed: selected.isEmpty ? null : () => Navigator.pop(sheetContext, selected.toList()),
-                    style: FilledButton.styleFrom(backgroundColor: AppTheme.primaryGreen, foregroundColor: Colors.black),
-                    child: const Text('Add to selected circles', style: TextStyle(fontWeight: FontWeight.w800)),
+    if (_addingToCircle) return;
+    setState(() => _addingToCircle = true);
+    try {
+      final circles = await CirclesRepository.fetchMyCircles();
+      if (!mounted) return;
+      setState(() => _addingToCircle = false);
+      final selected = <String>{};
+      final result = await showModalBottomSheet<List<String>>(
+        context: context,
+        backgroundColor: AppTheme.surfaceDark,
+        isScrollControlled: true,
+        builder: (sheetContext) => StatefulBuilder(
+          builder: (context, setSheetState) => SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Add to Circle', style: GoogleFonts.manrope(fontSize: 20, fontWeight: FontWeight.w800, color: AppTheme.textPrimary)),
+                  const SizedBox(height: 6),
+                  const Text('Choose one or more circles you follow.', style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
+                  const SizedBox(height: 12),
+                  if (circles.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 18),
+                      child: Text("You don't follow any circles yet.", style: TextStyle(color: AppTheme.textMuted)),
+                    )
+                  else
+                    Flexible(
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: circles.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 6),
+                        itemBuilder: (_, index) {
+                          final circle = circles[index];
+                          final isSelected = selected.contains(circle.id);
+                          return InkWell(
+                            borderRadius: BorderRadius.circular(14),
+                            onTap: () => setSheetState(() {
+                              if (isSelected) selected.remove(circle.id); else selected.add(circle.id);
+                            }),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: isSelected ? AppTheme.primaryGreen.withAlpha(28) : AppTheme.cardDark,
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(color: isSelected ? AppTheme.primaryGreen.withAlpha(150) : AppTheme.outline),
+                              ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 40,
+                                    height: 40,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: AppTheme.surfaceVariantDark,
+                                      image: circle.coverImageUrl?.isNotEmpty == true
+                                          ? DecorationImage(image: NetworkImage(circle.coverImageUrl!), fit: BoxFit.cover)
+                                          : null,
+                                    ),
+                                    child: circle.coverImageUrl?.isNotEmpty == true
+                                        ? null
+                                        : const Icon(Icons.groups_rounded, color: AppTheme.textMuted, size: 20),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(child: Text(circle.name, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w700))),
+                                  Checkbox(
+                                    value: isSelected,
+                                    activeColor: AppTheme.primaryGreen,
+                                    onChanged: (value) => setSheetState(() {
+                                      if (value == true) selected.add(circle.id); else selected.remove(circle.id);
+                                    }),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: FilledButton(
+                      onPressed: selected.isEmpty ? null : () => Navigator.pop(sheetContext, selected.toList()),
+                      style: FilledButton.styleFrom(backgroundColor: AppTheme.primaryGreen, foregroundColor: Colors.black),
+                      child: const Text('Add to selected circles', style: TextStyle(fontWeight: FontWeight.w800)),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
-      ),
-    );
-    if (result == null) return;
-    try {
+      );
+      if (result == null || result.isEmpty) return;
       for (final circleId in result) {
         await MemoryEditRepository.addToCircle(memoryId: _id, circleId: circleId);
       }
-      if (mounted) _snack('Memory added to ${result.length == 1 ? 'the circle' : '${result.length} circles'}. It is now private to those circles.');
-      await _load();
-    } catch (_) {
+      if (mounted) _snack(result.length == 1 ? 'Memory added to the circle.' : 'Memory added to ${result.length} circles.');
+    } catch (e) {
+      debugPrint('MemoryDetailScreenV3: add to circle failed: $e');
       if (mounted) _snack("Couldn't add this memory to the circle.");
+    } finally {
+      if (mounted) setState(() => _addingToCircle = false);
     }
   }
 
@@ -257,9 +311,7 @@ class _MemoryDetailScreenV3State extends State<MemoryDetailScreenV3> {
     controller.dispose();
   }
 
-  void _snack(String message) => ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
-  );
+  void _snack(String message) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), behavior: SnackBarBehavior.floating));
 
   String _title(Memory memory) {
     final value = (memory.caption ?? '').split(' — ').first.trim();
@@ -269,6 +321,18 @@ class _MemoryDetailScreenV3State extends State<MemoryDetailScreenV3> {
   String _story(Memory memory) {
     final parts = (memory.caption ?? '').split(' — ');
     return parts.length > 1 ? parts.sublist(1).join(' — ').trim() : '';
+  }
+
+  void _openPhotoViewer(int index) {
+    final urls = _memory?.mediaUrls ?? const <String>[];
+    if (urls.isEmpty) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => MemoryPhotoViewerScreen(imageUrls: urls, initialIndex: index),
+      ),
+    );
   }
 
   @override
@@ -300,12 +364,10 @@ class _MemoryDetailScreenV3State extends State<MemoryDetailScreenV3> {
             PopupMenuButton<String>(
               onSelected: (value) {
                 if (value == 'edit') _edit();
-                if (value == 'circle') _addToCircle();
                 if (value == 'delete') _delete();
               },
               itemBuilder: (_) => const [
                 PopupMenuItem(value: 'edit', child: Text('Edit Memory')),
-                PopupMenuItem(value: 'circle', child: Text('Add to Circle')),
                 PopupMenuItem(value: 'delete', child: Text('Delete Memory')),
               ],
             ),
@@ -313,14 +375,32 @@ class _MemoryDetailScreenV3State extends State<MemoryDetailScreenV3> {
       ),
       body: ListView(
         physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.only(bottom: 32),
+        padding: const EdgeInsets.only(bottom: 24),
         children: [
-          AspectRatio(
-            aspectRatio: 1,
-            child: CachedNetworkImage(
-              imageUrl: memory.imageUrl,
-              fit: BoxFit.cover,
-              errorWidget: (_, __, ___) => Container(color: AppTheme.surfaceVariantDark, child: const Icon(Icons.image_outlined, color: AppTheme.textDisabled, size: 48)),
+          GestureDetector(
+            onTap: () => _openPhotoViewer(0),
+            child: AspectRatio(
+              aspectRatio: 1,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  CachedNetworkImage(
+                    imageUrl: memory.imageUrl,
+                    fit: BoxFit.cover,
+                    errorWidget: (_, __, ___) => Container(color: AppTheme.surfaceVariantDark, child: const Icon(Icons.image_outlined, color: AppTheme.textDisabled, size: 48)),
+                  ),
+                  if (memory.mediaUrls.length > 1)
+                    Positioned(
+                      right: 14,
+                      bottom: 14,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(color: Colors.black.withAlpha(170), borderRadius: BorderRadius.circular(16)),
+                        child: Text('${memory.mediaUrls.length} photos', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
           Padding(
@@ -347,7 +427,7 @@ class _MemoryDetailScreenV3State extends State<MemoryDetailScreenV3> {
                   const SizedBox(height: 18),
                   Text(story, style: GoogleFonts.manrope(fontSize: 15, height: 1.5, color: AppTheme.textPrimary)),
                 ],
-                if (!publicMemory && _taggedPeople.isNotEmpty) ...[
+                if (_taggedPeople.isNotEmpty) ...[
                   const SizedBox(height: 20),
                   Text('People in this memory', style: GoogleFonts.manrope(fontSize: 16, fontWeight: FontWeight.w800, color: AppTheme.textPrimary)),
                   const SizedBox(height: 10),
@@ -355,9 +435,7 @@ class _MemoryDetailScreenV3State extends State<MemoryDetailScreenV3> {
                     spacing: 8,
                     runSpacing: 8,
                     children: _taggedPeople.map((person) => Chip(
-                      avatar: person.avatarUrl == null
-                          ? null
-                          : CircleAvatar(backgroundImage: NetworkImage(person.avatarUrl!)),
+                      avatar: person.avatarUrl == null ? null : CircleAvatar(backgroundImage: NetworkImage(person.avatarUrl!)),
                       label: Text(person.displayName),
                     )).toList(),
                   ),
@@ -376,6 +454,18 @@ class _MemoryDetailScreenV3State extends State<MemoryDetailScreenV3> {
                   const SizedBox(height: 10),
                   ..._comments.take(3).map((comment) => Padding(padding: const EdgeInsets.only(bottom: 10), child: Text(comment.body, style: const TextStyle(color: AppTheme.textMuted)))),
                 ],
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: OutlinedButton.icon(
+                    onPressed: _addingToCircle ? null : _addToCircle,
+                    icon: _addingToCircle
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryGreen))
+                        : const Icon(Icons.group_add_rounded, color: AppTheme.primaryGreen),
+                    label: Text('Add to Circle', style: GoogleFonts.manrope(color: AppTheme.primaryGreen, fontWeight: FontWeight.w800)),
+                  ),
+                ),
               ],
             ),
           ),
