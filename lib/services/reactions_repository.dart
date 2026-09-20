@@ -25,6 +25,22 @@ class ReactionsRepository {
     return ReactionSummary(counts: counts, myEmoji: myEmoji);
   }
 
+  static Future<Map<String, int>> fetchLikeCounts(List<String> memoryIds) async {
+    if (memoryIds.isEmpty) return {};
+    final rows = await _client
+        .from('memory_reactions')
+        .select('memory_id, emoji')
+        .inFilter('memory_id', memoryIds);
+    final counts = <String, int>{};
+    for (final row in rows as List) {
+      if (row['emoji'] != '❤️') continue;
+      final memoryId = row['memory_id'] as String?;
+      if (memoryId == null) continue;
+      counts[memoryId] = (counts[memoryId] ?? 0) + 1;
+    }
+    return counts;
+  }
+
   static Future<void> setReaction(String memoryId, String emoji) async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) throw StateError('Must be signed in to react');
