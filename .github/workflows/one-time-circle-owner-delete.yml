@@ -1,0 +1,63 @@
+name: One-time Circle Owner Delete Update
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    if: github.event.head_commit.message != 'Implement circle owner delete menu'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Update circle owner menu
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('lib/presentation/circle_detail_screen/circle_detail_screen.dart')
+          text = path.read_text()
+
+          old = """builder: (_) => _CircleMenuSheet(circleName: circle.name),"""
+          new = """builder: (_) => _CircleMenuSheet(\n        circleName: circle.name,\n        isOwner: SupabaseService.client.auth.currentUser?.id == circle.createdBy,\n      ),"""
+          assert old in text, 'Circle menu builder not found'
+          text = text.replace(old, new, 1)
+
+          old = """    } else if (action == 'leave') {\n      await _confirmLeaveCircle(circle);\n    }\n  }"""
+          new = """    } else if (action == 'leave') {\n      await _confirmLeaveCircle(circle);\n    } else if (action == 'delete') {\n      await _confirmDeleteCircle(circle);\n    }\n  }\n\n  Future<void> _confirmDeleteCircle(Circle circle) async {\n    final confirmed = await showDialog<bool>(\n      context: context,\n      builder: (dialogContext) => AlertDialog(\n        backgroundColor: AppTheme.surfaceDark,\n        title: Text(\n          'Delete ${circle.name}?',\n          style: GoogleFonts.manrope(\n            color: AppTheme.textPrimary,\n            fontWeight: FontWeight.w800,\n          ),\n        ),\n        content: Text(\n          'This will permanently delete the circle and its shared content for everyone. This action cannot be undone.',\n          style: GoogleFonts.manrope(color: AppTheme.textMuted, fontSize: 13),\n        ),\n        actions: [\n          TextButton(\n            onPressed: () => Navigator.pop(dialogContext, false),\n            child: Text(\n              'Cancel',\n              style: GoogleFonts.manrope(color: AppTheme.textMuted),\n            ),\n          ),\n          TextButton(\n            onPressed: () => Navigator.pop(dialogContext, true),\n            child: Text(\n              'Delete Circle',\n              style: GoogleFonts.manrope(\n                color: AppTheme.error,\n                fontWeight: FontWeight.w800,\n              ),\n            ),\n          ),\n        ],\n      ),\n    );\n\n    if (confirmed != true || !mounted) return;\n\n    final userId = CirclesRepository.currentUserId;\n    if (userId == null || userId != circle.createdBy) return;\n\n    try {\n      await SupabaseService.client\n          .from('circles')\n          .delete()\n          .eq('id', circle.id)\n          .eq('created_by', userId);\n      if (!mounted) return;\n      context.pop();\n    } catch (e, st) {\n      debugPrint('CircleDetailScreen: delete circle failed: $e\\n$st');\n      if (!mounted) return;\n      ScaffoldMessenger.of(context).showSnackBar(\n        SnackBar(\n          content: Text(\n            \"Couldn't delete this circle. Please try again.\",\n            style: GoogleFonts.manrope(color: Colors.white),\n          ),\n          backgroundColor: AppTheme.error,\n        ),\n      );\n    }\n  }"""
+          assert old in text, 'Menu action handler not found'
+          text = text.replace(old, new, 1)
+
+          old = """class _CircleMenuSheet extends StatelessWidget {\n  final String circleName;\n  const _CircleMenuSheet({required this.circleName});"""
+          new = """class _CircleMenuSheet extends StatelessWidget {\n  final String circleName;\n  final bool isOwner;\n\n  const _CircleMenuSheet({\n    required this.circleName,\n    required this.isOwner,\n  });"""
+          assert old in text, 'Menu sheet declaration not found'
+          text = text.replace(old, new, 1)
+
+          old = """          _MenuOption(\n            icon: Icons.logout_rounded,\n            label: 'Leave Circle',\n            color: AppTheme.error,\n            onTap: () => Navigator.pop(context, 'leave'),\n          ),"""
+          new = """          _MenuOption(\n            icon: isOwner ? Icons.delete_outline_rounded : Icons.logout_rounded,\n            label: isOwner ? 'Delete Circle' : 'Leave Circle',\n            color: AppTheme.error,\n            onTap: () => Navigator.pop(context, isOwner ? 'delete' : 'leave'),\n          ),"""
+          assert old in text, 'Leave Circle menu option not found'
+          text = text.replace(old, new, 1)
+
+          path.write_text(text)
+
+      - name: Verify Dart source changes
+        run: |
+          grep -q "isOwner: SupabaseService.client.auth.currentUser?.id == circle.createdBy" lib/presentation/circle_detail_screen/circle_detail_screen.dart
+          grep -q "label: isOwner ? 'Delete Circle' : 'Leave Circle'" lib/presentation/circle_detail_screen/circle_detail_screen.dart
+          grep -q "action == 'delete'" lib/presentation/circle_detail_screen/circle_detail_screen.dart
+
+      - name: Commit code change and remove temporary workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/presentation/circle_detail_screen/circle_detail_screen.dart
+          git rm .github/workflows/one-time-circle-owner-delete.yml
+          git commit -m "Implement circle owner delete menu"
+          git push
