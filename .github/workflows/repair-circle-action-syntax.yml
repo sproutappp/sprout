@@ -1,0 +1,84 @@
+name: Repair circle action syntax
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, 'Repair circle action syntax')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Repair malformed invite button
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('lib/widgets/circle_action_menu.dart')
+          s = p.read_text()
+          lines = s.splitlines()
+          out = []
+          replaced = False
+          for line in lines:
+              if 'SizedBox(width: double.infinity, child: ElevatedButton(onPressed: _selected.isEmpty || _sending ? null : _send' in line:
+                  out.extend([
+                      '          SizedBox(',
+                      '            width: double.infinity,',
+                      '            child: ElevatedButton(',
+                      '              onPressed: _selected.isEmpty || _sending ? null : _send,',
+                      '              style: ElevatedButton.styleFrom(',
+                      '                backgroundColor: AppTheme.primaryGreen,',
+                      '                foregroundColor: Colors.black,',
+                      '                padding: const EdgeInsets.symmetric(vertical: 15),',
+                      '                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),',
+                      '                elevation: 0,',
+                      '              ),',
+                      '              child: _sending',
+                      '                  ? const SizedBox(',
+                      '                      width: 20,',
+                      '                      height: 20,',
+                      '                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),',
+                      '                    )',
+                      '                  : Text(',
+                      "                      _selected.isEmpty ? 'Send Invite' : 'Send Invite (${_selected.length})',",
+                      '                      style: GoogleFonts.manrope(',
+                      '                        fontSize: 15,',
+                      '                        fontWeight: FontWeight.w700,',
+                      '                        color: Colors.black,',
+                      '                      ),',
+                      '                    ),',
+                      '            ),',
+                      '          ),',
+                  ])
+                  replaced = True
+              else:
+                  out.append(line)
+          if not replaced:
+              raise SystemExit('Malformed invite button line was not found; refusing to modify the file.')
+          p.write_text('\n'.join(out) + '\n')
+          PY
+
+      - name: Format changed Dart file
+        run: dart format lib/widgets/circle_action_menu.dart
+
+      - name: Verify syntax without Android build
+        run: dart analyze lib/widgets/circle_action_menu.dart
+
+      - name: Commit repair
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/widgets/circle_action_menu.dart
+          git diff --cached --quiet && { echo "No repair diff produced."; exit 1; }
+          git commit -m "Repair circle action syntax"
+          git push origin HEAD:main
