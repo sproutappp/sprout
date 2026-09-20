@@ -1,5 +1,10 @@
 import 'profile.dart';
 
+// Memory list/detail compatibility item is defined by the existing memory
+// grid widget. Re-exporting it here keeps existing model imports working
+// without maintaining a second, conflicting MemoryItem declaration.
+export '../presentation/memories_screen/widgets/memories_grid_widget.dart' show MemoryItem;
+
 class Memory {
   final String id;
   final String? circleId;
@@ -50,5 +55,3 @@ class Memory {
     );
   }
 }
-
-typedef MemoryItem = Memory;
