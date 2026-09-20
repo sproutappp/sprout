@@ -91,16 +91,22 @@ class _CreateMemoryScreenV2State extends State<CreateMemoryScreenV2> {
         _loadingPeople = false;
       });
     } catch (_) {
-      if (mounted) setState(() {
-        _people = [];
-        _loadingPeople = false;
-      });
+      if (mounted) {
+        setState(() {
+          _people = [];
+          _loadingPeople = false;
+        });
+      }
     }
   }
 
   Future<void> _pick(ImageSource source) async {
     try {
-      final picked = await _picker.pickImage(source: source, maxWidth: 2048, imageQuality: 88);
+      final picked = await _picker.pickImage(
+        source: source,
+        maxWidth: 2048,
+        imageQuality: 88,
+      );
       if (picked != null && mounted) {
         setState(() {
           _image = File(picked.path);
@@ -117,12 +123,18 @@ class _CreateMemoryScreenV2State extends State<CreateMemoryScreenV2> {
     try {
       if (!await Geolocator.isLocationServiceEnabled()) return;
       var permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) return;
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) return;
       final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium),
       );
-      final places = await _geocoding.placemarkFromCoordinates(position.latitude, position.longitude);
+      final places = await _geocoding.placemarkFromCoordinates(
+        position.latitude,
+        position.longitude,
+      );
       if (!mounted || places.isEmpty) return;
       final p = places.first;
       final parts = <String>[
@@ -130,7 +142,9 @@ class _CreateMemoryScreenV2State extends State<CreateMemoryScreenV2> {
         if ((p.locality ?? '').isNotEmpty) p.locality!,
         if ((p.administrativeArea ?? '').isNotEmpty) p.administrativeArea!,
       ];
-      if (_location.text.trim().isEmpty && parts.isNotEmpty) _location.text = parts.join(', ');
+      if (_location.text.trim().isEmpty && parts.isNotEmpty) {
+        _location.text = parts.join(', ');
+      }
     } catch (_) {
       // Location is optional; leave the field empty if reverse geocoding fails.
     } finally {
@@ -150,7 +164,9 @@ class _CreateMemoryScreenV2State extends State<CreateMemoryScreenV2> {
     }
     setState(() => _saving = true);
     try {
-      final combined = [_title.text.trim(), _caption.text.trim()].where((s) => s.isNotEmpty).join(' — ');
+      final combined = [_title.text.trim(), _caption.text.trim()]
+          .where((s) => s.isNotEmpty)
+          .join(' — ');
       final memory = await MemoriesRepository.addMemory(
         file: _image!,
         caption: combined.isEmpty ? null : combined,
@@ -175,6 +191,227 @@ class _CreateMemoryScreenV2State extends State<CreateMemoryScreenV2> {
     }
   }
 
+  Widget _circleSelector() {
+    if (_circles.isEmpty) {
+      return const Text(
+        "You don't have any circles yet — create one first.",
+        style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Choose a Circle',
+          style: GoogleFonts.manrope(
+            color: AppTheme.textPrimary,
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 40,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            itemCount: _circles.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            itemBuilder: (context, index) {
+              final circle = _circles[index];
+              final selected = _circleIds.contains(circle.id);
+              return GestureDetector(
+                onTap: () async {
+                  setState(() {
+                    if (selected) {
+                      _circleIds.remove(circle.id);
+                    } else {
+                      _circleIds.add(circle.id);
+                    }
+                  });
+                  await _loadPeople();
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 160),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: selected
+                        ? AppTheme.primaryGreen.withAlpha(28)
+                        : const Color(0xFF0D2116),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: selected
+                          ? AppTheme.primaryGreen.withAlpha(170)
+                          : AppTheme.outline,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _CircleCover(circle: circle),
+                      const SizedBox(width: 7),
+                      Text(
+                        circle.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.manrope(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: selected
+                              ? AppTheme.primaryGreen
+                              : AppTheme.textSecondary,
+                        ),
+                      ),
+                      if (selected) ...[
+                        const SizedBox(width: 5),
+                        const Icon(
+                          Icons.check_rounded,
+                          size: 14,
+                          color: AppTheme.primaryGreen,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _peopleTagSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Tag People',
+          style: GoogleFonts.manrope(
+            color: AppTheme.textPrimary,
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Tag people who are members of the selected circles.',
+          style: GoogleFonts.manrope(fontSize: 10, color: AppTheme.textMuted),
+        ),
+        const SizedBox(height: 10),
+        if (_loadingPeople)
+          const SizedBox(
+            height: 64,
+            child: Center(
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppTheme.primaryGreen,
+              ),
+            ),
+          )
+        else if (_people.isEmpty)
+          Text(
+            'No User in Circle',
+            style: GoogleFonts.manrope(fontSize: 11, color: AppTheme.textMuted),
+          )
+        else
+          SizedBox(
+            height: 86,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              itemCount: _people.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 12),
+              itemBuilder: (context, index) {
+                final person = _people[index];
+                final selected = _taggedPeople.contains(person.id);
+                return GestureDetector(
+                  onTap: () => setState(() {
+                    if (selected) {
+                      _taggedPeople.remove(person.id);
+                    } else {
+                      _taggedPeople.add(person.id);
+                    }
+                  }),
+                  child: SizedBox(
+                    width: 58,
+                    child: Column(
+                      children: [
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 160),
+                          padding: const EdgeInsets.all(2),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: selected
+                                  ? AppTheme.primaryGreen
+                                  : Colors.transparent,
+                              width: 2,
+                            ),
+                          ),
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              CircleAvatar(
+                                radius: 24,
+                                backgroundColor: AppTheme.surfaceVariantDark,
+                                backgroundImage: person.avatarUrl?.isNotEmpty == true
+                                    ? NetworkImage(person.avatarUrl!)
+                                    : null,
+                                child: person.avatarUrl?.isNotEmpty == true
+                                    ? null
+                                    : const Icon(
+                                        Icons.person_outline,
+                                        color: AppTheme.textDisabled,
+                                      ),
+                              ),
+                              if (selected)
+                                Positioned(
+                                  right: -2,
+                                  bottom: -1,
+                                  child: Container(
+                                    width: 18,
+                                    height: 18,
+                                    decoration: const BoxDecoration(
+                                      color: AppTheme.primaryGreen,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.check_rounded,
+                                      size: 12,
+                                      color: Colors.black,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 5),
+                        Text(
+                          person.displayName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.manrope(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w600,
+                            color: selected
+                                ? AppTheme.primaryGreen
+                                : AppTheme.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.of(context).padding.bottom;
@@ -183,16 +420,24 @@ class _CreateMemoryScreenV2State extends State<CreateMemoryScreenV2> {
       appBar: AppBar(
         backgroundColor: AppTheme.backgroundDark,
         foregroundColor: AppTheme.textPrimary,
-        title: Text('New Memory', style: GoogleFonts.manrope(fontWeight: FontWeight.w800)),
+        title: Text(
+          'New Memory',
+          style: GoogleFonts.manrope(fontWeight: FontWeight.w800),
+        ),
         actions: [
           TextButton(
             onPressed: _saving ? null : _save,
-            child: Text('Save', style: GoogleFonts.manrope(fontWeight: FontWeight.w800)),
+            child: Text(
+              'Save',
+              style: GoogleFonts.manrope(fontWeight: FontWeight.w800),
+            ),
           ),
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryGreen))
+          ? const Center(
+              child: CircularProgressIndicator(color: AppTheme.primaryGreen),
+            )
           : ListView(
               padding: EdgeInsets.fromLTRB(20, 8, 20, bottom + 30),
               children: [
@@ -204,11 +449,27 @@ class _CreateMemoryScreenV2State extends State<CreateMemoryScreenV2> {
                 const SizedBox(height: 18),
                 _locationField(),
                 const SizedBox(height: 24),
-                Text('Share with', style: GoogleFonts.manrope(color: AppTheme.textPrimary, fontSize: 14, fontWeight: FontWeight.w800)),
+                Text(
+                  'Share with',
+                  style: GoogleFonts.manrope(
+                    color: AppTheme.textPrimary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
                 SwitchListTile.adaptive(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Public', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w700)),
-                  subtitle: const Text('Anyone on Sprout can see this memory', style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
+                  title: const Text(
+                    'Public',
+                    style: TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  subtitle: const Text(
+                    'Anyone on Sprout can see this memory',
+                    style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
+                  ),
                   value: _public,
                   activeColor: AppTheme.primaryGreen,
                   onChanged: (v) async {
@@ -220,60 +481,44 @@ class _CreateMemoryScreenV2State extends State<CreateMemoryScreenV2> {
                   },
                 ),
                 if (!_public) ...[
-                  const SizedBox(height: 4),
-                  Text('Circles', style: GoogleFonts.manrope(color: AppTheme.textPrimary, fontSize: 13, fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 6),
-                  ..._circles.map((c) => CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    activeColor: AppTheme.primaryGreen,
-                    title: Text(c.name, style: const TextStyle(color: AppTheme.textPrimary)),
-                    value: _circleIds.contains(c.id),
-                    onChanged: (v) async {
-                      setState(() {
-                        if (v == true) {
-                          _circleIds.add(c.id);
-                        } else {
-                          _circleIds.remove(c.id);
-                        }
-                      });
-                      await _loadPeople();
-                    },
-                  )),
-                  const SizedBox(height: 14),
-                  Text('Tag People', style: GoogleFonts.manrope(color: AppTheme.textPrimary, fontSize: 13, fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 4),
-                  const Text('Tag people who are members of the selected circles.', style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
-                  const SizedBox(height: 6),
-                  if (_loadingPeople)
-                    const LinearProgressIndicator(minHeight: 2, color: AppTheme.primaryGreen)
-                  else
-                    ..._people.map((p) => CheckboxListTile(
-                      contentPadding: EdgeInsets.zero,
-                      activeColor: AppTheme.primaryGreen,
-                      title: Text(p.displayName, style: const TextStyle(color: AppTheme.textPrimary)),
-                      value: _taggedPeople.contains(p.id),
-                      onChanged: (v) => setState(() {
-                        if (v == true) {
-                          _taggedPeople.add(p.id);
-                        } else {
-                          _taggedPeople.remove(p.id);
-                        }
-                      }),
-                    )),
+                  const SizedBox(height: 8),
+                  _circleSelector(),
+                  const SizedBox(height: 22),
+                  _peopleTagSection(),
                 ],
                 if (_error != null) ...[
                   const SizedBox(height: 12),
-                  Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: AppTheme.error, fontSize: 12)),
+                  Text(
+                    _error!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: AppTheme.error,
+                      fontSize: 12,
+                    ),
+                  ),
                 ],
                 const SizedBox(height: 18),
                 SizedBox(
                   height: 52,
                   child: FilledButton(
                     onPressed: _saving ? null : _save,
-                    style: FilledButton.styleFrom(backgroundColor: AppTheme.primaryGreen, foregroundColor: Colors.black),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppTheme.primaryGreen,
+                      foregroundColor: Colors.black,
+                    ),
                     child: _saving
-                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
-                        : const Text('Save Memory', style: TextStyle(fontWeight: FontWeight.w800)),
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.black,
+                            ),
+                          )
+                        : const Text(
+                            'Save Memory',
+                            style: TextStyle(fontWeight: FontWeight.w800),
+                          ),
                   ),
                 ),
               ],
@@ -282,65 +527,156 @@ class _CreateMemoryScreenV2State extends State<CreateMemoryScreenV2> {
   }
 
   Widget _photoPicker() => Container(
-    height: 250,
-    decoration: BoxDecoration(color: AppTheme.cardDark, borderRadius: BorderRadius.circular(20), border: Border.all(color: AppTheme.outline)),
-    clipBehavior: Clip.antiAlias,
-    child: _image == null
-        ? Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.add_a_photo_outlined, size: 42, color: AppTheme.primaryGreen),
-              const SizedBox(height: 12),
-              const Text('Add a photo', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w700)),
-              const SizedBox(height: 14),
-              Wrap(
-                spacing: 10,
+        height: 250,
+        decoration: BoxDecoration(
+          color: AppTheme.cardDark,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppTheme.outline),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: _image == null
+            ? Column(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  OutlinedButton.icon(onPressed: () => _pick(ImageSource.camera), icon: const Icon(Icons.camera_alt_outlined), label: const Text('Camera')),
-                  OutlinedButton.icon(onPressed: () => _pick(ImageSource.gallery), icon: const Icon(Icons.photo_library_outlined), label: const Text('Gallery')),
+                  const Icon(
+                    Icons.add_a_photo_outlined,
+                    size: 42,
+                    color: AppTheme.primaryGreen,
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Add a photo',
+                    style: TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Wrap(
+                    spacing: 10,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: () => _pick(ImageSource.camera),
+                        icon: const Icon(Icons.camera_alt_outlined),
+                        label: const Text('Camera'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: () => _pick(ImageSource.gallery),
+                        icon: const Icon(Icons.photo_library_outlined),
+                        label: const Text('Gallery'),
+                      ),
+                    ],
+                  ),
+                ],
+              )
+            : Stack(
+                fit: StackFit.expand,
+                children: [
+                  Image.file(_image!, fit: BoxFit.cover),
+                  Positioned(
+                    top: 12,
+                    right: 12,
+                    child: IconButton.filled(
+                      onPressed: () => setState(() => _image = null),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ),
                 ],
               ),
-            ],
-          )
-        : Stack(
-            fit: StackFit.expand,
-            children: [
-              Image.file(_image!, fit: BoxFit.cover),
-              Positioned(top: 12, right: 12, child: IconButton.filled(onPressed: () => setState(() => _image = null), icon: const Icon(Icons.close_rounded))),
-            ],
-          ),
-  );
+      );
 
   Widget _locationField() => TextField(
-    controller: _location,
-    style: const TextStyle(color: AppTheme.textPrimary),
-    decoration: InputDecoration(
-      labelText: 'Location',
-      labelStyle: const TextStyle(color: AppTheme.textMuted),
-      hintText: _locating ? 'Finding location...' : 'Optional location',
-      hintStyle: const TextStyle(color: AppTheme.textDisabled),
-      prefixIcon: const Icon(Icons.location_on_outlined, color: AppTheme.textMuted),
-      suffixIcon: IconButton(onPressed: _locating ? null : _locate, icon: const Icon(Icons.my_location_rounded, color: AppTheme.primaryGreen)),
-      filled: true,
-      fillColor: AppTheme.cardDark,
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: AppTheme.outline)),
-    ),
-  );
+        controller: _location,
+        style: const TextStyle(color: AppTheme.textPrimary),
+        decoration: InputDecoration(
+          labelText: 'Location',
+          labelStyle: const TextStyle(color: AppTheme.textMuted),
+          hintText: _locating ? 'Finding location...' : 'Optional location',
+          hintStyle: const TextStyle(color: AppTheme.textDisabled),
+          prefixIcon: const Icon(
+            Icons.location_on_outlined,
+            color: AppTheme.textMuted,
+          ),
+          suffixIcon: IconButton(
+            onPressed: _locating ? null : _locate,
+            icon: const Icon(
+              Icons.my_location_rounded,
+              color: AppTheme.primaryGreen,
+            ),
+          ),
+          filled: true,
+          fillColor: AppTheme.cardDark,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: const BorderSide(color: AppTheme.outline),
+          ),
+        ),
+      );
 
-  Widget _field(String label, TextEditingController controller, String hint, {int maxLines = 1}) => TextField(
-    controller: controller,
-    maxLines: maxLines,
-    style: const TextStyle(color: AppTheme.textPrimary),
-    decoration: InputDecoration(
-      labelText: label,
-      labelStyle: const TextStyle(color: AppTheme.textMuted),
-      hintText: hint,
-      hintStyle: const TextStyle(color: AppTheme.textDisabled),
-      filled: true,
-      fillColor: AppTheme.cardDark,
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: AppTheme.outline)),
-      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: AppTheme.outline)),
-      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: AppTheme.primaryGreen)),
-    ),
-  );
+  Widget _field(
+    String label,
+    TextEditingController controller,
+    String hint, {
+    int maxLines = 1,
+  }) => TextField(
+        controller: controller,
+        maxLines: maxLines,
+        style: const TextStyle(color: AppTheme.textPrimary),
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: const TextStyle(color: AppTheme.textMuted),
+          hintText: hint,
+          hintStyle: const TextStyle(color: AppTheme.textDisabled),
+          filled: true,
+          fillColor: AppTheme.cardDark,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: const BorderSide(color: AppTheme.outline),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: const BorderSide(color: AppTheme.outline),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: const BorderSide(color: AppTheme.primaryGreen),
+          ),
+        ),
+      );
+}
+
+class _CircleCover extends StatelessWidget {
+  final Circle circle;
+
+  const _CircleCover({required this.circle});
+
+  @override
+  Widget build(BuildContext context) {
+    final url = circle.coverImageUrl?.trim();
+    return Container(
+      width: 24,
+      height: 24,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: AppTheme.surfaceVariantDark,
+        border: Border.all(color: AppTheme.outline),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: url == null || url.isEmpty
+          ? const Icon(
+              Icons.groups_rounded,
+              size: 14,
+              color: AppTheme.textMuted,
+            )
+          : Image.network(
+              url,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => const Icon(
+                Icons.groups_rounded,
+                size: 14,
+                color: AppTheme.textMuted,
+              ),
+            ),
+    );
+  }
 }
