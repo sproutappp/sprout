@@ -1,7 +1,8 @@
 name: One-time fix circle action syntax
 
 on:
-  workflow_dispatch:
+  push:
+    branches: [main]
 
 permissions:
   contents: write
@@ -30,14 +31,16 @@ jobs:
                       lines[i] = fixed
                       changed = True
           if not changed:
-              raise SystemExit('Target invite-button line was not found or is already fixed.')
+              print('Circle action syntax is already fixed.')
+              raise SystemExit(0)
           path.write_text(''.join(lines))
           PY
 
-      - name: Commit and push
+      - name: Commit fix and remove temporary workflow
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add lib/widgets/circle_action_menu.dart
-          git commit -m "Fix circle action menu syntax" || exit 0
+          git rm .github/workflows/one-time-fix-circle-action-syntax-2.yml
+          git commit -m "Fix circle action menu syntax"
           git push
