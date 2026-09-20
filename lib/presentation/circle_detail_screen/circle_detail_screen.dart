@@ -129,7 +129,10 @@ class _CircleDetailScreenState extends State<CircleDetailScreen> {
     final action = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (_) => _CircleMenuSheet(circleName: circle.name),
+      builder: (_) => _CircleMenuSheet(
+        circleName: circle.name,
+        isOwner: SupabaseService.client.auth.currentUser?.id == circle.createdBy,
+      ),
     );
     if (!mounted || action == null) return;
 
@@ -147,6 +150,74 @@ class _CircleDetailScreenState extends State<CircleDetailScreen> {
       await _openNotificationsDialog();
     } else if (action == 'leave') {
       await _confirmLeaveCircle(circle);
+    } else if (action == 'delete') {
+      await _confirmDeleteCircle(circle);
+    }
+  }
+
+  Future<void> _confirmDeleteCircle(Circle circle) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppTheme.surfaceDark,
+        title: Text(
+          'Delete ${circle.name}?',
+          style: GoogleFonts.manrope(
+            color: AppTheme.textPrimary,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        content: Text(
+          'This will permanently delete the circle and its shared content for everyone. This action cannot be undone.',
+          style: GoogleFonts.manrope(color: AppTheme.textMuted, fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.manrope(color: AppTheme.textMuted),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(
+              'Delete Circle',
+              style: GoogleFonts.manrope(
+                color: AppTheme.error,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    final userId = CirclesRepository.currentUserId;
+    if (userId == null || userId != circle.createdBy) return;
+
+    try {
+      await SupabaseService.client
+          .from('circles')
+          .delete()
+          .eq('id', circle.id)
+          .eq('created_by', userId);
+      if (!mounted) return;
+      context.pop();
+    } catch (e, st) {
+      debugPrint('CircleDetailScreen: delete circle failed: $e\n$st');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            "Couldn't delete this circle. Please try again.",
+            style: GoogleFonts.manrope(color: Colors.white),
+          ),
+          backgroundColor: AppTheme.error,
+        ),
+      );
     }
   }
 
@@ -972,7 +1043,12 @@ class _MembersSheet extends StatelessWidget {
 
 class _CircleMenuSheet extends StatelessWidget {
   final String circleName;
-  const _CircleMenuSheet({required this.circleName});
+  final bool isOwner;
+
+  const _CircleMenuSheet({
+    required this.circleName,
+    required this.isOwner,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1015,10 +1091,10 @@ class _CircleMenuSheet extends StatelessWidget {
             onTap: () => Navigator.pop(context, 'notifications'),
           ),
           _MenuOption(
-            icon: Icons.logout_rounded,
-            label: 'Leave Circle',
+            icon: isOwner ? Icons.delete_outline_rounded : Icons.logout_rounded,
+            label: isOwner ? 'Delete Circle' : 'Leave Circle',
             color: AppTheme.error,
-            onTap: () => Navigator.pop(context, 'leave'),
+            onTap: () => Navigator.pop(context, isOwner ? 'delete' : 'leave'),
           ),
         ],
       ),
