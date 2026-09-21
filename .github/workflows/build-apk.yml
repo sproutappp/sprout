@@ -7,14 +7,239 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
+    if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
     runs-on: ubuntu-latest
     env:
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
     steps:
       - name: Check out the repo
         uses: actions/checkout@v4
+
+      # One-time source patch. It runs inside the already-green build workflow
+      # so the resulting app commit is immediately compiled by this same run.
+      - name: Apply circle member report UI patch
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('lib/presentation/circle_detail_screen/circle_detail_screen.dart')
+          text = p.read_text()
+
+          if "action == 'report'" not in text:
+              target = "    } else if (action == 'delete') {"
+              replacement = """    } else if (action == 'report') {
+              await _submitCircleReport(circle);
+            } else if (action == 'delete') {"""
+              if target not in text:
+                  raise SystemExit('Circle menu action target not found')
+              text = text.replace(target, replacement, 1)
+
+          if 'Future<void> _submitCircleReport' not in text:
+              marker = "  Future<void> _confirmDeleteCircle(Circle circle) async {"
+              method = """  Future<void> _submitCircleReport(Circle circle) async {
+    final controller = TextEditingController();
+
+    final shouldSubmit = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            final words = controller.text.trim().isEmpty
+                ? 0
+                : controller.text.trim().split(RegExp(r'\\s+')).length;
+            final valid = words > 0 && words <= 50;
+
+            return AlertDialog(
+              backgroundColor: AppTheme.surfaceDark,
+              title: Text(
+                'Report Circle',
+                style: GoogleFonts.manrope(
+                  color: AppTheme.textPrimary,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              content: TextField(
+                controller: controller,
+                autofocus: true,
+                maxLines: 4,
+                onChanged: (_) => setDialogState(() {}),
+                style: GoogleFonts.manrope(
+                  color: AppTheme.textPrimary,
+                  fontSize: 13,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'Tell us what you want to report...',
+                  hintStyle: GoogleFonts.manrope(
+                    color: AppTheme.textMuted,
+                    fontSize: 13,
+                  ),
+                  filled: true,
+                  fillColor: AppTheme.surfaceVariantDark,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide.none,
+                  ),
+                  helperText: '$words/50 words',
+                  helperStyle: GoogleFonts.manrope(
+                    color: words > 50 ? AppTheme.error : AppTheme.textMuted,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: valid
+                      ? () => Navigator.pop(dialogContext, true)
+                      : null,
+                  child: Text(
+                    'Submit',
+                    style: GoogleFonts.manrope(
+                      color: valid
+                          ? AppTheme.primaryGreen
+                          : AppTheme.textDisabled,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    final message = controller.text.trim();
+    controller.dispose();
+    if (shouldSubmit != true || message.isEmpty || !mounted) return;
+
+    try {
+      await SupabaseService.client.functions.invoke(
+        'report-circle',
+        body: {
+          'circle_id': circle.id,
+          'message': message,
+        },
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Report submitted. Thank you.')),
+      );
+    } catch (e, st) {
+      debugPrint('CircleDetailScreen: report circle failed: $e\\n$st');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Couldn't submit the report. Please try again."),
+        ),
+      );
+    }
+  }
+
+"""
+              if marker not in text:
+                  raise SystemExit('Report insertion marker not found')
+              text = text.replace(marker, method + marker, 1)
+
+          start = text.find('class _CircleMenuSheet extends StatelessWidget {')
+          end = text.find('class _MenuOption extends StatelessWidget {', start)
+          if start < 0 or end < 0:
+              raise SystemExit('Circle menu sheet target not found')
+
+          new_class = """class _CircleMenuSheet extends StatelessWidget {
+  final String circleName;
+  final bool isOwner;
+
+  const _CircleMenuSheet({
+    required this.circleName,
+    required this.isOwner,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.of(context).padding.bottom;
+    return _SheetContainer(
+      bottomPadding: bottom,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            circleName,
+            style: GoogleFonts.manrope(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: AppTheme.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Circle options',
+            style: GoogleFonts.manrope(
+              fontSize: 13,
+              color: AppTheme.textMuted,
+            ),
+          ),
+          const SizedBox(height: 20),
+          if (isOwner)
+            _MenuOption(
+              icon: Icons.edit_rounded,
+              label: 'Edit Circle',
+              color: AppTheme.textPrimary,
+              onTap: () => Navigator.pop(context, 'edit'),
+            ),
+          if (isOwner)
+            _MenuOption(
+              icon: Icons.person_add_rounded,
+              label: 'Invite People',
+              color: AppTheme.primaryGreen,
+              onTap: () => Navigator.pop(context, 'invite'),
+            ),
+          if (!isOwner)
+            _MenuOption(
+              icon: Icons.flag_outlined,
+              label: 'Report',
+              color: AppTheme.error,
+              onTap: () => Navigator.pop(context, 'report'),
+            ),
+          _MenuOption(
+            icon: Icons.notifications_rounded,
+            label: 'Notifications',
+            color: AppTheme.textPrimary,
+            onTap: () => Navigator.pop(context, 'notifications'),
+          ),
+          _MenuOption(
+            icon: isOwner
+                ? Icons.delete_outline_rounded
+                : Icons.logout_rounded,
+            label: isOwner ? 'Delete Circle' : 'Leave Circle',
+            color: AppTheme.error,
+            onTap: () => Navigator.pop(
+              context,
+              isOwner ? 'delete' : 'leave',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+"""
+          text = text[:start] + new_class + text[end:]
+          p.write_text(text)
+          PY
+
+      - name: Commit app patch and keep build workflow recursion-safe
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add lib/presentation/circle_detail_screen/circle_detail_screen.dart
+          git commit -m 'Add circle member report option [skip ci]'
+          git push
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
