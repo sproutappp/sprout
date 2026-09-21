@@ -5,8 +5,10 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../models/memory.dart';
 import '../../routes/app_routes.dart';
+import '../../services/comments_repository.dart';
 import '../../services/discover_refresh_bus.dart';
 import '../../services/memories_repository.dart';
+import '../../services/reactions_repository.dart';
 import '../../theme/app_theme.dart';
 import '../memories_screen/widgets/memories_grid_widget.dart'
     show MemoryItem, MemoryPrivacy, MemoryType;
@@ -22,6 +24,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   bool _isLoading = true;
   bool _loadFailed = false;
   List<Memory> _memories = [];
+  Map<String, int> _likeCounts = {};
+  Map<String, int> _commentCounts = {};
 
   @override
   void initState() {
@@ -51,8 +55,34 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     try {
       final memories = await MemoriesRepository.fetchPublicMemories();
       if (!mounted) return;
+
+      final results = await Future.wait(
+        memories.map((memory) async {
+          try {
+            final reactionSummary = await ReactionsRepository.fetchSummary(memory.id);
+            final comments = await CommentsRepository.fetchForMemory(memory.id);
+            return (
+              id: memory.id,
+              likes: reactionSummary.totalCount,
+              comments: comments.length,
+            );
+          } catch (_) {
+            return (id: memory.id, likes: 0, comments: 0);
+          }
+        }),
+      );
+
+      final likeCounts = <String, int>{};
+      final commentCounts = <String, int>{};
+      for (final result in results) {
+        likeCounts[result.id] = result.likes;
+        commentCounts[result.id] = result.comments;
+      }
+
       setState(() {
         _memories = memories;
+        _likeCounts = likeCounts;
+        _commentCounts = commentCounts;
         _isLoading = false;
       });
     } catch (e, st) {
@@ -216,6 +246,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                               padding: const EdgeInsets.only(bottom: 16),
                               child: _PublicMemoryCard(
                                 memory: memory,
+                                likeCount: _likeCounts[memory.id] ?? 0,
+                                commentCount: _commentCounts[memory.id] ?? 0,
                                 onTap: () => _openMemory(memory),
                               ),
                             );
@@ -238,9 +270,16 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
 
 class _PublicMemoryCard extends StatelessWidget {
   final Memory memory;
+  final int likeCount;
+  final int commentCount;
   final VoidCallback onTap;
 
-  const _PublicMemoryCard({required this.memory, required this.onTap});
+  const _PublicMemoryCard({
+    required this.memory,
+    required this.likeCount,
+    required this.commentCount,
+    required this.onTap,
+  });
 
   String _timeAgo() {
     final difference = DateTime.now().difference(memory.createdAt);
@@ -374,7 +413,25 @@ class _PublicMemoryCard extends StatelessWidget {
                     children: [
                       Icon(Icons.favorite_border_rounded, size: 15, color: AppTheme.textMuted),
                       const SizedBox(width: 4),
+                      Text(
+                        '$likeCount',
+                        style: GoogleFonts.manrope(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.textMuted,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
                       Icon(Icons.chat_bubble_outline_rounded, size: 14, color: AppTheme.textMuted),
+                      const SizedBox(width: 4),
+                      Text(
+                        '$commentCount',
+                        style: GoogleFonts.manrope(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.textMuted,
+                        ),
+                      ),
                       const Spacer(),
                       Icon(Icons.arrow_forward_rounded, size: 16, color: AppTheme.primaryGreen),
                     ],
