@@ -1,0 +1,243 @@
+name: Apply memory photo carousel patch
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, 'Add Instagram-style memory photo carousel') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch memory detail hero
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('lib/presentation/memory_detail_screen/memory_detail_screen_v3.dart')
+          text = path.read_text()
+
+          start = text.find('class _MemoryHero extends StatelessWidget {')
+          end = text.find('class _HeroButton extends StatelessWidget {', start)
+          if start < 0 or end < 0:
+              raise SystemExit('Could not find the expected _MemoryHero block; refusing to modify anything.')
+
+          new_block = r'''class _MemoryHero extends StatefulWidget {
+            final Memory memory;
+            final String title;
+            final VoidCallback onBack;
+            final VoidCallback onShare;
+            final VoidCallback? onMenu;
+            final ValueChanged<int> onPhotoTap;
+
+            const _MemoryHero({
+              required this.memory,
+              required this.title,
+              required this.onBack,
+              required this.onShare,
+              required this.onMenu,
+              required this.onPhotoTap,
+            });
+
+            @override
+            State<_MemoryHero> createState() => _MemoryHeroState();
+          }
+
+          class _MemoryHeroState extends State<_MemoryHero> {
+            late final PageController _pageController;
+            int _currentIndex = 0;
+
+            @override
+            void initState() {
+              super.initState();
+              _pageController = PageController();
+            }
+
+            @override
+            void dispose() {
+              _pageController.dispose();
+              super.dispose();
+            }
+
+            void _goToNextPhoto() {
+              final total = widget.memory.mediaUrls.length;
+              if (total < 2 || _currentIndex >= total - 1) return;
+              _pageController.nextPage(
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeOut,
+              );
+            }
+
+            @override
+            Widget build(BuildContext context) {
+              final width = MediaQuery.of(context).size.width;
+              final height = (width * 0.98).clamp(230.0, 390.0).toDouble();
+              final urls = widget.memory.mediaUrls;
+              final total = urls.length;
+
+              return SizedBox(
+                width: width,
+                height: height,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    PageView.builder(
+                      controller: _pageController,
+                      itemCount: total > 0 ? total : 1,
+                      physics: const BouncingScrollPhysics(),
+                      onPageChanged: (index) => setState(() => _currentIndex = index),
+                      itemBuilder: (_, index) => GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => widget.onPhotoTap(index),
+                        child: total > 0
+                            ? CachedNetworkImage(
+                                imageUrl: urls[index],
+                                fit: BoxFit.cover,
+                                errorWidget: (_, __, ___) => Container(
+                                  color: AppTheme.surfaceVariantDark,
+                                  child: const Icon(
+                                    Icons.image_outlined,
+                                    color: AppTheme.textDisabled,
+                                    size: 42,
+                                  ),
+                                ),
+                              )
+                            : Container(
+                                color: AppTheme.surfaceVariantDark,
+                                child: const Icon(
+                                  Icons.image_outlined,
+                                  color: AppTheme.textDisabled,
+                                  size: 42,
+                                ),
+                              ),
+                      ),
+                    ),
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              stops: const [0.0, 0.16, 0.78, 1.0],
+                              colors: [
+                                Colors.black.withAlpha(95),
+                                Colors.transparent,
+                                Colors.transparent,
+                                AppTheme.backgroundDark.withAlpha(220),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      top: 10,
+                      left: 10,
+                      right: 10,
+                      child: Row(
+                        children: [
+                          _HeroButton(
+                            icon: Icons.arrow_back_ios_new_rounded,
+                            onTap: widget.onBack,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              widget.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.manrope(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          _HeroButton(
+                            icon: Icons.more_horiz_rounded,
+                            onTap: widget.onMenu ?? widget.onShare,
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (total > 1 && _currentIndex < total - 1)
+                      Positioned(
+                        right: 12,
+                        top: height / 2 - 19,
+                        child: GestureDetector(
+                          onTap: _goToNextPhoto,
+                          child: Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              color: Colors.black.withAlpha(145),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white.withAlpha(70)),
+                            ),
+                            child: const Icon(
+                              Icons.chevron_right_rounded,
+                              size: 25,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                    if (total > 1)
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 12,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: List.generate(total, (index) {
+                            final active = index == _currentIndex;
+                            return AnimatedContainer(
+                              duration: const Duration(milliseconds: 150),
+                              width: active ? 8 : 6,
+                              height: active ? 8 : 6,
+                              margin: const EdgeInsets.symmetric(horizontal: 3),
+                              decoration: BoxDecoration(
+                                color: active
+                                    ? Colors.white
+                                    : Colors.white.withAlpha(125),
+                                shape: BoxShape.circle,
+                              ),
+                            );
+                          }),
+                        ),
+                      ),
+                  ],
+                ),
+              );
+            }
+          }
+
+          '''
+
+          path.write_text(text[:start] + new_block + text[end:])
+          PY
+
+      - name: Verify only the requested source changed
+        run: |
+          git diff --check
+          git diff -- lib/presentation/memory_detail_screen/memory_detail_screen_v3.dart
+          test -z "$(git status --porcelain --untracked-files=no | grep -v '^ M lib/presentation/memory_detail_screen/memory_detail_screen_v3.dart$' || true)"
+
+      - name: Commit patch and remove one-time workflow
+        run: |
+          rm -f .github/workflows/apply-memory-photo-carousel.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/presentation/memory_detail_screen/memory_detail_screen_v3.dart .github/workflows/apply-memory-photo-carousel.yml
+          git commit -m "Add Instagram-style memory photo carousel"
+          git push origin main
