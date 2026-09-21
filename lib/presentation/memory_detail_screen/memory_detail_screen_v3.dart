@@ -587,7 +587,7 @@ class _MemoryDetailScreenV3State extends State<MemoryDetailScreenV3> {
                 onBack: () => Navigator.pop(context),
                 onShare: _share,
                 onMenu: _isOwner ? _showOwnerMenu : null,
-                onTap: () => _openPhotoViewer(0),
+                onPhotoTap: (index) => _openPhotoViewer(index),
               ),
             ),
             SliverToBoxAdapter(
