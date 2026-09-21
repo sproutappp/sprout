@@ -56,28 +56,23 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       final memories = await MemoriesRepository.fetchPublicMemories();
       if (!mounted) return;
 
-      final results = await Future.wait(
+      final memoryIds = memories.map((memory) => memory.id).toList();
+      final likeCountsFuture = ReactionsRepository.fetchLikeCounts(memoryIds);
+      final commentResultsFuture = Future.wait(
         memories.map((memory) async {
           try {
-            final reactionSummary = await ReactionsRepository.fetchSummary(memory.id);
-            final comments = await CommentsRepository.fetchForMemory(memory.id);
-            return (
-              id: memory.id,
-              likes: reactionSummary.totalCount,
-              comments: comments.length,
-            );
+            return MapEntry(memory.id, (await CommentsRepository.fetchForMemory(memory.id)).length);
           } catch (_) {
-            return (id: memory.id, likes: 0, comments: 0);
+            return MapEntry(memory.id, 0);
           }
         }),
       );
 
-      final likeCounts = <String, int>{};
-      final commentCounts = <String, int>{};
-      for (final result in results) {
-        likeCounts[result.id] = result.likes;
-        commentCounts[result.id] = result.comments;
-      }
+      final likeCounts = await likeCountsFuture;
+      final commentResults = await commentResultsFuture;
+      final commentCounts = <String, int>{
+        for (final entry in commentResults) entry.key: entry.value,
+      };
 
       setState(() {
         _memories = memories;
