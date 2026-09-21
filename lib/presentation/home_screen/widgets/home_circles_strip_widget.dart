@@ -36,8 +36,7 @@ class _CircleModel {
     id: circle.id,
     name: circle.name,
     sourceCircle: circle,
-    recentActivity:
-        '${circle.memberCount} member${circle.memberCount == 1 ? '' : 's'}',
+    recentActivity: '${circle.memoryCount} memories',
     avatarUrl: circle.coverImageUrl ??
         'https://images.pexels.com/photos/1128318/pexels-photo-1128318.jpeg?w=200',
     semanticLabel: '${circle.name} circle cover photo',
