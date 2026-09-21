@@ -2,6 +2,7 @@ name: Build APK
 
 # Runs automatically on every push to main, and can also be triggered
 # manually from the Actions tab.
+# CI source validation trigger for app UI changes.
 on:
   push:
     branches: [main]
@@ -41,7 +42,7 @@ jobs:
       # GitHub Actions secrets.
       - name: Write env.json from secrets
         run: |
-          echo '{"SUPABASE_URL":"${{ secrets.SUPABASE_URL }}","SUPABASE_ANON_KEY":"${{ secrets.SUPABASE_ANON_KEY }}"}' > env.json
+          echo '{"SUPABASE_URL":"${{ secrets.SUPABASE_URL }}","SUPABASE_ANON_KEY":"${{ secrets.SUPABASE_ANON_KEY}"}' > env.json
 
       # Release signing (upload key).
       - name: Reconstruct upload keystore from secret
