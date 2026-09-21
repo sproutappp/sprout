@@ -33,7 +33,7 @@ jobs:
                   raise SystemExit('Circle menu action target not found')
               text = text.replace(target, replacement, 1)
 
-          if '_submitCircleReport' not in text:
+          if 'Future<void> _submitCircleReport' not in text:
               marker = "  Future<void> _confirmDeleteCircle(Circle circle) async {"
               method = """  Future<void> _submitCircleReport(Circle circle) async {
     final controller = TextEditingController();
