@@ -1,4 +1,4 @@
-name: Fix circle role menu
+name: Add circle member report UI
 
 on:
   push:
@@ -16,7 +16,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Patch circle detail role menu
+      - name: Patch member report UI
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -24,170 +24,218 @@ jobs:
           path = Path('lib/presentation/circle_detail_screen/circle_detail_screen.dart')
           text = path.read_text()
 
-          old = """      builder: (_) => _CircleMenuSheet(circleName: circle.name),"""
-          new = """      builder: (_) => _CircleMenuSheet(
-            circleName: circle.name,
-            isAdmin: circle.createdBy == CirclesRepository.currentUserId,
-          ),"""
-          if old not in text:
-              raise SystemExit('Menu builder target not found')
-          text = text.replace(old, new, 1)
+          if "action == 'report'" not in text:
+              target = "    } else if (action == 'delete') {"
+              replacement = """    } else if (action == 'report') {
+              await _submitCircleReport(circle);
+            } else if (action == 'delete') {"""
+              if target not in text:
+                  raise SystemExit('Circle menu action target not found')
+              text = text.replace(target, replacement, 1)
 
-          old = """    } else if (action == 'leave') {
-          await _confirmLeaveCircle(circle);
-        }
-      }
-"""
-          new = """    } else if (action == 'leave') {
-          await _confirmLeaveCircle(circle);
-        } else if (action == 'delete') {
-          final confirmed = await showDialog<bool>(
-            context: context,
-            builder: (dialogContext) => AlertDialog(
+          if '_submitCircleReport' not in text:
+              marker = "  Future<void> _confirmDeleteCircle(Circle circle) async {"
+              method = """  Future<void> _submitCircleReport(Circle circle) async {
+    final controller = TextEditingController();
+
+    final shouldSubmit = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            final words = controller.text.trim().isEmpty
+                ? 0
+                : controller.text.trim().split(RegExp(r'\\s+')).length;
+            final valid = words > 0 && words <= 50;
+
+            return AlertDialog(
               backgroundColor: AppTheme.surfaceDark,
               title: Text(
-                'Delete ${circle.name}?',
+                'Report Circle',
                 style: GoogleFonts.manrope(
                   color: AppTheme.textPrimary,
                   fontWeight: FontWeight.w800,
                 ),
               ),
-              content: Text(
-                'This permanently deletes the circle and its shared memories. This cannot be undone.',
+              content: TextField(
+                controller: controller,
+                autofocus: true,
+                maxLines: 4,
+                onChanged: (_) => setDialogState(() {}),
                 style: GoogleFonts.manrope(
-                  color: AppTheme.textMuted,
+                  color: AppTheme.textPrimary,
                   fontSize: 13,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'Tell us what you want to report...',
+                  hintStyle: GoogleFonts.manrope(
+                    color: AppTheme.textMuted,
+                    fontSize: 13,
+                  ),
+                  filled: true,
+                  fillColor: AppTheme.surfaceVariantDark,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide.none,
+                  ),
+                  helperText: '$words/50 words',
+                  helperStyle: GoogleFonts.manrope(
+                    color: words > 50 ? AppTheme.error : AppTheme.textMuted,
+                    fontSize: 11,
+                  ),
                 ),
               ),
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.pop(dialogContext, false),
+                  onPressed: valid
+                      ? () => Navigator.pop(dialogContext, true)
+                      : null,
                   child: Text(
-                    'Cancel',
-                    style: GoogleFonts.manrope(color: AppTheme.textMuted),
-                  ),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.pop(dialogContext, true),
-                  child: Text(
-                    'Delete Circle',
+                    'Submit',
                     style: GoogleFonts.manrope(
-                      color: AppTheme.error,
+                      color: valid
+                          ? AppTheme.primaryGreen
+                          : AppTheme.textDisabled,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
                 ),
               ],
-            ),
-          );
-
-          if (confirmed != true || !mounted) return;
-
-          try {
-            await CirclesRepository.deleteCircle(circle);
-            if (!mounted) return;
-            context.pop(true);
-          } catch (e, st) {
-            debugPrint('CircleDetailScreen: delete circle failed: $e\\n$st');
-            if (!mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  "Couldn't delete this circle. Please try again.",
-                  style: GoogleFonts.manrope(color: Colors.white),
-                ),
-                backgroundColor: AppTheme.error,
-              ),
             );
-          }
-        }
-      }
+          },
+        );
+      },
+    );
+
+    final message = controller.text.trim();
+    controller.dispose();
+    if (shouldSubmit != true || message.isEmpty || !mounted) return;
+
+    try {
+      await SupabaseService.client.functions.invoke(
+        'report-circle',
+        body: {
+          'circle_id': circle.id,
+          'message': message,
+        },
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Report submitted. Thank you.')),
+      );
+    } catch (e, st) {
+      debugPrint('CircleDetailScreen: report circle failed: $e\\n$st');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Couldn't submit the report. Please try again."),
+        ),
+      );
+    }
+  }
+
 """
-          if old not in text:
-              raise SystemExit('Menu action target not found')
-          text = text.replace(old, new, 1)
+              if marker not in text:
+                  raise SystemExit('Report insertion marker not found')
+              text = text.replace(marker, method + marker, 1)
 
-          start = text.index('class _CircleMenuSheet extends StatelessWidget {')
-          end = text.index('class _MenuOption extends StatelessWidget {', start)
-          old_class = text[start:end]
+          start = text.find('class _CircleMenuSheet extends StatelessWidget {')
+          end = text.find('class _MenuOption extends StatelessWidget {', start)
+          if start < 0 or end < 0:
+              raise SystemExit('Circle menu sheet target not found')
+
           new_class = """class _CircleMenuSheet extends StatelessWidget {
-            final String circleName;
-            final bool isAdmin;
+  final String circleName;
+  final bool isOwner;
 
-            const _CircleMenuSheet({
-              required this.circleName,
-              required this.isAdmin,
-            });
+  const _CircleMenuSheet({
+    required this.circleName,
+    required this.isOwner,
+  });
 
-            @override
-            Widget build(BuildContext context) {
-              final bottom = MediaQuery.of(context).padding.bottom;
-              return _SheetContainer(
-                bottomPadding: bottom,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      circleName,
-                      style: GoogleFonts.manrope(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                        color: AppTheme.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Circle options',
-                      style: GoogleFonts.manrope(fontSize: 13, color: AppTheme.textMuted),
-                    ),
-                    const SizedBox(height: 20),
-                    if (isAdmin)
-                      _MenuOption(
-                        icon: Icons.edit_rounded,
-                        label: 'Edit Circle',
-                        color: AppTheme.textPrimary,
-                        onTap: () => Navigator.pop(context, 'edit'),
-                      ),
-                    _MenuOption(
-                      icon: Icons.person_add_rounded,
-                      label: 'Invite People',
-                      color: AppTheme.primaryGreen,
-                      onTap: () => Navigator.pop(context, 'invite'),
-                    ),
-                    _MenuOption(
-                      icon: Icons.notifications_rounded,
-                      label: 'Notifications',
-                      color: AppTheme.textPrimary,
-                      onTap: () => Navigator.pop(context, 'notifications'),
-                    ),
-                    _MenuOption(
-                      icon: isAdmin ? Icons.delete_outline_rounded : Icons.logout_rounded,
-                      label: isAdmin ? 'Delete Circle' : 'Leave Circle',
-                      color: AppTheme.error,
-                      onTap: () => Navigator.pop(context, isAdmin ? 'delete' : 'leave'),
-                    ),
-                  ],
-                ),
-              );
-            }
-          }
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.of(context).padding.bottom;
+    return _SheetContainer(
+      bottomPadding: bottom,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            circleName,
+            style: GoogleFonts.manrope(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: AppTheme.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Circle options',
+            style: GoogleFonts.manrope(
+              fontSize: 13,
+              color: AppTheme.textMuted,
+            ),
+          ),
+          const SizedBox(height: 20),
+          if (isOwner)
+            _MenuOption(
+              icon: Icons.edit_rounded,
+              label: 'Edit Circle',
+              color: AppTheme.textPrimary,
+              onTap: () => Navigator.pop(context, 'edit'),
+            ),
+          if (isOwner)
+            _MenuOption(
+              icon: Icons.person_add_rounded,
+              label: 'Invite People',
+              color: AppTheme.primaryGreen,
+              onTap: () => Navigator.pop(context, 'invite'),
+            ),
+          if (!isOwner)
+            _MenuOption(
+              icon: Icons.flag_outlined,
+              label: 'Report',
+              color: AppTheme.error,
+              onTap: () => Navigator.pop(context, 'report'),
+            ),
+          _MenuOption(
+            icon: Icons.notifications_rounded,
+            label: 'Notifications',
+            color: AppTheme.textPrimary,
+            onTap: () => Navigator.pop(context, 'notifications'),
+          ),
+          _MenuOption(
+            icon: isOwner
+                ? Icons.delete_outline_rounded
+                : Icons.logout_rounded,
+            label: isOwner ? 'Delete Circle' : 'Leave Circle',
+            color: AppTheme.error,
+            onTap: () => Navigator.pop(
+              context,
+              isOwner ? 'delete' : 'leave',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
-          """
-          if not old_class.strip():
-              raise SystemExit('Menu class target is empty')
+"""
           text = text[:start] + new_class + text[end:]
           path.write_text(text)
           PY
 
-      - name: Verify Dart syntax formatting
-        run: dart format --output=none --set-exit-if-changed lib/presentation/circle_detail_screen/circle_detail_screen.dart
+      - name: Check formatting
+        run: dart format --output=none lib/presentation/circle_detail_screen/circle_detail_screen.dart
 
-      - name: Commit patch and remove temporary workflow
+      - name: Commit app change and remove temporary workflow
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add lib/presentation/circle_detail_screen/circle_detail_screen.dart .github/workflows/fix-circle-role-menu.yml
-          git commit -m "Implement admin and member circle menu roles"
+          git add lib/presentation/circle_detail_screen/circle_detail_screen.dart
+          git commit -m "Add circle member report option"
           git rm .github/workflows/fix-circle-role-menu.yml
-          git commit -m "Remove temporary circle role menu workflow"
+          git commit -m "Remove temporary circle report workflow"
           git push
