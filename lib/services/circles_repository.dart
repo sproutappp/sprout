@@ -19,13 +19,28 @@ class CirclesRepository {
     if (circleMaps.isEmpty) return [];
     final circleIds = circleMaps.map((c) => c['id'] as String).toList();
     final counts = await _memberCountsByCircle(circleIds);
-    for (final c in circleMaps) c['member_count'] = counts[c['id']] ?? 0;
+    final memoryCounts = await _memoryCountsByCircle(circleIds);
+    for (final c in circleMaps) {
+      c['member_count'] = counts[c['id']] ?? 0;
+      c['memory_count'] = memoryCounts[c['id']] ?? 0;
+    }
     return circleMaps.map(Circle.fromMap).toList();
   }
 
   static Future<Map<String, int>> _memberCountsByCircle(List<String> circleIds) async {
     if (circleIds.isEmpty) return {};
     final rows = await _client.from('circle_members').select('circle_id').inFilter('circle_id', circleIds);
+    final counts = <String, int>{};
+    for (final row in (rows as List)) {
+      final cid = row['circle_id'] as String;
+      counts[cid] = (counts[cid] ?? 0) + 1;
+    }
+    return counts;
+  }
+
+  static Future<Map<String, int>> _memoryCountsByCircle(List<String> circleIds) async {
+    if (circleIds.isEmpty) return {};
+    final rows = await _client.from('memories').select('circle_id').inFilter('circle_id', circleIds);
     final counts = <String, int>{};
     for (final row in (rows as List)) {
       final cid = row['circle_id'] as String;
