@@ -6,6 +6,7 @@ class Circle {
   final String createdBy;
   final DateTime createdAt;
   final int memberCount;
+  final int memoryCount;
 
   const Circle({
     required this.id,
@@ -15,6 +16,7 @@ class Circle {
     required this.createdBy,
     required this.createdAt,
     this.memberCount = 0,
+    this.memoryCount = 0,
   });
 
   factory Circle.fromMap(Map<String, dynamic> map) {
@@ -27,6 +29,8 @@ class Circle {
       createdAt: DateTime.parse(map['created_at'] as String),
       // Populated when the query joins/aggregates circle_members.
       memberCount: (map['member_count'] as num?)?.toInt() ?? 0,
+      // Populated by CirclesRepository from the memories table.
+      memoryCount: (map['memory_count'] as num?)?.toInt() ?? 0,
     );
   }
 }
