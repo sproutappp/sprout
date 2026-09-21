@@ -19,7 +19,9 @@ class HomeAppBarWidget extends StatelessWidget {
     final blurOpacity = (scrollOffset / 60).clamp(0.0, 1.0);
 
     return Positioned(
-      top: 0,
+      // Keep the header in the same Stack layer for reliable tap handling,
+      // but move it with the scroll content so it is not fixed to the screen.
+      top: -scrollOffset,
       left: 0,
       right: 0,
       child: ClipRect(
