@@ -27,16 +27,33 @@ class ReactionsRepository {
 
   static Future<Map<String, int>> fetchLikeCounts(List<String> memoryIds) async {
     if (memoryIds.isEmpty) return {};
-    final rows = await _client
-        .from('memory_reactions')
-        .select('memory_id, emoji')
-        .inFilter('memory_id', memoryIds);
+
+    // Use the same per-memory query as the detail screen. The previous
+    // batched query could silently produce zero on the home/tray path even
+    // though fetchSummary() could see the reaction for the same memory.
+    // Keeping this path aligned with fetchSummary() ensures the count shown
+    // on a memory detail is the count shown on its thumbnail as well.
     final counts = <String, int>{};
-    for (final row in rows as List) {
-      if (row['emoji'] != '❤️') continue;
-      final memoryId = row['memory_id'] as String?;
-      if (memoryId == null) continue;
-      counts[memoryId] = (counts[memoryId] ?? 0) + 1;
+    final summaries = await Future.wait(
+      memoryIds.map((memoryId) async {
+        try {
+          return MapEntry(memoryId, await fetchSummary(memoryId));
+        } catch (_) {
+          return MapEntry(memoryId, ReactionSummary.empty);
+        }
+      }),
+    );
+
+    for (final entry in summaries) {
+      final summary = entry.value;
+      // The like reaction is the heart. Accept both common Unicode forms so
+      // older rows saved without the variation selector are counted too.
+      var heartCount = 0;
+      for (final reaction in summary.counts.entries) {
+        final normalized = reaction.key.replaceAll('\uFE0F', '');
+        if (normalized == '❤') heartCount += reaction.value;
+      }
+      if (heartCount > 0) counts[entry.key] = heartCount;
     }
     return counts;
   }
