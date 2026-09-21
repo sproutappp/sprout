@@ -806,13 +806,13 @@ class _MemoryDetailScreenV3State extends State<MemoryDetailScreenV3> {
   }
 }
 
-class _MemoryHero extends StatelessWidget {
+class _MemoryHero extends StatefulWidget {
   final Memory memory;
   final String title;
   final VoidCallback onBack;
   final VoidCallback onShare;
   final VoidCallback? onMenu;
-  final VoidCallback onTap;
+  final ValueChanged<int> onPhotoTap;
 
   const _MemoryHero({
     required this.memory,
@@ -820,35 +820,84 @@ class _MemoryHero extends StatelessWidget {
     required this.onBack,
     required this.onShare,
     required this.onMenu,
-    required this.onTap,
+    required this.onPhotoTap,
   });
+
+  @override
+  State<_MemoryHero> createState() => _MemoryHeroState();
+}
+
+class _MemoryHeroState extends State<_MemoryHero> {
+  late final PageController _pageController;
+  int _currentIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController();
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  void _goToNextPhoto() {
+    final total = widget.memory.mediaUrls.length;
+    if (total < 2 || _currentIndex >= total - 1) return;
+    _pageController.nextPage(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.of(context).size.width;
     final height = (width * 0.98).clamp(230.0, 390.0).toDouble();
+    final urls = widget.memory.mediaUrls;
+    final total = urls.length;
 
-    return GestureDetector(
-      onTap: onTap,
-      child: SizedBox(
-        width: width,
-        height: height,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            CachedNetworkImage(
-              imageUrl: memory.imageUrl,
-              fit: BoxFit.cover,
-              errorWidget: (_, __, ___) => Container(
-                color: AppTheme.surfaceVariantDark,
-                child: const Icon(
-                  Icons.image_outlined,
-                  color: AppTheme.textDisabled,
-                  size: 42,
-                ),
-              ),
+    return SizedBox(
+      width: width,
+      height: height,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          PageView.builder(
+            controller: _pageController,
+            itemCount: total > 0 ? total : 1,
+            physics: const BouncingScrollPhysics(),
+            onPageChanged: (index) => setState(() => _currentIndex = index),
+            itemBuilder: (_, index) => GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => widget.onPhotoTap(index),
+              child: total > 0
+                  ? CachedNetworkImage(
+                      imageUrl: urls[index],
+                      fit: BoxFit.cover,
+                      errorWidget: (_, __, ___) => Container(
+                        color: AppTheme.surfaceVariantDark,
+                        child: const Icon(
+                          Icons.image_outlined,
+                          color: AppTheme.textDisabled,
+                          size: 42,
+                        ),
+                      ),
+                    )
+                  : Container(
+                      color: AppTheme.surfaceVariantDark,
+                      child: const Icon(
+                        Icons.image_outlined,
+                        color: AppTheme.textDisabled,
+                        size: 42,
+                      ),
+                    ),
             ),
-            Positioned.fill(
+          ),
+          Positioned.fill(
+            child: IgnorePointer(
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
@@ -865,73 +914,85 @@ class _MemoryHero extends StatelessWidget {
                 ),
               ),
             ),
-            Positioned(
-              top: 10,
-              left: 10,
-              right: 10,
-              child: Row(
-                children: [
-                  _HeroButton(
-                    icon: Icons.arrow_back_ios_new_rounded,
-                    onTap: onBack,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.manrope(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                      ),
+          ),
+          Positioned(
+            top: 10,
+            left: 10,
+            right: 10,
+            child: Row(
+              children: [
+                _HeroButton(
+                  icon: Icons.arrow_back_ios_new_rounded,
+                  onTap: widget.onBack,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    widget.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.manrope(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  _HeroButton(
-                    icon: Icons.more_horiz_rounded,
-                    onTap: onMenu ?? onShare,
-                  ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 8),
+                _HeroButton(
+                  icon: Icons.more_horiz_rounded,
+                  onTap: widget.onMenu ?? widget.onShare,
+                ),
+              ],
             ),
-            if (memory.mediaUrls.length > 1)
-              Positioned(
-                right: 12,
-                bottom: 14,
+          ),
+          if (total > 1 && _currentIndex < total - 1)
+            Positioned(
+              right: 12,
+              top: height / 2 - 19,
+              child: GestureDetector(
+                onTap: _goToNextPhoto,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 5,
-                  ),
+                  width: 38,
+                  height: 38,
                   decoration: BoxDecoration(
-                    color: Colors.black.withAlpha(155),
-                    borderRadius: BorderRadius.circular(14),
+                    color: Colors.black.withAlpha(145),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white.withAlpha(70)),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.photo_library_outlined,
-                        size: 12,
-                        color: Colors.white,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${memory.mediaUrls.length}',
-                        style: GoogleFonts.manrope(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ],
+                  child: const Icon(
+                    Icons.chevron_right_rounded,
+                    size: 25,
+                    color: Colors.white,
                   ),
                 ),
               ),
-          ],
-        ),
+            ),
+          if (total > 1)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 12,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(total, (index) {
+                  final active = index == _currentIndex;
+                  return AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    width: active ? 8 : 6,
+                    height: active ? 8 : 6,
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    decoration: BoxDecoration(
+                      color: active
+                          ? Colors.white
+                          : Colors.white.withAlpha(125),
+                      shape: BoxShape.circle,
+                    ),
+                  );
+                }),
+              ),
+            ),
+        ],
       ),
     );
   }
