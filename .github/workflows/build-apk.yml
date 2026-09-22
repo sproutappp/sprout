@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -17,163 +17,6 @@ jobs:
     steps:
       - name: Check out the repo
         uses: actions/checkout@v4
-
-      - name: Apply unread memory banner navigation fix
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-
-          p = Path('lib/presentation/circles_screen/circles_screen_with_cover.dart')
-          text = p.read_text()
-
-          if "import '../../services/memories_repository.dart';" not in text:
-              text = text.replace(
-                  "import '../../services/notifications_repository.dart';",
-                  "import '../../services/notifications_repository.dart';\nimport '../../services/memories_repository.dart';\nimport '../../models/notification.dart';\nimport '../../presentation/memories_screen/widgets/memories_grid_widget.dart';",
-                  1,
-              )
-
-          if 'Future<void> _openUnreadMemories() async' not in text:
-              anchor = "  void _openCircleDetail(Circle circle) {\n    context.push(AppRoutes.circleDetailScreen, extra: circle.id);\n  }\n"
-              method = r'''  void _openCircleDetail(Circle circle) {
-    context.push(AppRoutes.circleDetailScreen, extra: circle.id);
-  }
-
-  Future<void> _openUnreadMemories() async {
-    if (_unreadMemoryCount > 1) {
-      if (mounted) context.push(AppRoutes.notificationsScreen);
-      return;
-    }
-
-    try {
-      final notifications = await NotificationsRepository.fetchForUser();
-      final unread = notifications
-          .where((n) => n.type == AppNotificationType.circleMemory && !n.isRead && n.memoryId != null)
-          .toList()
-        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-
-      if (!mounted) return;
-      if (unread.length != 1 || unread.first.memoryId == null) {
-        context.push(AppRoutes.notificationsScreen);
-        return;
-      }
-
-      final memory = await MemoriesRepository.fetchById(unread.first.memoryId!);
-      if (!mounted) return;
-      if (memory == null) {
-        context.push(AppRoutes.notificationsScreen);
-        return;
-      }
-
-      await NotificationsRepository.markAsRead(unread.first.id);
-      if (!mounted) return;
-
-      final item = MemoryItem(
-        id: memory.id,
-        title: memory.caption?.isNotEmpty == true ? memory.caption! : 'A shared memory',
-        date: '${memory.createdAt.day}/${memory.createdAt.month}/${memory.createdAt.year}',
-        imageUrl: memory.imageUrl,
-        semanticLabel: 'Shared memory photo',
-        circle: memory.circleName ?? 'Circle',
-        circleColor: AppTheme.primaryGreen,
-        privacy: MemoryPrivacy.circle,
-        type: MemoryType.photo,
-      );
-      context.push(AppRoutes.memoryDetailScreen, extra: item);
-    } catch (e, st) {
-      debugPrint('CirclesScreen: open unread memory failed: $e\n$st');
-      if (mounted) context.push(AppRoutes.notificationsScreen);
-    }
-  }
-'''
-              if anchor not in text:
-                  raise SystemExit('circle detail anchor not found')
-              text = text.replace(anchor, method, 1)
-
-          old_call = "                    child: _UnreadBanner(count: _unreadMemoryCount),"
-          new_call = """                    child: _UnreadBanner(
-                      count: _unreadMemoryCount,
-                      onTap: _openUnreadMemories,
-                    ),"""
-          if old_call in text:
-              text = text.replace(old_call, new_call, 1)
-          elif 'onTap: _openUnreadMemories' not in text:
-              raise SystemExit('unread banner call site not found')
-
-          start = text.find('class _UnreadBanner extends StatelessWidget {')
-          end = text.find('class _CircleCard extends StatelessWidget {', start)
-          if start < 0 or end < 0:
-              raise SystemExit('unread banner class boundaries not found')
-
-          banner = r'''class _UnreadBanner extends StatelessWidget {
-  final int count;
-  final VoidCallback onTap;
-
-  const _UnreadBanner({
-    required this.count,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: AppTheme.primaryGreen.withAlpha(18),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppTheme.primaryGreen.withAlpha(55)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                gradient: AppTheme.primaryGradient,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.auto_awesome_rounded, size: 18, color: Colors.black),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                count == 1
-                    ? '1 new memory across your circles'
-                    : '$count new memories across your circles',
-                style: GoogleFonts.manrope(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: AppTheme.textPrimary,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-'''
-          text = text[:start] + banner + text[end:]
-          p.write_text(text)
-          PY
-          git diff --check
-
-      - name: Persist app-only patch and restore build workflow
-        shell: bash
-        run: |
-          set -euo pipefail
-          git show HEAD^:.github/workflows/build-apk.yml > .github/workflows/build-apk.yml
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add lib/presentation/circles_screen/circles_screen_with_cover.dart .github/workflows/build-apk.yml
-          git commit -m 'Fix unread memory banner navigation [skip ci]'
-          git push
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -201,7 +44,7 @@ jobs:
           {"SUPABASE_URL":"${{ secrets.SUPABASE_URL }}","SUPABASE_ANON_KEY":"${{ secrets.SUPABASE_ANON_KEY }}"}
           EOF
 
-      # Reconstruct the Android upload keystore only when the signing secret exists.
+      # Reconstruct the Android upload keystore only when the real upload key is configured.
       - name: Reconstruct upload keystore
         if: ${{ env.ANDROID_KEYSTORE_BASE64 != '' }}
         run: |
