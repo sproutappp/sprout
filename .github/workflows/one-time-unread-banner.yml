@@ -1,0 +1,181 @@
+name: One-time unread memory banner patch
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Patch unread memory banner navigation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('lib/presentation/circles_screen/circles_screen_with_cover.dart')
+          text = path.read_text()
+
+          import_anchor = "import '../../services/notifications_repository.dart';"
+          imports = """import '../../services/notifications_repository.dart';
+          import '../../services/memories_repository.dart';
+          import '../../presentation/memories_screen/widgets/memories_grid_widget.dart';"""
+          if "import '../../services/memories_repository.dart';" not in text:
+              if import_anchor not in text:
+                  raise SystemExit('notifications repository import not found')
+              text = text.replace(import_anchor, imports, 1)
+
+          method_anchor = """  void _openCircleDetail(Circle circle) {
+            context.push(AppRoutes.circleDetailScreen, extra: circle.id);
+          }
+
+          @override
+          Widget build(BuildContext context) {"""
+          method_replacement = """  void _openCircleDetail(Circle circle) {
+            context.push(AppRoutes.circleDetailScreen, extra: circle.id);
+          }
+
+          Future<void> _openUnreadMemories() async {
+            if (_unreadMemoryCount > 1) {
+              if (mounted) context.push(AppRoutes.notificationsScreen);
+              return;
+            }
+
+            try {
+              final notifications = await NotificationsRepository.fetchForUser();
+              final unread = notifications
+                  .where((n) => n.type == AppNotificationType.circleMemory && !n.isRead && n.memoryId != null)
+                  .toList()
+                ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+              if (!mounted) return;
+              if (unread.length != 1 || unread.first.memoryId == null) {
+                context.push(AppRoutes.notificationsScreen);
+                return;
+              }
+
+              final memory = await MemoriesRepository.fetchById(unread.first.memoryId!);
+              if (!mounted) return;
+              if (memory == null) {
+                context.push(AppRoutes.notificationsScreen);
+                return;
+              }
+
+              await NotificationsRepository.markAsRead(unread.first.id);
+              if (!mounted) return;
+
+              final item = MemoryItem(
+                id: memory.id,
+                title: memory.caption?.isNotEmpty == true ? memory.caption! : 'A shared memory',
+                date: '${memory.createdAt.day}/${memory.createdAt.month}/${memory.createdAt.year}',
+                imageUrl: memory.imageUrl,
+                semanticLabel: 'Shared memory photo',
+                circle: memory.circleName ?? 'Circle',
+                circleColor: AppTheme.primaryGreen,
+                privacy: MemoryPrivacy.circle,
+                type: MemoryType.photo,
+              );
+              context.push(AppRoutes.memoryDetailScreen, extra: item);
+            } catch (e, st) {
+              debugPrint('CirclesScreen: open unread memory failed: $e\\n$st');
+              if (mounted) context.push(AppRoutes.notificationsScreen);
+            }
+          }
+
+          @override
+          Widget build(BuildContext context) {"""
+          if method_anchor in text:
+              text = text.replace(method_anchor, method_replacement, 1)
+          elif 'Future<void> _openUnreadMemories() async' not in text:
+              raise SystemExit('circle detail method anchor not found')
+
+          old_banner = """                    child: _UnreadBanner(count: _unreadMemoryCount),"""
+          new_banner = """                    child: _UnreadBanner(
+                      count: _unreadMemoryCount,
+                      onTap: _openUnreadMemories,
+                    ),"""
+          if old_banner in text:
+              text = text.replace(old_banner, new_banner, 1)
+          elif 'onTap: _openUnreadMemories,' not in text:
+              raise SystemExit('unread banner call site not found')
+
+          old_class = """class _UnreadBanner extends StatelessWidget {
+            final int count;
+            const _UnreadBanner({required this.count});"""
+          new_class = """class _UnreadBanner extends StatelessWidget {
+            final int count;
+            final VoidCallback onTap;
+            const _UnreadBanner({required this.count, required this.onTap});"""
+          if old_class in text:
+              text = text.replace(old_class, new_class, 1)
+          elif 'final VoidCallback onTap;' not in text:
+              raise SystemExit('unread banner class anchor not found')
+
+          old_build = """  Widget build(BuildContext context) {
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),"""
+          new_build = """  Widget build(BuildContext context) {
+            return GestureDetector(
+              onTap: onTap,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),"""
+          # Apply only to the first build method after _UnreadBanner.
+          marker = "class _UnreadBanner extends StatelessWidget {"
+          before, after = text.split(marker, 1)
+          if old_build in after:
+              after = after.replace(old_build, new_build, 1)
+          else:
+              raise SystemExit('unread banner build anchor not found')
+          text = before + marker + after
+
+          # Close the GestureDetector around the existing banner Container.
+          marker2 = "class _CircleCard extends StatelessWidget {"
+          before, after = text.split(marker2, 1)
+          target = """          ),
+        ],
+      ),
+    );
+  }
+}
+
+"""
+          replacement = """          ),
+              ),
+            );
+          }
+        }
+
+"""
+          if target not in before:
+              raise SystemExit('unread banner closing block not found')
+          before = before.replace(target, replacement, 1)
+          text = before + marker2 + after
+
+          path.write_text(text)
+          PY
+
+      - name: Validate patched Dart file
+        run: |
+          grep -n "_openUnreadMemories\|onTap: onTap\|memories_repository" lib/presentation/circles_screen/circles_screen_with_cover.dart
+
+      - name: Commit patch and remove temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/one-time-unread-banner.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/presentation/circles_screen/circles_screen_with_cover.dart .github/workflows/one-time-unread-banner.yml
+          git diff --cached --quiet && exit 0
+          git commit -m "Fix unread memory banner navigation"
+          git push
