@@ -73,7 +73,7 @@ jobs:
       final item = MemoryItem(
         id: memory.id,
         title: memory.caption?.isNotEmpty == true ? memory.caption! : 'A shared memory',
-        date: '${memory.createdAt.day}/${memory.createdAt.month}/${memory.createdAt.day}',
+        date: '${memory.createdAt.day}/${memory.createdAt.month}/${memory.createdAt.year}',
         imageUrl: memory.imageUrl,
         semanticLabel: 'Shared memory photo',
         circle: memory.circleName ?? 'Circle',
