@@ -119,15 +119,7 @@ class CirclesRepository {
   static Future<void> deleteCircle(Circle circle) async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) throw StateError('Must be signed in to delete a circle');
-
-    // Delete the circle row first. The database's ON DELETE CASCADE removes
-    // its members, memories, reactions, comments, tags, and notifications.
     await _client.from('circles').delete().eq('id', circle.id);
-
-    // Circle covers live in Storage and are not part of the SQL cascade.
-    // Remove the known cover object as a best-effort cleanup after the row
-    // is gone. Failure here must not make a successfully deleted circle
-    // appear to have failed.
     final coverUrl = circle.coverImageUrl;
     if (coverUrl != null && coverUrl.isNotEmpty) {
       final marker = '/storage/v1/object/public/$_circleCoverBucket/';
@@ -137,15 +129,26 @@ class CirclesRepository {
         if (objectPath.isNotEmpty) {
           try {
             await _client.storage.from(_circleCoverBucket).remove([objectPath]);
-          } catch (_) {
-            // Storage cleanup is best-effort; the database deletion is final.
-          }
+          } catch (_) {}
         }
       }
     }
   }
 
   static Future<({Circle circle, List<Profile> members})> fetchCircleDetail(String circleId) async {
+    // A recipient can arrive here directly by tapping an in-app invitation.
+    // Redeem the pending invite before the normal member-only RLS query.
+    final userId = _client.auth.currentUser?.id;
+    if (userId != null) {
+      try {
+        await _client.rpc('redeem_pending_circle_invite', params: {
+          'p_circle_id': circleId,
+        });
+      } catch (_) {
+        // If there is no pending invite, continue with the normal member query.
+      }
+    }
+
     final circleRow = await _client.from('circles').select().eq('id', circleId).single();
     final memberRows = await _client.from('circle_members').select('user_id, profiles(id, full_name, avatar_url)').eq('circle_id', circleId);
     final members = <Profile>[];
@@ -174,6 +177,7 @@ class CirclesRepository {
   }
 
   static Future<int> sendCircleInvites({required String circleId, required List<String> userIds}) async {
+    if (userIds.isEmpty) return 0;
     final result = await _client.rpc('send_circle_invites', params: {
       'p_circle_id': circleId,
       'p_user_ids': userIds,
