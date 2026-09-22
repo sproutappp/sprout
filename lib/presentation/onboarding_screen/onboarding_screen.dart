@@ -167,23 +167,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                           ),
                         ),
                       ),
-
-                      const SizedBox(height: 24),
-
-                      // Terms
-                      FadeTransition(
-                        opacity: _ctaFade,
-                        child: Text(
-                          'By continuing, you agree to our Terms & Privacy Policy',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontFamily: 'Manrope',
-                            fontSize: 11,
-                            color: AppTheme.textDisabled,
-                            height: 1.5,
-                          ),
-                        ),
-                      ),
                     ],
                   ),
                 ),
