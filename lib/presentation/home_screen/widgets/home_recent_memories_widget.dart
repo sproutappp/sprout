@@ -102,6 +102,13 @@ class _HomeRecentMemoriesWidgetState extends State<HomeRecentMemoriesWidget>
     }
   }
 
+  void _removeDeletedMemory(String memoryId) {
+    if (!mounted) return;
+    setState(() {
+      _memories = _memories.where((memory) => memory.id != memoryId).toList();
+    });
+  }
+
   @override
   void dispose() {
     _entranceController.dispose();
@@ -202,7 +209,10 @@ class _HomeRecentMemoriesWidgetState extends State<HomeRecentMemoriesWidget>
                       begin: const Offset(0.06, 0),
                       end: Offset.zero,
                     ).animate(anim),
-                    child: _MemoryCardWidget(memory: _memories[index]),
+                    child: _MemoryCardWidget(
+                      memory: _memories[index],
+                      onDeleted: _removeDeletedMemory,
+                    ),
                   ),
                 );
               },
@@ -215,7 +225,12 @@ class _HomeRecentMemoriesWidgetState extends State<HomeRecentMemoriesWidget>
 
 class _MemoryCardWidget extends StatefulWidget {
   final _MemoryCard memory;
-  const _MemoryCardWidget({required this.memory});
+  final ValueChanged<String> onDeleted;
+
+  const _MemoryCardWidget({
+    required this.memory,
+    required this.onDeleted,
+  });
 
   @override
   State<_MemoryCardWidget> createState() => _MemoryCardWidgetState();
@@ -249,8 +264,9 @@ class _MemoryCardWidgetState extends State<_MemoryCardWidget> {
           extra: memory,
         );
         if (deleted == true && mounted) {
-          final parent = context.findAncestorStateOfType<_HomeRecentMemoriesWidgetState>();
-          await parent?._load();
+          // Remove the deleted memory from the tray immediately. The next
+          // Home refresh will reconcile the tray with the server as usual.
+          widget.onDeleted(m.id);
         }
       },
       child: AnimatedScale(
