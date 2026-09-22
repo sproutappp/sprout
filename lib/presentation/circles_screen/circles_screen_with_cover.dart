@@ -7,11 +7,14 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../models/circle.dart';
+import '../../models/notification.dart';
 import '../../routes/app_routes.dart';
 import '../../services/circles_repository.dart';
+import '../../services/memories_repository.dart';
 import '../../services/notifications_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/circle_action_menu.dart';
+import '../../presentation/memories_screen/widgets/memories_grid_widget.dart';
 
 class CirclesScreenWithCover extends StatefulWidget {
   const CirclesScreenWithCover({super.key});
@@ -88,6 +91,59 @@ class _CirclesScreenWithCoverState extends State<CirclesScreenWithCover> {
 
   void _openCircleDetail(Circle circle) {
     context.push(AppRoutes.circleDetailScreen, extra: circle.id);
+  }
+
+  Future<void> _openUnreadMemories() async {
+    if (_unreadMemoryCount > 1) {
+      if (mounted) context.push(AppRoutes.notificationsScreen);
+      return;
+    }
+
+    try {
+      final notifications = await NotificationsRepository.fetchForUser();
+      final unread = notifications
+          .where((n) =>
+              n.type == AppNotificationType.circleMemory &&
+              !n.isRead &&
+              n.memoryId != null)
+          .toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+      if (!mounted) return;
+      if (unread.length != 1 || unread.first.memoryId == null) {
+        context.push(AppRoutes.notificationsScreen);
+        return;
+      }
+
+      final memory = await MemoriesRepository.fetchById(unread.first.memoryId!);
+      if (!mounted) return;
+      if (memory == null) {
+        context.push(AppRoutes.notificationsScreen);
+        return;
+      }
+
+      await NotificationsRepository.markAsRead(unread.first.id);
+      if (!mounted) return;
+
+      final item = MemoryItem(
+        id: memory.id,
+        title: memory.caption?.isNotEmpty == true
+            ? memory.caption!
+            : 'A shared memory',
+        date:
+            '${memory.createdAt.day}/${memory.createdAt.month}/${memory.createdAt.year}',
+        imageUrl: memory.imageUrl,
+        semanticLabel: 'Shared memory photo',
+        circle: memory.circleName ?? 'Circle',
+        circleColor: AppTheme.primaryGreen,
+        privacy: MemoryPrivacy.circle,
+        type: MemoryType.photo,
+      );
+      context.push(AppRoutes.memoryDetailScreen, extra: item);
+    } catch (e, st) {
+      debugPrint('CirclesScreen: open unread memory failed: $e\n$st');
+      if (mounted) context.push(AppRoutes.notificationsScreen);
+    }
   }
 
   @override
@@ -193,7 +249,10 @@ class _CirclesScreenWithCoverState extends State<CirclesScreenWithCover> {
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: _UnreadBanner(count: _unreadMemoryCount),
+                    child: _UnreadBanner(
+                      count: _unreadMemoryCount,
+                      onTap: _openUnreadMemories,
+                    ),
                   ),
                 ),
               if (_unreadMemoryCount > 0)
@@ -279,42 +338,54 @@ class _CirclesScreenWithCoverState extends State<CirclesScreenWithCover> {
 
 class _UnreadBanner extends StatelessWidget {
   final int count;
-  const _UnreadBanner({required this.count});
+  final VoidCallback onTap;
+
+  const _UnreadBanner({
+    required this.count,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: AppTheme.primaryGreen.withAlpha(18),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.primaryGreen.withAlpha(55)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              gradient: AppTheme.primaryGradient,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.auto_awesome_rounded, size: 18, color: Colors.black),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              count == 1
-                  ? '1 new memory across your circles'
-                  : '$count new memories across your circles',
-              style: GoogleFonts.manrope(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: AppTheme.textPrimary,
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppTheme.primaryGreen.withAlpha(18),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppTheme.primaryGreen.withAlpha(55)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                gradient: AppTheme.primaryGradient,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.auto_awesome_rounded,
+                size: 18,
+                color: Colors.black,
               ),
             ),
-          ),
-        ],
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                count == 1
+                    ? '1 new memory across your circles'
+                    : '$count new memories across your circles',
+                style: GoogleFonts.manrope(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
