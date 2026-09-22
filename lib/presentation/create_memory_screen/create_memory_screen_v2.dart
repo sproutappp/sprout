@@ -197,12 +197,22 @@ class _CreateMemoryScreenV2State extends State<CreateMemoryScreenV2> {
         isPublic: _public,
         circleIds: _public ? const [] : _circleIds.toList(),
       );
+
+      // The memory has already been created successfully at this point.
+      // Tagging is a follow-up operation; a failure here must not make the
+      // user retry the whole save and create duplicate memories.
       if (!_public && _taggedPeople.isNotEmpty) {
-        await MemoryPeopleRepository.replaceForMemory(
-          memoryId: memory.id,
-          personIds: _taggedPeople.toList(),
-        );
+        try {
+          await MemoryPeopleRepository.replaceForMemory(
+            memoryId: memory.id,
+            personIds: _taggedPeople.toList(),
+          );
+        } catch (_) {
+          // Keep the successful memory creation intact. The tag operation
+          // should not turn a completed save into a false failure.
+        }
       }
+
       if (mounted) Navigator.pop(context, true);
     } catch (_) {
       if (mounted) {
