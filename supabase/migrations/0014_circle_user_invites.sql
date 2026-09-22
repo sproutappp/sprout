@@ -116,4 +116,47 @@ $$;
 revoke all on function public.redeem_circle_invite(uuid) from public;
 grant execute on function public.redeem_circle_invite(uuid) to authenticated;
 
+-- Notification taps already navigate to the circle detail route. This helper
+-- lets that route accept a pending in-app invitation before the normal member
+-- RLS query runs, without exposing invite rows to non-members.
+create or replace function public.redeem_pending_circle_invite(p_circle_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_token uuid;
+begin
+  if exists (
+    select 1
+    from circle_members
+    where circle_id = p_circle_id
+      and user_id = auth.uid()
+  ) then
+    return false;
+  end if;
+
+  select token
+    into v_token
+  from circle_invites
+  where circle_id = p_circle_id
+    and invited_user_id = auth.uid()
+    and revoked = false
+    and (expires_at is null or expires_at >= now())
+  order by created_at desc
+  limit 1;
+
+  if v_token is null then
+    return false;
+  end if;
+
+  perform public.redeem_circle_invite(v_token);
+  return true;
+end;
+$$;
+
+revoke all on function public.redeem_pending_circle_invite(uuid) from public;
+grant execute on function public.redeem_pending_circle_invite(uuid) to authenticated;
+
 notify pgrst, 'reload schema';
