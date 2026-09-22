@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -95,30 +94,6 @@ class _SignUpLoginScreenState extends State<SignUpLoginScreen>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: GestureDetector(
-                          onTap: () => context.pop(),
-                          child: Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: AppTheme.surfaceVariantDark,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: AppTheme.outline,
-                                width: 0.5,
-                              ),
-                            ),
-                            child: const Icon(
-                              Icons.arrow_back_rounded,
-                              size: 18,
-                              color: AppTheme.textPrimary,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 28),
                       const AuthHeaderWidget(),
                       const SizedBox(height: 32),
                       if (_errorMessage != null) ...[
@@ -135,65 +110,12 @@ class _SignUpLoginScreenState extends State<SignUpLoginScreen>
                           ),
                         ),
                       ),
-                      const SizedBox(height: 24),
-                      FadeTransition(
-                        opacity: _fadeAnim,
-                        child: _LegalLinks(
-                          onTerms: () => context.push(AppRoutes.termsOfUseScreen),
-                          onPrivacy: () => context.push(AppRoutes.privacyPolicyScreen),
-                        ),
-                      ),
                     ],
                   ),
                 ),
               ),
             ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LegalLinks extends StatelessWidget {
-  final VoidCallback onTerms;
-  final VoidCallback onPrivacy;
-
-  const _LegalLinks({required this.onTerms, required this.onPrivacy});
-
-  @override
-  Widget build(BuildContext context) {
-    return RichText(
-      textAlign: TextAlign.center,
-      text: TextSpan(
-        style: const TextStyle(
-          fontFamily: 'Manrope',
-          fontSize: 11,
-          color: AppTheme.textDisabled,
-          height: 1.5,
-        ),
-        children: [
-          const TextSpan(text: 'By logging in you choose to accept the '),
-          TextSpan(
-            text: 'Terms of Use',
-            style: const TextStyle(
-              color: AppTheme.primaryGreen,
-              fontWeight: FontWeight.w700,
-              decoration: TextDecoration.underline,
-            ),
-            recognizer: TapGestureRecognizer()..onTap = onTerms,
-          ),
-          const TextSpan(text: ' and '),
-          TextSpan(
-            text: 'Privacy Policy',
-            style: const TextStyle(
-              color: AppTheme.primaryGreen,
-              fontWeight: FontWeight.w700,
-              decoration: TextDecoration.underline,
-            ),
-            recognizer: TapGestureRecognizer()..onTap = onPrivacy,
-          ),
-          const TextSpan(text: '.'),
         ],
       ),
     );
