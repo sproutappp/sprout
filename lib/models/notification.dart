@@ -1,6 +1,6 @@
 import 'profile.dart';
 
-enum AppNotificationType { circleMemory, circleJoin, memoryComment, circleInvite }
+enum AppNotificationType { circleMemory, circleJoin, memoryComment }
 
 class AppNotification {
   final String id;
@@ -10,6 +10,7 @@ class AppNotification {
   final String? circleName;
   final String? memoryId;
   final String? inviteToken;
+  final bool isCircleInvite;
   final bool isRead;
   final DateTime createdAt;
 
@@ -21,6 +22,7 @@ class AppNotification {
     this.circleName,
     this.memoryId,
     this.inviteToken,
+    this.isCircleInvite = false,
     required this.isRead,
     required this.createdAt,
   });
@@ -32,7 +34,9 @@ class AppNotification {
       case 'memory_comment':
         return AppNotificationType.memoryComment;
       case 'circle_invite':
-        return AppNotificationType.circleInvite;
+        // Keep the existing notification UI type so older clients remain
+        // compatible; isCircleInvite carries the action-specific meaning.
+        return AppNotificationType.circleJoin;
       case 'circle_memory':
       default:
         return AppNotificationType.circleMemory;
@@ -40,11 +44,12 @@ class AppNotification {
   }
 
   factory AppNotification.fromMap(Map<String, dynamic> map) {
+    final rawType = map['type'] as String;
     final actorMap = map['actor'] as Map<String, dynamic>?;
     final circleMap = map['circles'] as Map<String, dynamic>?;
     return AppNotification(
       id: map['id'] as String,
-      type: _typeFromString(map['type'] as String),
+      type: _typeFromString(rawType),
       actor: actorMap != null
           ? Profile.fromMap(actorMap)
           : const Profile(id: '', fullName: 'Someone'),
@@ -52,12 +57,17 @@ class AppNotification {
       circleName: circleMap != null ? circleMap['name'] as String? : null,
       memoryId: map['memory_id'] as String?,
       inviteToken: map['invite_token'] as String?,
+      isCircleInvite: rawType == 'circle_invite',
       isRead: map['is_read'] as bool? ?? false,
       createdAt: DateTime.parse(map['created_at'] as String),
     );
   }
 
   String get message {
+    if (isCircleInvite) {
+      return '${actor.displayName} invited you to join ${circleName ?? 'a circle'}';
+    }
+
     switch (type) {
       case AppNotificationType.circleMemory:
         return '${actor.displayName} added a new memory to ${circleName ?? 'a circle'}';
@@ -65,8 +75,6 @@ class AppNotification {
         return '${actor.displayName} joined ${circleName ?? 'your circle'}';
       case AppNotificationType.memoryComment:
         return '${actor.displayName} commented on your memory';
-      case AppNotificationType.circleInvite:
-        return '${actor.displayName} invited you to join ${circleName ?? 'a circle'}';
     }
   }
 }
