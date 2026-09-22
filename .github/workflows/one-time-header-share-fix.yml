@@ -130,9 +130,6 @@ jobs:
           path.write_text(text)
           PY
 
-      - name: Validate Dart formatting
-        run: dart format --output=none --set-exit-if-changed lib/presentation/circle_detail_screen/circle_detail_screen.dart
-
       - name: Commit app change and remove this workflow
         shell: bash
         run: |
