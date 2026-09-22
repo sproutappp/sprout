@@ -234,7 +234,28 @@ class MemoriesRepository {
     if (paths.isNotEmpty) {
       try { await _client.storage.from(_bucket).remove(paths.toSet().toList()); } catch (_) {}
     }
+
+    // Remove the circle links explicitly as well as the memory row. This
+    // keeps a deleted memory from surviving as a stale shared-memory relation
+    // if the database's FK cascade is not present in the deployed schema.
+    try {
+      await _client.from('memory_circles').delete().eq('memory_id', memoryId);
+    } catch (_) {}
+
     await _client.from('memories').delete().eq('id', memoryId).eq('uploaded_by', userId);
+
+    // Supabase/PostgREST can return successfully when an RLS policy matches
+    // zero rows. Verify the row is actually gone before reporting success to
+    // the UI; otherwise the caller can incorrectly remove the detail screen
+    // while the memory remains visible in the app.
+    final remaining = await _client
+        .from('memories')
+        .select('id')
+        .eq('id', memoryId)
+        .maybeSingle();
+    if (remaining != null) {
+      throw StateError('Memory deletion was not confirmed by the server');
+    }
   }
 
   static final _rng = Random.secure();
