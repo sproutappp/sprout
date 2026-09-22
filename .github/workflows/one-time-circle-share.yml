@@ -18,13 +18,17 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
       - name: Patch circle header share button
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          import re
 
           path = Path('lib/presentation/circle_detail_screen/circle_detail_screen.dart')
           text = path.read_text()
@@ -66,7 +70,6 @@ jobs:
       - name: Validate patched Dart file
         run: |
           set -euo pipefail
-          flutter --version >/dev/null
           flutter pub get
           dart format --output=none --set-exit-if-changed lib/presentation/circle_detail_screen/circle_detail_screen.dart
 
