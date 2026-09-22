@@ -232,7 +232,7 @@ class _MemoryCardWidgetState extends State<_MemoryCardWidget> {
       onTapDown: (_) => setState(() => _pressed = true),
       onTapUp: (_) => setState(() => _pressed = false),
       onTapCancel: () => setState(() => _pressed = false),
-      onTap: () {
+      onTap: () async {
         final memory = MemoryItem(
           id: m.id,
           title: m.title,
@@ -244,7 +244,14 @@ class _MemoryCardWidgetState extends State<_MemoryCardWidget> {
           privacy: m.privacy,
           type: MemoryType.photo,
         );
-        context.push(AppRoutes.memoryDetailScreen, extra: memory);
+        final deleted = await context.push<bool>(
+          AppRoutes.memoryDetailScreen,
+          extra: memory,
+        );
+        if (deleted == true && mounted) {
+          final parent = context.findAncestorStateOfType<_HomeRecentMemoriesWidgetState>();
+          await parent?._load();
+        }
       },
       child: AnimatedScale(
         scale: _pressed ? 0.96 : 1.0,
