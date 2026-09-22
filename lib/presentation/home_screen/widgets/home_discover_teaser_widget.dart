@@ -4,7 +4,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../../theme/app_theme.dart';
 import '../../../routes/app_routes.dart';
+import '../../../services/comments_repository.dart';
 import '../../../services/memories_repository.dart';
+import '../../../services/reactions_repository.dart';
 
 /// A small preview of public memories, linking into the full Discover screen.
 ///
@@ -13,10 +15,14 @@ import '../../../services/memories_repository.dart';
 class _ExperiencePreview {
   final String memoryId;
   final String coverImageUrl;
+  final int likeCount;
+  final int commentCount;
 
   const _ExperiencePreview({
     required this.memoryId,
     required this.coverImageUrl,
+    required this.likeCount,
+    required this.commentCount,
   });
 }
 
@@ -42,11 +48,35 @@ class _HomeDiscoverTeaserWidgetState extends State<HomeDiscoverTeaserWidget> {
   Future<void> _load() async {
     try {
       final memories = await MemoriesRepository.fetchPublicMemories();
+      final visibleMemories = memories.take(2).toList();
+      final memoryIds = visibleMemories.map((memory) => memory.id).toList();
+      final likeCountsFuture = ReactionsRepository.fetchLikeCounts(memoryIds);
+      final commentCountsFuture = Future.wait(
+        visibleMemories.map((memory) async {
+          try {
+            return MapEntry(
+              memory.id,
+              (await CommentsRepository.fetchForMemory(memory.id)).length,
+            );
+          } catch (_) {
+            return MapEntry(memory.id, 0);
+          }
+        }),
+      );
+
+      final likeCounts = await likeCountsFuture;
+      final commentResults = await commentCountsFuture;
+      final commentCounts = <String, int>{
+        for (final entry in commentResults) entry.key: entry.value,
+      };
+
       final experiences = [
-        for (final m in memories.take(2))
+        for (final m in visibleMemories)
           _ExperiencePreview(
             memoryId: m.id,
             coverImageUrl: m.imageUrl,
+            likeCount: likeCounts[m.id] ?? 0,
+            commentCount: commentCounts[m.id] ?? 0,
           ),
       ];
 
@@ -187,6 +217,66 @@ class _ExperiencePreviewCardState extends State<_ExperiencePreviewCard> {
                       color: AppTheme.textMuted,
                       size: 40,
                     ),
+                  ),
+                ),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  height: 52,
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            Colors.black.withAlpha(51),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  left: 12,
+                  right: 12,
+                  bottom: 9,
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.favorite_border_rounded,
+                        size: 16,
+                        color: Colors.white,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${e.likeCount}',
+                        style: const TextStyle(
+                          fontFamily: 'Manrope',
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Icon(
+                        Icons.chat_bubble_outline_rounded,
+                        size: 15,
+                        color: Colors.white,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${e.commentCount}',
+                        style: const TextStyle(
+                          fontFamily: 'Manrope',
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
