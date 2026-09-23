@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import '../../../theme/app_theme.dart';
 
 enum MemoryPrivacy { public, circle, private }
-
 enum MemoryType { photo }
 
 String memoryDisplayTitle(String? caption) {
@@ -17,7 +16,7 @@ String memoryDisplayTitle(String? caption) {
 
 class MemoryItem {
   final String id;
-  final String title;
+  final String _rawTitle;
   final String date;
   final String imageUrl;
   final String semanticLabel;
@@ -26,9 +25,11 @@ class MemoryItem {
   final MemoryPrivacy privacy;
   final MemoryType type;
 
+  String get title => memoryDisplayTitle(_rawTitle);
+
   const MemoryItem({
     required this.id,
-    required this.title,
+    required String title,
     required this.date,
     required this.imageUrl,
     required this.semanticLabel,
@@ -36,7 +37,7 @@ class MemoryItem {
     required this.circleColor,
     required this.privacy,
     required this.type,
-  });
+  }) : _rawTitle = title;
 }
 
 Map<String, List<MemoryItem>> groupMemoriesByMonth(List<MemoryItem> memories) {
