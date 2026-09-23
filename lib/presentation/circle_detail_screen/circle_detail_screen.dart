@@ -60,12 +60,10 @@ class _CircleDetailScreenState extends State<CircleDetailScreen> {
     });
 
     try {
-      // Load circle information independently from memories.
       final detail = await CirclesRepository.fetchCircleDetail(circleId);
 
       final items = <MemoryItem>[];
 
-      // A memory-query failure must not break the entire Circle Detail page.
       try {
         final memories = await MemoriesRepository.fetchForCircle(circleId);
 
@@ -73,9 +71,7 @@ class _CircleDetailScreenState extends State<CircleDetailScreen> {
           items.add(
             MemoryItem(
               id: memory.id,
-              title: memory.caption?.isNotEmpty == true
-                  ? memory.caption!
-                  : 'A shared memory',
+              title: memoryDisplayTitle(memory.caption),
               date: _formatDate(memory.createdAt),
               imageUrl: memory.imageUrl,
               semanticLabel: 'Shared memory photo',
@@ -357,6 +353,9 @@ class _CircleDetailScreenState extends State<CircleDetailScreen> {
       extra: memory,
     );
     if (deleted == true && mounted) {
+      setState(() {
+        _memories = _memories.where((item) => item.id != memory.id).toList();
+      });
       await _load();
     }
   }

@@ -112,6 +112,7 @@ Container(
   width: 50.w, // 50% of screen width
   height: 20.h, // 20% of screen height
   child: Text('Responsive Container'),
+)
 ```
 ## 📦 Deployment
 
@@ -131,4 +132,3 @@ flutter build ios --release --dart-define-from-file=env.json
 - Styled with Material Design
 
 Built with ❤️ on Rocket.new
-

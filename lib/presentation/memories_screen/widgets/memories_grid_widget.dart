@@ -8,6 +8,13 @@ enum MemoryPrivacy { public, circle, private }
 
 enum MemoryType { photo }
 
+String memoryDisplayTitle(String? caption) {
+  final value = (caption ?? '').trim();
+  if (value.isEmpty) return 'A memory';
+  final separator = value.indexOf(' — ');
+  return separator > 0 ? value.substring(0, separator).trim() : value;
+}
+
 class MemoryItem {
   final String id;
   final String title;
@@ -44,8 +51,13 @@ Map<String, List<MemoryItem>> groupMemoriesByMonth(List<MemoryItem> memories) {
 
 class MemoriesGridWidget extends StatelessWidget {
   final List<MemoryItem> memories;
+  final ValueChanged<String>? onDeleted;
 
-  const MemoriesGridWidget({super.key, required this.memories});
+  const MemoriesGridWidget({
+    super.key,
+    required this.memories,
+    this.onDeleted,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -58,6 +70,7 @@ class MemoriesGridWidget extends StatelessWidget {
           .map((entry) => _MonthSection(
                 monthLabel: entry.key,
                 memories: entry.value,
+                onDeleted: onDeleted,
               ))
           .toList(),
     );
@@ -67,8 +80,13 @@ class MemoriesGridWidget extends StatelessWidget {
 class _MonthSection extends StatelessWidget {
   final String monthLabel;
   final List<MemoryItem> memories;
+  final ValueChanged<String>? onDeleted;
 
-  const _MonthSection({required this.monthLabel, required this.memories});
+  const _MonthSection({
+    required this.monthLabel,
+    required this.memories,
+    this.onDeleted,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -123,7 +141,10 @@ class _MonthSection extends StatelessWidget {
         ...memories.map(
           (memory) => Padding(
             padding: const EdgeInsets.only(bottom: 10),
-            child: _MemoryHorizontalCard(memory: memory),
+            child: _MemoryHorizontalCard(
+              memory: memory,
+              onDeleted: onDeleted,
+            ),
           ),
         ),
         const SizedBox(height: 20),
@@ -134,8 +155,12 @@ class _MonthSection extends StatelessWidget {
 
 class _MemoryHorizontalCard extends StatefulWidget {
   final MemoryItem memory;
+  final ValueChanged<String>? onDeleted;
 
-  const _MemoryHorizontalCard({required this.memory});
+  const _MemoryHorizontalCard({
+    required this.memory,
+    this.onDeleted,
+  });
 
   @override
   State<_MemoryHorizontalCard> createState() => _MemoryHorizontalCardState();
@@ -152,7 +177,15 @@ class _MemoryHorizontalCardState extends State<_MemoryHorizontalCard> {
       onTapDown: (_) => setState(() => _pressed = true),
       onTapUp: (_) => setState(() => _pressed = false),
       onTapCancel: () => setState(() => _pressed = false),
-      onTap: () => context.push('/memory-detail-screen', extra: memory),
+      onTap: () async {
+        final deleted = await context.push<bool>(
+          '/memory-detail-screen',
+          extra: memory,
+        );
+        if (deleted == true) {
+          widget.onDeleted?.call(memory.id);
+        }
+      },
       child: AnimatedScale(
         scale: _pressed ? 0.97 : 1.0,
         duration: const Duration(milliseconds: 110),

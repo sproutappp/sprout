@@ -42,6 +42,13 @@ class _MemoriesScreenState extends State<MemoriesScreen> {
     _load();
   }
 
+  void _removeDeletedMemory(String memoryId) {
+    if (!mounted) return;
+    setState(() {
+      _allMemories = _allMemories.where((memory) => memory.id != memoryId).toList();
+    });
+  }
+
   Future<void> _load() async {
     setState(() {
       _isLoading = true;
@@ -55,7 +62,7 @@ class _MemoriesScreenState extends State<MemoriesScreen> {
           for (final m in memories)
             MemoryItem(
               id: m.id,
-              title: m.caption?.isNotEmpty == true ? m.caption! : 'A memory',
+              title: memoryDisplayTitle(m.caption),
               date: _formatDate(m.createdAt),
               imageUrl: m.imageUrl,
               semanticLabel: 'Shared memory photo',
@@ -225,7 +232,10 @@ class _MemoriesScreenState extends State<MemoriesScreen> {
                     padding: EdgeInsets.symmetric(
                       horizontal: isTablet ? 32 : 20,
                     ),
-                    child: MemoriesGridWidget(memories: filtered),
+                    child: MemoriesGridWidget(
+                      memories: filtered,
+                      onDeleted: _removeDeletedMemory,
+                    ),
                   ),
                 ),
 
