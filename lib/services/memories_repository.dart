@@ -67,6 +67,10 @@ class MemoriesRepository {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) throw StateError('Must be signed in to load memories');
 
+    // Home should contain memories the signed-in user can actually see:
+    // their own memories, public memories, and memories shared to circles
+    // where they are a member. Previously this queried only uploaded_by, so
+    // a member could see a circle memory inside the circle but not on Home.
     final memoryById = <String, Map<String, dynamic>>{};
 
     final ownRows = await _client
@@ -235,12 +239,19 @@ class MemoriesRepository {
       try { await _client.storage.from(_bucket).remove(paths.toSet().toList()); } catch (_) {}
     }
 
+    // Remove the circle links explicitly as well as the memory row. This
+    // keeps a deleted memory from surviving as a stale shared-memory relation
+    // if the database's FK cascade is not present in the deployed schema.
     try {
       await _client.from('memory_circles').delete().eq('memory_id', memoryId);
     } catch (_) {}
 
     await _client.from('memories').delete().eq('id', memoryId).eq('uploaded_by', userId);
 
+    // Supabase/PostgREST can return successfully when an RLS policy matches
+    // zero rows. Verify the row is actually gone before reporting success to
+    // the UI; otherwise the caller can incorrectly remove the detail screen
+    // while the memory remains visible in the app.
     final remaining = await _client
         .from('memories')
         .select('id')
