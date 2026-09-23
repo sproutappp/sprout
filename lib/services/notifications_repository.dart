@@ -39,9 +39,32 @@ class NotificationsRepository {
         .order('created_at', ascending: false)
         .limit(50);
 
-    return (rows as List)
-        .map((row) => AppNotification.fromMap(Map<String, dynamic>.from(row)))
-        .toList();
+    // A recipient is deliberately not a circle member yet, so the normal
+    // circles RLS policy may make the embedded circle relation null for a
+    // circle-invite notification. Fill that name from the recipient-only
+    // pending-invite RPC without exposing circle_invites to the client.
+    final pending = await _client.rpc('fetch_pending_circle_invites');
+    final pendingNames = <String, String>{};
+    for (final item in (pending as List)) {
+      final map = Map<String, dynamic>.from(item as Map);
+      final circleId = map['circle_id'] as String?;
+      final circleName = map['circle_name'] as String?;
+      if (circleId != null && circleName != null) {
+        pendingNames[circleId] = circleName;
+      }
+    }
+
+    return (rows as List).map((raw) {
+      final map = Map<String, dynamic>.from(raw);
+      if (map['type'] == 'circle_invite') {
+        final circleId = map['circle_id'] as String?;
+        final name = circleId == null ? null : pendingNames[circleId];
+        if (name != null) {
+          map['circles'] = {'id': circleId, 'name': name};
+        }
+      }
+      return AppNotification.fromMap(map);
+    }).toList();
   }
 
   static Future<void> markAsRead(String id) async {
