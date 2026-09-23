@@ -55,6 +55,8 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
+      # Memory card constructor keys are fixed on main; this workflow commit
+      # intentionally only triggers a fresh APK build from that corrected tree.
       - name: Build release APK
         run: flutter build apk --release --dart-define-from-file=env.json
         env:
