@@ -1,8 +1,5 @@
 import 'profile.dart';
 
-// Memory list/detail compatibility item is defined by the existing memory
-// grid widget. Re-exporting it here keeps existing model imports working
-// without maintaining a second, conflicting MemoryItem declaration.
 export '../presentation/memories_screen/widgets/memories_grid_widget.dart' show MemoryItem;
 
 class Memory {
@@ -42,14 +39,26 @@ class Memory {
         ? rawMedia.whereType<String>().where((url) => url.isNotEmpty).toList()
         : <String>[];
     final imageUrl = map['image_url'] as String;
+
     final storedTitle = (map['title'] as String?)?.trim();
-    final legacyCaption = (map['caption'] as String?)?.trim();
-    final legacySeparator = legacyCaption?.indexOf(' — ') ?? -1;
-    final title = storedTitle?.isNotEmpty == true
+    final storedCaption = (map['caption'] as String?)?.trim();
+    final separator = storedCaption?.indexOf(' — ') ?? -1;
+
+    // Older memories stored title + caption in one caption field. Keep a
+    // compatibility fallback so those rows display correctly even before
+    // the database migration has been applied.
+    final hasStoredTitle = storedTitle?.isNotEmpty == true;
+    final title = hasStoredTitle
         ? storedTitle!
-        : (legacySeparator > 0
-            ? legacyCaption!.substring(0, legacySeparator).trim()
-            : (legacyCaption?.isNotEmpty == true ? legacyCaption! : 'A memory'));
+        : (separator > 0
+            ? storedCaption!.substring(0, separator).trim()
+            : (storedCaption?.isNotEmpty == true ? storedCaption! : 'A memory'));
+    final caption = hasStoredTitle
+        ? storedCaption
+        : (separator > 0
+            ? storedCaption!.substring(separator + 3).trim()
+            : null);
+
     return Memory(
       id: map['id'] as String,
       circleId: map['circle_id'] as String?,
@@ -57,7 +66,7 @@ class Memory {
       imageUrl: imageUrl,
       mediaUrls: mediaUrls.isEmpty ? [imageUrl] : mediaUrls,
       title: title,
-      caption: legacyCaption,
+      caption: caption?.isEmpty == true ? null : caption,
       location: map['location'] as String?,
       createdAt: DateTime.parse(map['created_at'] as String),
       contributor: contributorMap != null ? Profile.fromMap(contributorMap) : null,
