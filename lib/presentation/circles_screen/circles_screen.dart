@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -19,19 +20,39 @@ class CirclesScreen extends StatefulWidget {
   State<CirclesScreen> createState() => _CirclesScreenState();
 }
 
-class _CirclesScreenState extends State<CirclesScreen> {
+class _CirclesScreenState extends State<CirclesScreen> with WidgetsBindingObserver {
   List<Circle> _circles = [];
   bool _loading = true;
   String? _error;
   int _unreadMemoryCount = 0;
   int _pendingInviteCount = 0;
+  Timer? _pendingInviteTimer;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
     _loadUnreadCount();
     _loadPendingInvites();
+    _pendingInviteTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      _loadPendingInvites();
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _loadPendingInvites();
+      _loadUnreadCount();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _pendingInviteTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadUnreadCount() async {
@@ -128,13 +149,9 @@ class _CirclesScreenState extends State<CirclesScreen> {
               if (_pendingInviteCount > 0)
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-                    child: GestureDetector(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
+                    child: _CircleInvitePendingBanner(
                       onTap: () => context.push(AppRoutes.notificationsScreen),
-                      child: Text(
-                        _pendingInviteCount == 1 ? 'Circle Invitation Pending' : 'Circle Invitations Pending',
-                        style: GoogleFonts.manrope(fontSize: 13, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
-                      ),
                     ),
                   ),
                 ),
@@ -268,4 +285,85 @@ class _Field extends StatelessWidget {
   final TextEditingController controller; final String hint; final IconData icon; final int maxLines;
   const _Field({required this.controller, required this.hint, required this.icon, this.maxLines = 1});
   @override Widget build(BuildContext context) => Container(decoration: BoxDecoration(color: AppTheme.surfaceVariantDark, borderRadius: BorderRadius.circular(14), border: Border.all(color: AppTheme.outline, width: 0.8)), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Padding(padding: EdgeInsets.fromLTRB(14, maxLines > 1 ? 14 : 0, 0, 0), child: Icon(icon, size: 18, color: AppTheme.textDisabled)), Expanded(child: TextField(controller: controller, maxLines: maxLines, style: GoogleFonts.manrope(fontSize: 14, color: AppTheme.textPrimary), decoration: InputDecoration(hintText: hint, hintStyle: GoogleFonts.manrope(fontSize: 14, color: AppTheme.textDisabled), border: InputBorder.none, contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14), isDense: true))) ]));
+}
+
+
+class _CircleInvitePendingBanner extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _CircleInvitePendingBanner({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 48),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+        decoration: BoxDecoration(
+          color: AppTheme.primaryGreenGlow,
+          borderRadius: BorderRadius.circular(15),
+          border: Border.all(
+            color: AppTheme.primaryGreen.withAlpha(105),
+            width: 0.8,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: AppTheme.primaryGreen.withAlpha(20),
+              blurRadius: 12,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 30,
+              height: 30,
+              decoration: BoxDecoration(
+                color: AppTheme.primaryGreen,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.group_add_rounded,
+                size: 17,
+                color: Colors.black,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Circle invitation Pending',
+                style: GoogleFonts.manrope(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+            ),
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: AppTheme.primaryGreen,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.primaryGreen.withAlpha(100),
+                    blurRadius: 6,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 7),
+            const Icon(
+              Icons.chevron_right_rounded,
+              size: 19,
+              color: AppTheme.primaryGreen,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
