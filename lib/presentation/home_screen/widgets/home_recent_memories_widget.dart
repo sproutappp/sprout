@@ -40,7 +40,7 @@ class _MemoryCard {
   factory _MemoryCard.fromMemory(Memory m, int index, {int reactionCount = 0}) {
     return _MemoryCard(
       id: m.id,
-      title: m.caption?.isNotEmpty == true ? m.caption! : 'A shared memory',
+      title: memoryDisplayTitle(m.caption),
       date: m.createdAt.toIso8601String(),
       imageUrl: m.imageUrl,
       semanticLabel: 'Shared memory photo',
@@ -264,8 +264,6 @@ class _MemoryCardWidgetState extends State<_MemoryCardWidget> {
           extra: memory,
         );
         if (deleted == true && mounted) {
-          // Remove the deleted memory from the tray immediately. The next
-          // Home refresh will reconcile the tray with the server as usual.
           widget.onDeleted(m.id);
         }
       },
