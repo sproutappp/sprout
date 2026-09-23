@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -24,6 +26,7 @@ class _MemoriesScreenState extends State<MemoriesScreen> {
   List<MemoryItem> _allMemories = [];
   bool _isLoading = true;
   String? _error;
+  StreamSubscription<String>? _memoryDeletedSubscription;
 
   static const _palette = [
     Color(0xFFFFB84D),
@@ -39,6 +42,7 @@ class _MemoriesScreenState extends State<MemoriesScreen> {
     _scrollController.addListener(() {
       setState(() => _scrollOffset = _scrollController.offset);
     });
+    _memoryDeletedSubscription = MemoriesRepository.memoryDeleted.listen(_removeDeletedMemory);
     _load();
   }
 
@@ -96,6 +100,7 @@ class _MemoriesScreenState extends State<MemoriesScreen> {
 
   @override
   void dispose() {
+    _memoryDeletedSubscription?.cancel();
     _scrollController.dispose();
     super.dispose();
   }
