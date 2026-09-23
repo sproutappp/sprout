@@ -826,7 +826,7 @@ class _MemoryRow extends StatelessWidget {
   final MemoryItem memory;
   final VoidCallback onTap;
 
-  const _MemoryRow({required this.memory, required this.onTap});
+  const _MemoryRow({super.key, required this.memory, required this.onTap});
 
   @override
   Widget build(BuildContext context) {

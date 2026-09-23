@@ -229,6 +229,7 @@ class _MemoryCardWidget extends StatefulWidget {
   final ValueChanged<String> onDeleted;
 
   const _MemoryCardWidget({
+    super.key,
     required this.memory,
     required this.onDeleted,
   });

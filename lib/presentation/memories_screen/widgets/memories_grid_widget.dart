@@ -160,6 +160,7 @@ class _MemoryHorizontalCard extends StatefulWidget {
   final ValueChanged<String>? onDeleted;
 
   const _MemoryHorizontalCard({
+    super.key,
     required this.memory,
     this.onDeleted,
   });
