@@ -8,7 +8,7 @@ class MemoryEditRepository {
   static Future<Map<String, dynamic>?> fetchMemory(String memoryId) async {
     return _client
         .from('memories')
-        .select('id, circle_id, uploaded_by, image_url, media_urls, caption, location, created_at, is_public')
+        .select('id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, created_at, is_public')
         .eq('id', memoryId)
         .maybeSingle();
   }
@@ -29,8 +29,14 @@ class MemoryEditRepository {
     if (userId == null) throw StateError('Must be signed in to edit a memory');
     if (!isPublic && circleIds.isEmpty) throw ArgumentError('Choose at least one circle for a private memory.');
 
+    final stored = caption.trim();
+    final separator = stored.indexOf(' — ');
+    final title = separator > 0 ? stored.substring(0, separator).trim() : stored;
+    final story = separator > 0 ? stored.substring(separator + 3).trim() : '';
+
     await _client.from('memories').update({
-      'caption': caption.trim().isEmpty ? null : caption.trim(),
+      'title': title.isEmpty ? null : title,
+      'caption': story.isEmpty ? null : story,
       'location': location?.trim().isEmpty == true ? null : location?.trim(),
       'is_public': isPublic,
       'circle_id': isPublic ? null : circleIds.first,
@@ -51,8 +57,6 @@ class MemoryEditRepository {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) throw StateError('Must be signed in');
 
-    // RLS verifies that the user belongs to the target circle and can view
-    // the memory. This is an additional share and does not remove public access.
     await _client.from('memory_circles').upsert({
       'memory_id': memoryId,
       'circle_id': circleId,
