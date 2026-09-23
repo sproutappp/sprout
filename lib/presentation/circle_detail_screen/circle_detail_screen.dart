@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../core/supabase/supabase_service.dart';
 import '../../models/circle.dart';
@@ -14,6 +15,7 @@ import '../../routes/app_routes.dart';
 import '../../services/circles_repository.dart';
 import '../../services/memories_repository.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/circle_action_menu.dart';
 import '../memories_screen/widgets/memories_grid_widget.dart';
 
 class CircleDetailScreen extends StatefulWidget {
@@ -203,7 +205,7 @@ class _CircleDetailScreenState extends State<CircleDetailScreen> {
       if (!mounted) return;
       context.pop();
     } catch (e, st) {
-      debugPrint('CircleDetailScreen: delete circle failed: $e\n$st');
+      debugPrint('CircleDetailScreen: delete circle failed: $e\\n$st');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -343,8 +345,22 @@ class _CircleDetailScreenState extends State<CircleDetailScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _InviteSheet(circle: circle),
+      builder: (_) => CircleInvitePicker(circle: circle),
     );
+  }
+
+  Future<void> _shareCircle(Circle circle) async {
+    try {
+      final token = await CirclesRepository.createInvite(circle.id);
+      final link = 'https://sproutapp.in/join/$token';
+      await Share.share('Join my ${circle.name} circle on Sprout:\n$link');
+    } catch (e, st) {
+      debugPrint('CircleDetailScreen: share circle failed: $e\\n$st');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Couldn't create the invite link.")),
+      );
+    }
   }
 
   Future<void> _openMemory(MemoryItem memory) async {
@@ -433,7 +449,7 @@ class _CircleDetailScreenState extends State<CircleDetailScreen> {
                 topPadding: topPadding,
                 onBack: () => context.pop(),
                 onMenu: _openMenu,
-                onInvite: () => _openInviteSheet(circle),
+                onInvite: () => _shareCircle(circle),
               ),
             ),
             SliverToBoxAdapter(
@@ -710,10 +726,10 @@ class _Header extends StatelessWidget {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.person_add_alt_1_rounded, size: 14, color: Colors.black),
+                        const Icon(Icons.share_rounded, size: 14, color: Colors.black),
                         const SizedBox(width: 5),
                         Text(
-                          'Invite',
+                          'Share',
                           style: GoogleFonts.manrope(
                             color: Colors.black,
                             fontSize: 11,
@@ -1369,157 +1385,6 @@ class _CircleEditSheetState extends State<_CircleEditSheet> {
           size: 34,
           color: AppTheme.textDisabled,
         ),
-      ),
-    );
-  }
-}
-
-class _InviteSheet extends StatefulWidget {
-  final Circle circle;
-  const _InviteSheet({required this.circle});
-
-  @override
-  State<_InviteSheet> createState() => _InviteSheetState();
-}
-
-class _InviteSheetState extends State<_InviteSheet> {
-  String? _token;
-  String? _error;
-  bool _loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _createInvite();
-  }
-
-  Future<void> _createInvite() async {
-    try {
-      final token = await CirclesRepository.createInvite(widget.circle.id);
-      if (!mounted) return;
-      setState(() {
-        _token = token;
-        _loading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = "Couldn't create an invite link — try again.";
-        _loading = false;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final link = 'https://sproutapp.in/join/${_token ?? ''}';
-    final bottom = MediaQuery.of(context).padding.bottom;
-
-    return _SheetContainer(
-      bottomPadding: bottom,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Invite to ${widget.circle.name}',
-            style: GoogleFonts.manrope(
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
-              color: AppTheme.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Share this link — anyone who signs in with it can join.',
-            style: GoogleFonts.manrope(fontSize: 13, color: AppTheme.textMuted),
-          ),
-          const SizedBox(height: 24),
-          if (_loading)
-            const Center(
-              child: Padding(
-                padding: EdgeInsets.all(20),
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: AppTheme.primaryGreen,
-                ),
-              ),
-            )
-          else if (_error != null)
-            Text(
-              _error!,
-              style: GoogleFonts.manrope(fontSize: 13, color: AppTheme.error),
-            )
-          else
-            GestureDetector(
-              onTap: () async {
-                await Clipboard.setData(ClipboardData(text: link));
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Link copied')),
-                );
-              },
-              child: Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: AppTheme.surfaceVariantDark,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppTheme.outline, width: 0.8),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.link_rounded,
-                      color: AppTheme.primaryGreen,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        link,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.manrope(
-                          fontSize: 12,
-                          color: AppTheme.textMuted,
-                        ),
-                      ),
-                    ),
-                    Text(
-                      'Copy',
-                      style: GoogleFonts.manrope(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: AppTheme.primaryGreen,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: () => Navigator.pop(context),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primaryGreen,
-                foregroundColor: Colors.black,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                elevation: 0,
-              ),
-              child: Text(
-                'Done',
-                style: GoogleFonts.manrope(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.black,
-                ),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
