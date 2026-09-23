@@ -266,8 +266,6 @@ class MemoriesRepository {
     if (files.isEmpty) throw ArgumentError('Add at least one photo.');
     if (!isPublic && circleIds.isEmpty) throw ArgumentError('Choose Public or at least one circle to share with.');
 
-    // CreateMemoryScreenV2 still sends the legacy combined value. Canonicalize
-    // it here so every new row has independent title/caption fields.
     final suppliedTitle = title?.trim();
     final suppliedCaption = caption?.trim();
     final separator = suppliedCaption?.indexOf(' — ') ?? -1;
@@ -284,37 +282,39 @@ class MemoriesRepository {
       final ext = file.path.split('.').last.toLowerCase();
       mediaPaths.add('$id/${DateTime.now().microsecondsSinceEpoch}_${mediaPaths.length}.$ext');
     }
-    final primaryPath = mediaPaths.first;
 
-    await _client.from('memories').insert({
-      'id': id,
-      'circle_id': isPublic ? null : circleIds.first,
-      'uploaded_by': userId,
-      'image_url': primaryPath,
-      'media_urls': mediaPaths,
-      'title': canonicalTitle?.isEmpty == true ? null : canonicalTitle,
-      'caption': canonicalCaption?.isEmpty == true ? null : canonicalCaption,
-      'location': location,
-      'is_public': isPublic,
-    });
-
+    // Upload assets BEFORE creating the database row. This prevents a failed
+    // upload from ever leaving a ghost memory record in public.memories.
     final uploadedPaths = <String>[];
     try {
+      for (var i = 0; i < files.length; i++) {
+        await _client.storage.from(_bucket).upload(mediaPaths[i], files[i]);
+        uploadedPaths.add(mediaPaths[i]);
+      }
+
+      await _client.from('memories').insert({
+        'id': id,
+        'circle_id': isPublic ? null : circleIds.first,
+        'uploaded_by': userId,
+        'image_url': mediaPaths.first,
+        'media_urls': mediaPaths,
+        'title': canonicalTitle?.isEmpty == true ? null : canonicalTitle,
+        'caption': canonicalCaption?.isEmpty == true ? null : canonicalCaption,
+        'location': location,
+        'is_public': isPublic,
+      });
+
       if (!isPublic) {
         await _client.from('memory_circles').insert([
           for (final circleId in circleIds) {'memory_id': id, 'circle_id': circleId},
         ]);
       }
-      for (var i = 0; i < files.length; i++) {
-        await _client.storage.from(_bucket).upload(mediaPaths[i], files[i]);
-        uploadedPaths.add(mediaPaths[i]);
-      }
     } catch (e) {
-      if (uploadedPaths.isNotEmpty) {
-        try { await _client.storage.from(_bucket).remove(uploadedPaths); } catch (_) {}
-      }
       try { await _client.from('memory_circles').delete().eq('memory_id', id); } catch (_) {}
-      try { await _client.from('memories').delete().eq('id', id); } catch (_) {}
+      try { await _client.from('memories').delete().eq('id', id).eq('uploaded_by', userId); } catch (_) {}
+      if (uploadedPaths.isNotEmpty) {
+        try { await _client.storage.from(_bucket).remove(uploadedPaths.toSet().toList()); } catch (_) {}
+      }
       rethrow;
     }
 
