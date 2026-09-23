@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -23,7 +24,7 @@ class CirclesScreenWithCover extends StatefulWidget {
   State<CirclesScreenWithCover> createState() => _CirclesScreenWithCoverState();
 }
 
-class _CirclesScreenWithCoverState extends State<CirclesScreenWithCover> {
+class _CirclesScreenWithCoverState extends State<CirclesScreenWithCover> with WidgetsBindingObserver {
   static const _palette = [
     Color(0xFFFFB84D),
     Color(0xFF39FF8C),
@@ -35,12 +36,44 @@ class _CirclesScreenWithCoverState extends State<CirclesScreenWithCover> {
   bool _isLoading = true;
   String? _error;
   int _unreadMemoryCount = 0;
+  int _pendingInviteCount = 0;
+  Timer? _pendingInviteTimer;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadCircles();
     _loadUnreadCount();
+    _loadPendingInvites();
+    _pendingInviteTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      _loadPendingInvites();
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _loadPendingInvites();
+      _loadUnreadCount();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _pendingInviteTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadPendingInvites() async {
+    try {
+      final invites = await CirclesRepository.fetchPendingCircleInvites();
+      if (!mounted) return;
+      setState(() => _pendingInviteCount = invites.length);
+    } catch (e, st) {
+      debugPrint('CirclesScreen: pending invite count failed: $e\\n$st');
+    }
   }
 
   Future<void> _loadUnreadCount() async {
@@ -245,6 +278,15 @@ class _CirclesScreenWithCoverState extends State<CirclesScreenWithCover> {
                 ),
               ),
               const SliverToBoxAdapter(child: SizedBox(height: 20)),
+              if (_pendingInviteCount > 0)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
+                    child: _CircleInvitePendingBanner(
+                      onTap: () => context.push(AppRoutes.notificationsScreen),
+                    ),
+                  ),
+                ),
               if (_unreadMemoryCount > 0)
                 SliverToBoxAdapter(
                   child: Padding(
@@ -873,6 +915,44 @@ class _SheetTextField extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+
+class _CircleInvitePendingBanner extends StatelessWidget {
+  final VoidCallback onTap;
+  const _CircleInvitePendingBanner({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 48),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppTheme.primaryGreenGlow,
+          borderRadius: BorderRadius.circular(15),
+          border: Border.all(color: AppTheme.primaryGreen.withAlpha(105), width: 0.8),
+        ),
+        child: Row(children: [
+          Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(color: AppTheme.primaryGreen, borderRadius: BorderRadius.circular(10)),
+            child: const Icon(Icons.group_add_rounded, size: 17, color: Colors.black),
+          ),
+          const SizedBox(width: 10),
+          Expanded(child: Text(
+            'Circle invitation Pending',
+            style: GoogleFonts.manrope(fontSize: 13, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
+          )),
+          Container(width: 8, height: 8, decoration: const BoxDecoration(color: AppTheme.primaryGreen, shape: BoxShape.circle)),
+          const SizedBox(width: 7),
+          const Icon(Icons.chevron_right_rounded, size: 19, color: AppTheme.primaryGreen),
+        ]),
       ),
     );
   }
