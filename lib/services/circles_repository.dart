@@ -185,6 +185,15 @@ class CirclesRepository {
     return (result as num).toInt();
   }
 
+  static Future<List<Map<String, dynamic>>> fetchPendingCircleInvites() async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return [];
+    final result = await _client.rpc('fetch_pending_circle_invites');
+    return (result as List)
+        .map((row) => Map<String, dynamic>.from(row as Map))
+        .toList();
+  }
+
   static Future<String> joinViaInvite(String token) async {
     final circleId = await _client.rpc('redeem_circle_invite', params: {'invite_token': token});
     return circleId as String;

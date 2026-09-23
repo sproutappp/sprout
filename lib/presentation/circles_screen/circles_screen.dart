@@ -24,18 +24,27 @@ class _CirclesScreenState extends State<CirclesScreen> {
   bool _loading = true;
   String? _error;
   int _unreadMemoryCount = 0;
+  int _pendingInviteCount = 0;
 
   @override
   void initState() {
     super.initState();
     _load();
     _loadUnreadCount();
+    _loadPendingInvites();
   }
 
   Future<void> _loadUnreadCount() async {
     try {
       final count = await NotificationsRepository.fetchUnreadCircleMemoryCount();
       if (mounted) setState(() => _unreadMemoryCount = count);
+    } catch (_) {}
+  }
+
+  Future<void> _loadPendingInvites() async {
+    try {
+      final invites = await CirclesRepository.fetchPendingCircleInvites();
+      if (mounted) setState(() => _pendingInviteCount = invites.length);
     } catch (_) {}
   }
 
@@ -50,6 +59,10 @@ class _CirclesScreenState extends State<CirclesScreen> {
       if (!mounted) return;
       setState(() { _error = "Couldn't load your circles. Pull down to try again."; _loading = false; });
     }
+  }
+
+  Future<void> _refresh() async {
+    await Future.wait([_load(), _loadUnreadCount(), _loadPendingInvites()]);
   }
 
   Future<void> _openCreateCircle() async {
@@ -76,7 +89,7 @@ class _CirclesScreenState extends State<CirclesScreen> {
         child: RefreshIndicator(
           color: AppTheme.primaryGreen,
           backgroundColor: AppTheme.surfaceDark,
-          onRefresh: _load,
+          onRefresh: _refresh,
           child: CustomScrollView(
             physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
             slivers: [
@@ -112,6 +125,19 @@ class _CirclesScreenState extends State<CirclesScreen> {
                 ),
               ),
               const SliverToBoxAdapter(child: SizedBox(height: 20)),
+              if (_pendingInviteCount > 0)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                    child: GestureDetector(
+                      onTap: () => context.push(AppRoutes.notificationsScreen),
+                      child: Text(
+                        _pendingInviteCount == 1 ? 'Circle Invitation Pending' : 'Circle Invitations Pending',
+                        style: GoogleFonts.manrope(fontSize: 13, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
+                      ),
+                    ),
+                  ),
+                ),
               if (_unreadMemoryCount > 0)
                 SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: _NewMemoriesBanner(count: _unreadMemoryCount, onTap: () => context.push(AppRoutes.notificationsScreen)))),
               if (_unreadMemoryCount > 0) const SliverToBoxAdapter(child: SizedBox(height: 20)),
@@ -170,7 +196,6 @@ class _CircleCard extends StatelessWidget {
               ],
             ])),
             const SizedBox(width: 2),
-            // Keep the three-dot hit target visually aligned with every card.
             CircleActionMenu(circle: circle, onChanged: onChanged),
           ]),
         ),
