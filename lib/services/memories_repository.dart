@@ -42,7 +42,7 @@ class MemoriesRepository {
 
     final row = await _client
         .from('memories')
-        .select('id, circle_id, uploaded_by, image_url, media_urls, caption, location, created_at, is_public')
+        .select('id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, created_at, is_public')
         .eq('id', memoryId)
         .maybeSingle();
     if (row == null) return null;
@@ -76,7 +76,7 @@ class MemoriesRepository {
 
     final ownRows = await _client
         .from('memories')
-        .select('id, circle_id, uploaded_by, image_url, media_urls, caption, location, created_at, is_public')
+        .select('id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, created_at, is_public')
         .eq('uploaded_by', userId);
     for (final row in (ownRows as List)) {
       memoryById[row['id'] as String] = Map<String, dynamic>.from(row as Map);
@@ -84,7 +84,7 @@ class MemoriesRepository {
 
     final publicRows = await _client
         .from('memories')
-        .select('id, circle_id, uploaded_by, image_url, media_urls, caption, location, created_at, is_public')
+        .select('id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, created_at, is_public')
         .eq('is_public', true);
     for (final row in (publicRows as List)) {
       memoryById[row['id'] as String] = Map<String, dynamic>.from(row as Map);
@@ -103,7 +103,7 @@ class MemoriesRepository {
     if (circleIds.isNotEmpty) {
       final circleMemoryRows = await _client
           .from('memory_circles')
-          .select('memories(id, circle_id, uploaded_by, image_url, media_urls, caption, location, created_at, is_public)')
+          .select('memories(id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, created_at, is_public)')
           .inFilter('circle_id', circleIds);
       for (final row in (circleMemoryRows as List)) {
         final rawMemory = row['memories'];
@@ -155,7 +155,7 @@ class MemoriesRepository {
   static Future<List<Memory>> fetchPublicMemories() async {
     final rows = await _client
         .from('memories')
-        .select('id, circle_id, uploaded_by, image_url, media_urls, caption, location, created_at, is_public')
+        .select('id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, created_at, is_public')
         .eq('is_public', true)
         .order('created_at', ascending: false);
     final memoryMaps = (rows as List).map((row) => Map<String, dynamic>.from(row as Map)).toList();
@@ -214,7 +214,7 @@ class MemoriesRepository {
     if (currentUserId != null && currentUserId == uploaderId) return fetchAllForUser();
     final rows = await _client
         .from('memories')
-        .select('id, circle_id, uploaded_by, image_url, media_urls, caption, location, created_at, is_public')
+        .select('id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, created_at, is_public')
         .eq('uploaded_by', uploaderId)
         .order('created_at', ascending: false);
     return _withoutDeleted(await _toMemoriesWithSignedUrls(rows as List));
@@ -225,11 +225,9 @@ class MemoriesRepository {
     if (userId == null) throw StateError('Must be signed in to delete a memory');
     if (_deletedMemoryIds.contains(memoryId)) return;
 
-    // IMPORTANT: delete the memory row BEFORE removing memory_circles links.
-    // The memories SELECT/DELETE RLS policy uses can_view_memory(), which
-    // depends on those links for circle memories. Removing the links first
-    // makes the memory invisible to the DELETE ... RETURNING query, causing
-    // a false "deletion failed" result and leaving the row in memories.
+    // Read the assets first. The owner SELECT policy is independent of
+    // circle membership, so even an orphaned/partially-shared memory remains
+    // deletable by its uploader.
     final row = await _client
         .from('memories')
         .select('id, image_url, media_urls, uploaded_by')
@@ -238,6 +236,9 @@ class MemoriesRepository {
         .maybeSingle();
     if (row == null) throw StateError('Memory not found or you do not own it');
 
+    // DELETE before touching memory_circles. The FK cascade removes all
+    // share rows, while the owner SELECT policy makes the DELETE visible to
+    // PostgREST/RLS and prevents a silent zero-row delete.
     final deletedRows = await _client
         .from('memories')
         .delete()
@@ -251,10 +252,6 @@ class MemoriesRepository {
     _deletedMemoryIds.add(memoryId);
     _memoryDeletedController.add(memoryId);
 
-    // The memory row has now been deleted and the FK cascade removes its
-    // memory_circles/memory_people/notification references. Storage cleanup
-    // is deliberately best-effort because it must never resurrect or block
-    // the database deletion.
     final paths = <String>[];
     final imagePath = row['image_url'] as String?;
     if (imagePath != null && imagePath.isNotEmpty) paths.add(imagePath);
@@ -276,6 +273,7 @@ class MemoriesRepository {
 
   static Future<Memory> addMemory({
     required List<File> files,
+    String? title,
     String? caption,
     String? location,
     bool isPublic = false,
@@ -300,7 +298,8 @@ class MemoriesRepository {
       'uploaded_by': userId,
       'image_url': primaryPath,
       'media_urls': mediaPaths,
-      'caption': caption,
+      'title': title?.trim().isEmpty == true ? null : title?.trim(),
+      'caption': caption?.trim().isEmpty == true ? null : caption?.trim(),
       'location': location,
       'is_public': isPublic,
     });
@@ -327,7 +326,7 @@ class MemoriesRepository {
 
     final row = await _client
         .from('memories')
-        .select('id, circle_id, uploaded_by, image_url, media_urls, caption, location, created_at, is_public')
+        .select('id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, created_at, is_public')
         .eq('id', id)
         .single();
     final resolved = await _toMemoriesWithSignedUrls([row]);
