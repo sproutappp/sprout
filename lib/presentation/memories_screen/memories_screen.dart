@@ -66,7 +66,7 @@ class _MemoriesScreenState extends State<MemoriesScreen> {
           for (final m in memories)
             MemoryItem(
               id: m.id,
-              title: memoryDisplayTitle(m.caption),
+              title: m.title,
               date: _formatDate(m.createdAt),
               imageUrl: m.imageUrl,
               semanticLabel: 'Shared memory photo',

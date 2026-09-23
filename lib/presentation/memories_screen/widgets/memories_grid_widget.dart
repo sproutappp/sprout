@@ -143,6 +143,7 @@ class _MonthSection extends StatelessWidget {
           (memory) => Padding(
             padding: const EdgeInsets.only(bottom: 10),
             child: _MemoryHorizontalCard(
+              key: ValueKey(memory.id),
               memory: memory,
               onDeleted: onDeleted,
             ),

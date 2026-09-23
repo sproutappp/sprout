@@ -71,7 +71,7 @@ class _CircleDetailScreenState extends State<CircleDetailScreen> {
           items.add(
             MemoryItem(
               id: memory.id,
-              title: memoryDisplayTitle(memory.caption),
+              title: memory.title,
               date: _formatDate(memory.createdAt),
               imageUrl: memory.imageUrl,
               semanticLabel: 'Shared memory photo',
@@ -496,6 +496,7 @@ class _CircleDetailScreenState extends State<CircleDetailScreen> {
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 10),
                       child: _MemoryRow(
+                        key: ValueKey(memory.id),
                         memory: memory,
                         onTap: () => _openMemory(memory),
                       ),

@@ -498,13 +498,12 @@ class _MemoryDetailScreenV3State extends State<MemoryDetailScreenV3> {
   }
 
   String _title(Memory memory) {
-    final value = (memory.caption ?? '').split(' — ').first.trim();
+    final value = memory.title.trim();
     return value.isEmpty ? 'A shared memory' : value;
   }
 
   String _story(Memory memory) {
-    final parts = (memory.caption ?? '').split(' — ');
-    return parts.length > 1 ? parts.sublist(1).join(' — ').trim() : '';
+    return (memory.caption ?? '').trim();
   }
 
   String _formatDate(DateTime date) {

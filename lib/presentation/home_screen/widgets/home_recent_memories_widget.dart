@@ -40,7 +40,7 @@ class _MemoryCard {
   factory _MemoryCard.fromMemory(Memory m, int index, {int reactionCount = 0}) {
     return _MemoryCard(
       id: m.id,
-      title: memoryDisplayTitle(m.caption),
+      title: m.title,
       date: m.createdAt.toIso8601String(),
       imageUrl: m.imageUrl,
       semanticLabel: 'Shared memory photo',
@@ -210,6 +210,7 @@ class _HomeRecentMemoriesWidgetState extends State<HomeRecentMemoriesWidget>
                       end: Offset.zero,
                     ).animate(anim),
                     child: _MemoryCardWidget(
+                      key: ValueKey(_memories[index].id),
                       memory: _memories[index],
                       onDeleted: _removeDeletedMemory,
                     ),
