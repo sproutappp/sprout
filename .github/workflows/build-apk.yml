@@ -131,15 +131,16 @@ String memoryDisplayTitle(String? caption) {
           PY
           git diff --check
 
-      - name: Persist focused app fix and restore build workflow
+      - name: Persist focused app fix and restore temporary files
         shell: bash
         run: |
           set -euo pipefail
           git show HEAD^:.github/workflows/build-apk.yml > .github/workflows/build-apk.yml
+          git show HEAD^:README.md > README.md
           rm -f .github/workflows/fix-memory-state-and-title.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add lib/presentation/memories_screen/memories_screen.dart lib/presentation/memories_screen/widgets/memories_grid_widget.dart lib/presentation/circle_detail_screen/circle_detail_screen.dart .github/workflows/build-apk.yml .github/workflows/fix-memory-state-and-title.yml
+          git add lib/presentation/memories_screen/memories_screen.dart lib/presentation/memories_screen/widgets/memories_grid_widget.dart lib/presentation/circle_detail_screen/circle_detail_screen.dart .github/workflows/build-apk.yml README.md .github/workflows/fix-memory-state-and-title.yml
           git diff --cached --quiet || git commit -m "Fix deleted memory state and titles"
           git push
 
