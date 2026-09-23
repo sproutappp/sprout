@@ -225,6 +225,11 @@ class MemoriesRepository {
     if (userId == null) throw StateError('Must be signed in to delete a memory');
     if (_deletedMemoryIds.contains(memoryId)) return;
 
+    // IMPORTANT: delete the memory row BEFORE removing memory_circles links.
+    // The memories SELECT/DELETE RLS policy uses can_view_memory(), which
+    // depends on those links for circle memories. Removing the links first
+    // makes the memory invisible to the DELETE ... RETURNING query, causing
+    // a false "deletion failed" result and leaving the row in memories.
     final row = await _client
         .from('memories')
         .select('id, image_url, media_urls, uploaded_by')
@@ -233,21 +238,6 @@ class MemoriesRepository {
         .maybeSingle();
     if (row == null) throw StateError('Memory not found or you do not own it');
 
-    final paths = <String>[];
-    final imagePath = row['image_url'] as String?;
-    if (imagePath != null && imagePath.isNotEmpty) paths.add(imagePath);
-    final rawMedia = row['media_urls'];
-    if (rawMedia is List) paths.addAll(rawMedia.whereType<String>().where((p) => p.isNotEmpty));
-    if (paths.isNotEmpty) {
-      try { await _client.storage.from(_bucket).remove(paths.toSet().toList()); } catch (_) {}
-    }
-
-    try {
-      await _client.from('memory_circles').delete().eq('memory_id', memoryId);
-    } catch (_) {}
-
-    // Request the deleted row back. Supabase/PostgREST can otherwise report a
-    // successful DELETE with zero rows when RLS hides the target.
     final deletedRows = await _client
         .from('memories')
         .delete()
@@ -260,6 +250,19 @@ class MemoriesRepository {
 
     _deletedMemoryIds.add(memoryId);
     _memoryDeletedController.add(memoryId);
+
+    // The memory row has now been deleted and the FK cascade removes its
+    // memory_circles/memory_people/notification references. Storage cleanup
+    // is deliberately best-effort because it must never resurrect or block
+    // the database deletion.
+    final paths = <String>[];
+    final imagePath = row['image_url'] as String?;
+    if (imagePath != null && imagePath.isNotEmpty) paths.add(imagePath);
+    final rawMedia = row['media_urls'];
+    if (rawMedia is List) paths.addAll(rawMedia.whereType<String>().where((p) => p.isNotEmpty));
+    if (paths.isNotEmpty) {
+      try { await _client.storage.from(_bucket).remove(paths.toSet().toList()); } catch (_) {}
+    }
   }
 
   static final _rng = Random.secure();
