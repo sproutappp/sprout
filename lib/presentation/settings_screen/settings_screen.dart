@@ -7,6 +7,7 @@ import '../../theme/app_theme.dart';
 import '../../routes/app_routes.dart';
 import '../../services/account_deletion_service.dart';
 import '../../services/settings_preferences.dart';
+import '../../presentation/report_issue_screen/report_issue_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -154,6 +155,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!await launchUrl(_supportUri, mode: LaunchMode.externalApplication)) {
       if (mounted) _showMessage('Couldn\'t open your email app.');
     }
+  }
+
+  void _openReportIssue() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const ReportIssueScreen()),
+    );
   }
 
   void _openPrivacyPolicy() {
@@ -422,6 +429,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               color: AppTheme.textMuted,
                             ),
                             onTap: _openSupport,
+                          ),
+                          _divider(),
+                          ListTile(
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 18,
+                              vertical: 4,
+                            ),
+                            leading: const Icon(
+                              Icons.report_problem_outlined,
+                              color: AppTheme.primaryGreen,
+                            ),
+                            title: Text(
+                              'Report an Issue',
+                              style: GoogleFonts.manrope(
+                                color: AppTheme.textPrimary,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            subtitle: Text(
+                              'Tell us about a problem with Sprout.',
+                              style: GoogleFonts.manrope(
+                                color: AppTheme.textMuted,
+                                fontSize: 12,
+                              ),
+                            ),
+                            trailing: const Icon(
+                              Icons.chevron_right_rounded,
+                              color: AppTheme.textMuted,
+                            ),
+                            onTap: _openReportIssue,
                           ),
                         ],
                       ),
