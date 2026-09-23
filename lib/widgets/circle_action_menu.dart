@@ -30,7 +30,7 @@ class CircleActionMenu extends StatelessWidget {
         context: context,
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
-        builder: (_) => _CircleInvitePicker(circle: circle),
+        builder: (_) => CircleInvitePicker(circle: circle),
       );
     } else if (action == 'share') {
       try {
@@ -159,15 +159,15 @@ class _CircleActionSheet extends StatelessWidget {
   }
 }
 
-class _CircleInvitePicker extends StatefulWidget {
+class CircleInvitePicker extends StatefulWidget {
   final Circle circle;
-  const _CircleInvitePicker({required this.circle});
+  const CircleInvitePicker({required this.circle});
 
   @override
-  State<_CircleInvitePicker> createState() => _CircleInvitePickerState();
+  State<CircleInvitePicker> createState() => _CircleInvitePickerState();
 }
 
-class _CircleInvitePickerState extends State<_CircleInvitePicker> {
+class _CircleInvitePickerState extends State<CircleInvitePicker> {
   List<Profile> _users = [];
   final Set<String> _selected = {};
   bool _loading = true;
@@ -575,64 +575,6 @@ class _MenuOption extends StatelessWidget {
               ],
             ),
           ),
-        ),
-      );
-}
-
-class _FieldLabel extends StatelessWidget {
-  final String text;
-  const _FieldLabel(this.text);
-
-  @override
-  Widget build(BuildContext context) => Text(
-        text,
-        style: GoogleFonts.manrope(
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          color: AppTheme.textMuted,
-          letterSpacing: 0.3,
-        ),
-      );
-}
-
-class _FormField extends StatelessWidget {
-  final TextEditingController controller;
-  final String hint;
-  final IconData icon;
-  final int maxLines;
-  const _FormField({required this.controller, required this.hint, required this.icon, this.maxLines = 1});
-
-  @override
-  Widget build(BuildContext context) => Container(
-        decoration: BoxDecoration(
-          color: AppTheme.surfaceVariantDark,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppTheme.outline, width: 0.8),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: EdgeInsets.fromLTRB(14, maxLines > 1 ? 14 : 0, 0, 0),
-              child: Icon(icon, size: 18, color: AppTheme.textDisabled),
-            ),
-            Expanded(
-              child: TextField(
-                controller: controller,
-                maxLines: maxLines,
-                style: GoogleFonts.manrope(fontSize: 14, color: AppTheme.textPrimary),
-                decoration: InputDecoration(
-                  hintText: hint,
-                  hintStyle: GoogleFonts.manrope(fontSize: 14, color: AppTheme.textDisabled),
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                  isDense: true,
-                ),
-              ),
-            ),
-          ],
         ),
       );
 }
