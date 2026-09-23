@@ -1,4 +1,4 @@
-name: One-time circle header share patch
+name: One-time memory deletion and naming fix
 
 on:
   push:
@@ -17,138 +17,178 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Patch circle header share button
+      - name: Patch memory deletion state and titles
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
 
-          path = Path('lib/presentation/circle_detail_screen/circle_detail_screen.dart')
-          text = path.read_text()
+          p = Path('lib/presentation/memories_screen/memories_screen.dart')
+          text = p.read_text()
+          if 'void _removeDeletedMemory(String memoryId)' not in text:
+              anchor = "  Future<void> _load() async {\n"
+              method = """  void _removeDeletedMemory(String memoryId) {
+    if (!mounted) return;
+    setState(() {
+      _allMemories = _allMemories.where((memory) => memory.id != memoryId).toList();
+    });
+  }
 
-          share_import = "import 'package:share_plus/share_plus.dart';"
-          if share_import not in text:
-              marker = "import 'package:image_picker/image_picker.dart';"
-              if marker not in text:
-                  raise SystemExit('image_picker import not found')
-              text = text.replace(marker, marker + "\n" + share_import, 1)
-
-          if 'Future<void> _shareCircle(Circle circle) async' not in text:
-              anchor = """  void _openInviteSheet(Circle circle) {
-            showModalBottomSheet<void>(
-              context: context,
-              isScrollControlled: true,
-              backgroundColor: Colors.transparent,
-              builder: (_) => _InviteSheet(circle: circle),
-            );
-          }
-          """
-              method = """  void _openInviteSheet(Circle circle) {
-            showModalBottomSheet<void>(
-              context: context,
-              isScrollControlled: true,
-              backgroundColor: Colors.transparent,
-              builder: (_) => _InviteSheet(circle: circle),
-            );
-          }
-
-          Future<void> _shareCircle(Circle circle) async {
-            try {
-              final token = await CirclesRepository.createInvite(circle.id);
-              final link = 'https://sproutapp.in/join/$token';
-              await SharePlus.instance.share(
-                ShareParams(
-                  title: 'Join ${circle.name} on Sprout',
-                  text: 'Join my circle "${circle.name}" on Sprout:\n$link',
-                ),
-              );
-            } catch (e, st) {
-              debugPrint('CircleDetailScreen: share circle failed: $e\\n$st');
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    \"Couldn't share this circle. Please try again.\",
-                    style: GoogleFonts.manrope(color: Colors.white),
-                  ),
-                  backgroundColor: AppTheme.error,
-                ),
-              );
-            }
-          }
-          """
+  Future<void> _load() async {
+"""
               if anchor not in text:
-                  raise SystemExit('invite sheet method anchor not found')
+                  raise SystemExit('MemoriesScreen _load anchor not found')
               text = text.replace(anchor, method, 1)
 
-          old_callback = "onInvite: () => _openInviteSheet(circle),"
-          new_callback = "onShare: () => _shareCircle(circle),"
-          if old_callback in text:
-              text = text.replace(old_callback, new_callback, 1)
-          elif new_callback not in text:
-              raise SystemExit('header callback not found')
+          old_title = "title: m.caption?.isNotEmpty == true ? m.caption! : 'A memory',"
+          if old_title in text:
+              text = text.replace(old_title, "title: memoryDisplayTitle(m.caption),", 1)
+          elif 'title: memoryDisplayTitle(m.caption),' not in text:
+              raise SystemExit('MemoriesScreen title mapping not found')
 
-          text = text.replace('final VoidCallback onInvite;', 'final VoidCallback onShare;', 1)
-          text = text.replace('required this.onInvite,', 'required this.onShare,', 1)
+          old_grid = "child: MemoriesGridWidget(memories: filtered),"
+          new_grid = """child: MemoriesGridWidget(
+                      memories: filtered,
+                      onDeleted: _removeDeletedMemory,
+                    ),"""
+          if old_grid in text:
+              text = text.replace(old_grid, new_grid, 1)
+          elif 'onDeleted: _removeDeletedMemory' not in text:
+              raise SystemExit('MemoriesGridWidget call not found')
+          p.write_text(text)
 
-          old_button = """                GestureDetector(
-                  onTap: onInvite,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-                    decoration: BoxDecoration(
-                      color: AppTheme.primaryGreen,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.person_add_alt_1_rounded, size: 14, color: Colors.black),
-                        const SizedBox(width: 5),
-                        Text(
-                          'Invite',
-                          style: GoogleFonts.manrope(
-                            color: Colors.black,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),"""
-          new_button = """                GestureDetector(
-                  onTap: onShare,
-                  child: Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: AppTheme.primaryGreen,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.share_rounded,
-                      size: 20,
-                      color: Colors.black,
-                    ),
-                  ),
-                ),"""
-          if old_button in text:
-              text = text.replace(old_button, new_button, 1)
-          elif 'onTap: onShare,' not in text:
-              raise SystemExit('header invite button block not found')
+          p = Path('lib/presentation/memories_screen/widgets/memories_grid_widget.dart')
+          text = p.read_text()
+          if 'String memoryDisplayTitle(String? caption)' not in text:
+              marker = "enum MemoryType { photo }\n"
+              helper = """enum MemoryType { photo }
 
-          path.write_text(text)
+String memoryDisplayTitle(String? caption) {
+  final value = (caption ?? '').trim();
+  if (value.isEmpty) return 'A memory';
+  final separator = value.indexOf(' — ');
+  return separator > 0 ? value.substring(0, separator).trim() : value;
+}
+"""
+              if marker not in text:
+                  raise SystemExit('MemoryType marker not found')
+              text = text.replace(marker, helper, 1)
+
+          if 'final ValueChanged<String>? onDeleted;' not in text:
+              text = text.replace(
+                  "class MemoriesGridWidget extends StatelessWidget {\n  final List<MemoryItem> memories;",
+                  "class MemoriesGridWidget extends StatelessWidget {\n  final List<MemoryItem> memories;\n  final ValueChanged<String>? onDeleted;",
+                  1,
+              )
+              text = text.replace(
+                  "const MemoriesGridWidget({super.key, required this.memories});",
+                  """const MemoriesGridWidget({
+    super.key,
+    required this.memories,
+    this.onDeleted,
+  });""",
+                  1,
+              )
+              text = text.replace(
+                  "memories: entry.value,\n              ))",
+                  "memories: entry.value,\n                onDeleted: onDeleted,\n              ))",
+                  1,
+              )
+
+          month_start = text.find('class _MonthSection extends StatelessWidget {')
+          month_end = text.find('class _MemoryHorizontalCard extends StatefulWidget {')
+          month = text[month_start:month_end]
+          if 'final ValueChanged<String>? onDeleted;' not in month:
+              text = text.replace(
+                  "class _MonthSection extends StatelessWidget {\n  final String monthLabel;\n  final List<MemoryItem> memories;",
+                  "class _MonthSection extends StatelessWidget {\n  final String monthLabel;\n  final List<MemoryItem> memories;\n  final ValueChanged<String>? onDeleted;",
+                  1,
+              )
+              text = text.replace(
+                  "const _MonthSection({required this.monthLabel, required this.memories});",
+                  """const _MonthSection({
+    required this.monthLabel,
+    required this.memories,
+    this.onDeleted,
+  });""",
+                  1,
+              )
+              text = text.replace(
+                  "child: _MemoryHorizontalCard(memory: memory),",
+                  "child: _MemoryHorizontalCard(memory: memory, onDeleted: onDeleted),",
+                  1,
+              )
+
+          card_start = text.find('class _MemoryHorizontalCard extends StatefulWidget {')
+          card_end = text.find('class _MemoryHorizontalCardState extends State<_MemoryHorizontalCard> {')
+          card = text[card_start:card_end]
+          if 'final ValueChanged<String>? onDeleted;' not in card:
+              text = text.replace(
+                  "class _MemoryHorizontalCard extends StatefulWidget {\n  final MemoryItem memory;",
+                  "class _MemoryHorizontalCard extends StatefulWidget {\n  final MemoryItem memory;\n  final ValueChanged<String>? onDeleted;",
+                  1,
+              )
+              text = text.replace(
+                  "const _MemoryHorizontalCard({required this.memory});",
+                  """const _MemoryHorizontalCard({
+    required this.memory,
+    this.onDeleted,
+  });""",
+                  1,
+              )
+
+          old_on_tap = "onTap: () => context.push('/memory-detail-screen', extra: memory),"
+          new_on_tap = """onTap: () async {
+        final deleted = await context.push<bool>(
+          '/memory-detail-screen',
+          extra: memory,
+        );
+        if (deleted == true) {
+          widget.onDeleted?.call(memory.id);
+        }
+      },"""
+          if old_on_tap in text:
+              text = text.replace(old_on_tap, new_on_tap, 1)
+          elif 'widget.onDeleted?.call(memory.id);' not in text:
+              raise SystemExit('Memory grid navigation not found')
+          p.write_text(text)
+
+          p = Path('lib/presentation/circle_detail_screen/circle_detail_screen.dart')
+          text = p.read_text()
+          old_title = """title: memory.caption?.isNotEmpty == true
+                  ? memory.caption!
+                  : 'A shared memory',"""
+          if old_title in text:
+              text = text.replace(old_title, "title: memoryDisplayTitle(memory.caption),", 1)
+          elif 'title: memoryDisplayTitle(memory.caption),' not in text:
+              raise SystemExit('CircleDetail title mapping not found')
+
+          old_open = """    if (deleted == true && mounted) {
+      await _load();
+    }"""
+          new_open = """    if (deleted == true && mounted) {
+      setState(() {
+        _memories = _memories.where((item) => item.id != memory.id).toList();
+      });
+      await _load();
+    }"""
+          if old_open in text:
+              text = text.replace(old_open, new_open, 1)
+          elif '_memories = _memories.where((item) => item.id != memory.id)' not in text:
+              raise SystemExit('CircleDetail delete return handler not found')
+          p.write_text(text)
           PY
+          git diff --check
 
-      - name: Commit patched app and remove temporary workflow
+      - name: Commit app changes and remove temporary workflow
         shell: bash
         run: |
           set -euo pipefail
           rm -f .github/workflows/one-time-circle-share.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add lib/presentation/circle_detail_screen/circle_detail_screen.dart .github/workflows/one-time-circle-share.yml
+          git add lib/presentation/memories_screen/memories_screen.dart lib/presentation/memories_screen/widgets/memories_grid_widget.dart lib/presentation/circle_detail_screen/circle_detail_screen.dart .github/workflows/one-time-circle-share.yml
           git diff --cached --quiet && exit 0
-          git commit -m "Replace circle header invite with native share"
+          git commit -m "Fix deleted memory state and titles"
           git push
