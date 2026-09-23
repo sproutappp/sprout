@@ -11,8 +11,14 @@ class MemoriesRepository {
   static const _bucket = 'memories';
   static const _signedUrlExpirySeconds = 60 * 60 * 24 * 7;
   static final _memoryDeletedController = StreamController<String>.broadcast();
+  static final Set<String> _deletedMemoryIds = <String>{};
 
   static Stream<String> get memoryDeleted => _memoryDeletedController.stream;
+
+  static List<Memory> _withoutDeleted(List<Memory> memories) {
+    if (_deletedMemoryIds.isEmpty) return memories;
+    return memories.where((memory) => !_deletedMemoryIds.contains(memory.id)).toList();
+  }
 
   static Future<List<Memory>> fetchForCircle(String circleId) async {
     final rows = await _client.from('memory_circles').select('memories(*)').eq('circle_id', circleId);
@@ -28,13 +34,12 @@ class MemoriesRepository {
       if (aCreatedAt is! String || bCreatedAt is! String) return 0;
       return bCreatedAt.compareTo(aCreatedAt);
     });
-    return _toMemoriesWithSignedUrls(memoryMaps);
+    return _withoutDeleted(await _toMemoriesWithSignedUrls(memoryMaps));
   }
 
   static Future<Memory?> fetchById(String memoryId) async {
-    // Do not expand optional PostgREST relationships in the primary lookup.
-    // A profile/circle relationship issue must not make an accessible memory
-    // appear to have been deleted.
+    if (_deletedMemoryIds.contains(memoryId)) return null;
+
     final row = await _client
         .from('memories')
         .select('id, circle_id, uploaded_by, image_url, media_urls, caption, location, created_at, is_public')
@@ -60,17 +65,13 @@ class MemoriesRepository {
     }
 
     final converted = await _toMemoriesWithSignedUrls([resolved]);
-    return converted.isEmpty ? null : converted.first;
+    return converted.isEmpty || _deletedMemoryIds.contains(memoryId) ? null : converted.first;
   }
 
   static Future<List<Memory>> fetchAllForUser() async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) throw StateError('Must be signed in to load memories');
 
-    // Home should contain memories the signed-in user can actually see:
-    // their own memories, public memories, and memories shared to circles
-    // where they are a member. Previously this queried only uploaded_by, so
-    // a member could see a circle memory inside the circle but not on Home.
     final memoryById = <String, Map<String, dynamic>>{};
 
     final ownRows = await _client
@@ -148,7 +149,7 @@ class MemoriesRepository {
       }
     }
 
-    return _toMemoriesWithSignedUrls(memoryMaps);
+    return _withoutDeleted(await _toMemoriesWithSignedUrls(memoryMaps));
   }
 
   static Future<List<Memory>> fetchPublicMemories() async {
@@ -172,7 +173,7 @@ class MemoriesRepository {
         if (profile != null) memory['profiles'] = profile;
       }
     }
-    return _toMemoriesWithSignedUrls(memoryMaps);
+    return _withoutDeleted(await _toMemoriesWithSignedUrls(memoryMaps));
   }
 
   static Future<List<Memory>> _toMemoriesWithSignedUrls(List rows) async {
@@ -216,12 +217,14 @@ class MemoriesRepository {
         .select('id, circle_id, uploaded_by, image_url, media_urls, caption, location, created_at, is_public')
         .eq('uploaded_by', uploaderId)
         .order('created_at', ascending: false);
-    return _toMemoriesWithSignedUrls(rows as List);
+    return _withoutDeleted(await _toMemoriesWithSignedUrls(rows as List));
   }
 
   static Future<void> deleteMemory(String memoryId) async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) throw StateError('Must be signed in to delete a memory');
+    if (_deletedMemoryIds.contains(memoryId)) return;
+
     final row = await _client
         .from('memories')
         .select('id, image_url, media_urls, uploaded_by')
@@ -239,28 +242,23 @@ class MemoriesRepository {
       try { await _client.storage.from(_bucket).remove(paths.toSet().toList()); } catch (_) {}
     }
 
-    // Remove the circle links explicitly as well as the memory row. This
-    // keeps a deleted memory from surviving as a stale shared-memory relation
-    // if the database's FK cascade is not present in the deployed schema.
     try {
       await _client.from('memory_circles').delete().eq('memory_id', memoryId);
     } catch (_) {}
 
-    await _client.from('memories').delete().eq('id', memoryId).eq('uploaded_by', userId);
-
-    // Supabase/PostgREST can return successfully when an RLS policy matches
-    // zero rows. Verify the row is actually gone before reporting success to
-    // the UI; otherwise the caller can incorrectly remove the detail screen
-    // while the memory remains visible in the app.
-    final remaining = await _client
+    // Request the deleted row back. Supabase/PostgREST can otherwise report a
+    // successful DELETE with zero rows when RLS hides the target.
+    final deletedRows = await _client
         .from('memories')
-        .select('id')
+        .delete()
         .eq('id', memoryId)
-        .maybeSingle();
-    if (remaining != null) {
+        .eq('uploaded_by', userId)
+        .select('id');
+    if ((deletedRows as List).isEmpty) {
       throw StateError('Memory deletion was not confirmed by the server');
     }
 
+    _deletedMemoryIds.add(memoryId);
     _memoryDeletedController.add(memoryId);
   }
 
