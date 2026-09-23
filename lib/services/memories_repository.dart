@@ -39,11 +39,7 @@ class MemoriesRepository {
 
   static Future<Memory?> fetchById(String memoryId) async {
     if (_deletedMemoryIds.contains(memoryId)) return null;
-    final row = await _client
-        .from('memories')
-        .select('id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, created_at, is_public')
-        .eq('id', memoryId)
-        .maybeSingle();
+    final row = await _client.from('memories').select('id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, created_at, is_public').eq('id', memoryId).maybeSingle();
     if (row == null) return null;
     final resolved = Map<String, dynamic>.from(row);
     final uploaderId = resolved['uploaded_by'] as String?;
@@ -69,37 +65,21 @@ class MemoriesRepository {
     if (userId == null) throw StateError('Must be signed in to load memories');
     final memoryById = <String, Map<String, dynamic>>{};
 
-    final ownRows = await _client
-        .from('memories')
-        .select('id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, created_at, is_public')
-        .eq('uploaded_by', userId);
+    final ownRows = await _client.from('memories').select('id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, created_at, is_public').eq('uploaded_by', userId);
     for (final row in (ownRows as List)) {
       memoryById[row['id'] as String] = Map<String, dynamic>.from(row as Map);
     }
 
-    final publicRows = await _client
-        .from('memories')
-        .select('id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, created_at, is_public')
-        .eq('is_public', true);
+    final publicRows = await _client.from('memories').select('id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, created_at, is_public').eq('is_public', true);
     for (final row in (publicRows as List)) {
       memoryById[row['id'] as String] = Map<String, dynamic>.from(row as Map);
     }
 
-    final membershipRows = await _client
-        .from('circle_members')
-        .select('circle_id')
-        .eq('user_id', userId);
-    final circleIds = (membershipRows as List)
-        .map((row) => row['circle_id'] as String?)
-        .whereType<String>()
-        .toSet()
-        .toList();
+    final membershipRows = await _client.from('circle_members').select('circle_id').eq('user_id', userId);
+    final circleIds = (membershipRows as List).map((row) => row['circle_id'] as String?).whereType<String>().toSet().toList();
 
     if (circleIds.isNotEmpty) {
-      final circleMemoryRows = await _client
-          .from('memory_circles')
-          .select('memories(id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, created_at, is_public)')
-          .inFilter('circle_id', circleIds);
+      final circleMemoryRows = await _client.from('memory_circles').select('memories(id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, created_at, is_public)').inFilter('circle_id', circleIds);
       for (final row in (circleMemoryRows as List)) {
         final rawMemory = row['memories'];
         if (rawMemory is Map) {
@@ -119,17 +99,10 @@ class MemoriesRepository {
     });
     if (memoryMaps.isEmpty) return [];
 
-    final circleIdsForNames = memoryMaps
-        .where((m) => m['is_public'] != true)
-        .map((m) => m['circle_id'] as String?)
-        .whereType<String>()
-        .toSet()
-        .toList();
+    final circleIdsForNames = memoryMaps.where((m) => m['is_public'] != true).map((m) => m['circle_id'] as String?).whereType<String>().toSet().toList();
     if (circleIdsForNames.isNotEmpty) {
       final circles = await _client.from('circles').select('id, name').inFilter('id', circleIdsForNames);
-      final namesById = <String, String>{
-        for (final row in (circles as List)) (row['id'] as String): (row['name'] as String),
-      };
+      final namesById = <String, String>{for (final row in (circles as List)) (row['id'] as String): (row['name'] as String)};
       for (final memory in memoryMaps) {
         final circleId = memory['circle_id'] as String?;
         if (memory['is_public'] != true && circleId != null && namesById.containsKey(circleId)) {
@@ -142,20 +115,13 @@ class MemoriesRepository {
   }
 
   static Future<List<Memory>> fetchPublicMemories() async {
-    final rows = await _client
-        .from('memories')
-        .select('id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, created_at, is_public')
-        .eq('is_public', true)
-        .order('created_at', ascending: false);
+    final rows = await _client.from('memories').select('id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, created_at, is_public').eq('is_public', true).order('created_at', ascending: false);
     final memoryMaps = (rows as List).map((row) => Map<String, dynamic>.from(row as Map)).toList();
     if (memoryMaps.isEmpty) return [];
-
     final uploaderIds = memoryMaps.map((m) => m['uploaded_by'] as String?).whereType<String>().toSet().toList();
     if (uploaderIds.isNotEmpty) {
       final profiles = await _client.from('profiles').select('id, full_name, avatar_url').inFilter('id', uploaderIds);
-      final profilesById = <String, Map<String, dynamic>>{
-        for (final row in (profiles as List)) (row['id'] as String): Map<String, dynamic>.from(row as Map),
-      };
+      final profilesById = <String, Map<String, dynamic>>{for (final row in (profiles as List)) (row['id'] as String): Map<String, dynamic>.from(row as Map)};
       for (final memory in memoryMaps) {
         final uploaderId = memory['uploaded_by'] as String?;
         final profile = uploaderId == null ? null : profilesById[uploaderId];
@@ -188,9 +154,7 @@ class MemoriesRepository {
           final primary = map['image_url'] as String?;
           if (primary != null && signedByPath.containsKey(primary)) map['image_url'] = signedByPath[primary];
           final rawMedia = map['media_urls'];
-          if (rawMedia is List) {
-            map['media_urls'] = rawMedia.whereType<String>().map((p) => signedByPath[p] ?? p).toList();
-          }
+          if (rawMedia is List) map['media_urls'] = rawMedia.whereType<String>().map((p) => signedByPath[p] ?? p).toList();
         }
       } catch (_) {}
     }
@@ -200,11 +164,7 @@ class MemoriesRepository {
   static Future<List<Memory>> fetchByUploader(String uploaderId) async {
     final currentUserId = _client.auth.currentUser?.id;
     if (currentUserId != null && currentUserId == uploaderId) return fetchAllForUser();
-    final rows = await _client
-        .from('memories')
-        .select('id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, created_at, is_public')
-        .eq('uploaded_by', uploaderId)
-        .order('created_at', ascending: false);
+    final rows = await _client.from('memories').select('id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, created_at, is_public').eq('uploaded_by', uploaderId).order('created_at', ascending: false);
     return _withoutDeleted(await _toMemoriesWithSignedUrls(rows as List));
   }
 
@@ -213,21 +173,13 @@ class MemoriesRepository {
     if (userId == null) throw StateError('Must be signed in to delete a memory');
     if (_deletedMemoryIds.contains(memoryId)) return;
 
-    final row = await _client
-        .from('memories')
-        .select('id, image_url, media_urls, uploaded_by')
-        .eq('id', memoryId)
-        .eq('uploaded_by', userId)
-        .maybeSingle();
+    final row = await _client.from('memories').select('id, image_url, media_urls, uploaded_by').eq('id', memoryId).eq('uploaded_by', userId).maybeSingle();
     if (row == null) throw StateError('Memory not found or you do not own it');
 
-    final deletedRows = await _client
-        .from('memories')
-        .delete()
-        .eq('id', memoryId)
-        .eq('uploaded_by', userId)
-        .select('id');
-    if ((deletedRows as List).isEmpty) {
+    // The database function performs the delete as the owner atomically and
+    // returns the id only after the row has actually been removed.
+    final deletedId = await _client.rpc('delete_memory', params: {'p_memory_id': memoryId});
+    if (deletedId is! String || deletedId != memoryId) {
       throw StateError('Memory deletion was not confirmed by the server');
     }
 
@@ -283,8 +235,8 @@ class MemoriesRepository {
       mediaPaths.add('$id/${DateTime.now().microsecondsSinceEpoch}_${mediaPaths.length}.$ext');
     }
 
-    // Upload assets BEFORE creating the database row. This prevents a failed
-    // upload from ever leaving a ghost memory record in public.memories.
+    // Upload all assets before creating the database row. If any upload fails,
+    // the catch block removes any successful uploads and no memory row exists.
     final uploadedPaths = <String>[];
     try {
       for (var i = 0; i < files.length; i++) {
@@ -318,11 +270,7 @@ class MemoriesRepository {
       rethrow;
     }
 
-    final row = await _client
-        .from('memories')
-        .select('id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, created_at, is_public')
-        .eq('id', id)
-        .single();
+    final row = await _client.from('memories').select('id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, created_at, is_public').eq('id', id).single();
     final resolved = await _toMemoriesWithSignedUrls([row]);
     return resolved.first;
   }
