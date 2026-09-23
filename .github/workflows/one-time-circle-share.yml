@@ -1,0 +1,154 @@
+name: One-time circle header share patch
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Patch circle header share button
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('lib/presentation/circle_detail_screen/circle_detail_screen.dart')
+          text = path.read_text()
+
+          share_import = "import 'package:share_plus/share_plus.dart';"
+          if share_import not in text:
+              marker = "import 'package:image_picker/image_picker.dart';"
+              if marker not in text:
+                  raise SystemExit('image_picker import not found')
+              text = text.replace(marker, marker + "\n" + share_import, 1)
+
+          if 'Future<void> _shareCircle(Circle circle) async' not in text:
+              anchor = """  void _openInviteSheet(Circle circle) {
+            showModalBottomSheet<void>(
+              context: context,
+              isScrollControlled: true,
+              backgroundColor: Colors.transparent,
+              builder: (_) => _InviteSheet(circle: circle),
+            );
+          }
+          """
+              method = """  void _openInviteSheet(Circle circle) {
+            showModalBottomSheet<void>(
+              context: context,
+              isScrollControlled: true,
+              backgroundColor: Colors.transparent,
+              builder: (_) => _InviteSheet(circle: circle),
+            );
+          }
+
+          Future<void> _shareCircle(Circle circle) async {
+            try {
+              final token = await CirclesRepository.createInvite(circle.id);
+              final link = 'https://sproutapp.in/join/$token';
+              await SharePlus.instance.share(
+                ShareParams(
+                  title: 'Join ${circle.name} on Sprout',
+                  text: 'Join my circle "${circle.name}" on Sprout:\n$link',
+                ),
+              );
+            } catch (e, st) {
+              debugPrint('CircleDetailScreen: share circle failed: $e\\n$st');
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    \"Couldn't share this circle. Please try again.\",
+                    style: GoogleFonts.manrope(color: Colors.white),
+                  ),
+                  backgroundColor: AppTheme.error,
+                ),
+              );
+            }
+          }
+          """
+              if anchor not in text:
+                  raise SystemExit('invite sheet method anchor not found')
+              text = text.replace(anchor, method, 1)
+
+          old_callback = "onInvite: () => _openInviteSheet(circle),"
+          new_callback = "onShare: () => _shareCircle(circle),"
+          if old_callback in text:
+              text = text.replace(old_callback, new_callback, 1)
+          elif new_callback not in text:
+              raise SystemExit('header callback not found')
+
+          text = text.replace('final VoidCallback onInvite;', 'final VoidCallback onShare;', 1)
+          text = text.replace('required this.onInvite,', 'required this.onShare,', 1)
+
+          old_button = """                GestureDetector(
+                  onTap: onInvite,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryGreen,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.person_add_alt_1_rounded, size: 14, color: Colors.black),
+                        const SizedBox(width: 5),
+                        Text(
+                          'Invite',
+                          style: GoogleFonts.manrope(
+                            color: Colors.black,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),"""
+          new_button = """                GestureDetector(
+                  onTap: onShare,
+                  child: Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryGreen,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.share_rounded,
+                      size: 20,
+                      color: Colors.black,
+                    ),
+                  ),
+                ),"""
+          if old_button in text:
+              text = text.replace(old_button, new_button, 1)
+          elif 'onTap: onShare,' not in text:
+              raise SystemExit('header invite button block not found')
+
+          path.write_text(text)
+          PY
+
+      - name: Commit patched app and remove temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/one-time-circle-share.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/presentation/circle_detail_screen/circle_detail_screen.dart .github/workflows/one-time-circle-share.yml
+          git diff --cached --quiet && exit 0
+          git commit -m "Replace circle header invite with native share"
+          git push
