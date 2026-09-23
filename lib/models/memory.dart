@@ -11,6 +11,7 @@ class Memory {
   final String uploadedBy;
   final String imageUrl;
   final List<String> mediaUrls;
+  final String title;
   final String? caption;
   final String? location;
   final DateTime createdAt;
@@ -24,6 +25,7 @@ class Memory {
     required this.uploadedBy,
     required this.imageUrl,
     this.mediaUrls = const [],
+    this.title = 'A memory',
     this.caption,
     this.location,
     required this.createdAt,
@@ -40,13 +42,22 @@ class Memory {
         ? rawMedia.whereType<String>().where((url) => url.isNotEmpty).toList()
         : <String>[];
     final imageUrl = map['image_url'] as String;
+    final storedTitle = (map['title'] as String?)?.trim();
+    final legacyCaption = (map['caption'] as String?)?.trim();
+    final legacySeparator = legacyCaption?.indexOf(' — ') ?? -1;
+    final title = storedTitle?.isNotEmpty == true
+        ? storedTitle!
+        : (legacySeparator > 0
+            ? legacyCaption!.substring(0, legacySeparator).trim()
+            : (legacyCaption?.isNotEmpty == true ? legacyCaption! : 'A memory'));
     return Memory(
       id: map['id'] as String,
       circleId: map['circle_id'] as String?,
       uploadedBy: map['uploaded_by'] as String,
       imageUrl: imageUrl,
       mediaUrls: mediaUrls.isEmpty ? [imageUrl] : mediaUrls,
-      caption: map['caption'] as String?,
+      title: title,
+      caption: legacyCaption,
       location: map['location'] as String?,
       createdAt: DateTime.parse(map['created_at'] as String),
       contributor: contributorMap != null ? Profile.fromMap(contributorMap) : null,
