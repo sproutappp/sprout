@@ -39,14 +39,12 @@ class MemoriesRepository {
 
   static Future<Memory?> fetchById(String memoryId) async {
     if (_deletedMemoryIds.contains(memoryId)) return null;
-
     final row = await _client
         .from('memories')
         .select('id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, created_at, is_public')
         .eq('id', memoryId)
         .maybeSingle();
     if (row == null) return null;
-
     final resolved = Map<String, dynamic>.from(row);
     final uploaderId = resolved['uploaded_by'] as String?;
     if (uploaderId != null) {
@@ -55,7 +53,6 @@ class MemoriesRepository {
         if (profile != null) resolved['profiles'] = profile;
       } catch (_) {}
     }
-
     final circleId = resolved['circle_id'] as String?;
     if (circleId != null) {
       try {
@@ -63,7 +60,6 @@ class MemoriesRepository {
         if (circle != null) resolved['circles'] = circle;
       } catch (_) {}
     }
-
     final converted = await _toMemoriesWithSignedUrls([resolved]);
     return converted.isEmpty || _deletedMemoryIds.contains(memoryId) ? null : converted.first;
   }
@@ -71,7 +67,6 @@ class MemoriesRepository {
   static Future<List<Memory>> fetchAllForUser() async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) throw StateError('Must be signed in to load memories');
-
     final memoryById = <String, Map<String, dynamic>>{};
 
     final ownRows = await _client
@@ -131,19 +126,13 @@ class MemoriesRepository {
         .toSet()
         .toList();
     if (circleIdsForNames.isNotEmpty) {
-      final circles = await _client
-          .from('circles')
-          .select('id, name')
-          .inFilter('id', circleIdsForNames);
+      final circles = await _client.from('circles').select('id, name').inFilter('id', circleIdsForNames);
       final namesById = <String, String>{
-        for (final row in (circles as List))
-          (row['id'] as String): (row['name'] as String),
+        for (final row in (circles as List)) (row['id'] as String): (row['name'] as String),
       };
       for (final memory in memoryMaps) {
         final circleId = memory['circle_id'] as String?;
-        if (memory['is_public'] != true &&
-            circleId != null &&
-            namesById.containsKey(circleId)) {
+        if (memory['is_public'] != true && circleId != null && namesById.containsKey(circleId)) {
           memory['circles'] = {'id': circleId, 'name': namesById[circleId]};
         }
       }
@@ -186,7 +175,6 @@ class MemoriesRepository {
       final rawMedia = map['media_urls'];
       if (rawMedia is List) allPaths.addAll(rawMedia.whereType<String>().where((p) => p.isNotEmpty));
     }
-
     if (allPaths.isNotEmpty) {
       try {
         final uniquePaths = allPaths.toSet().toList();
@@ -225,9 +213,6 @@ class MemoriesRepository {
     if (userId == null) throw StateError('Must be signed in to delete a memory');
     if (_deletedMemoryIds.contains(memoryId)) return;
 
-    // Read the assets first. The owner SELECT policy is independent of
-    // circle membership, so even an orphaned/partially-shared memory remains
-    // deletable by its uploader.
     final row = await _client
         .from('memories')
         .select('id, image_url, media_urls, uploaded_by')
@@ -236,9 +221,6 @@ class MemoriesRepository {
         .maybeSingle();
     if (row == null) throw StateError('Memory not found or you do not own it');
 
-    // DELETE before touching memory_circles. The FK cascade removes all
-    // share rows, while the owner SELECT policy makes the DELETE visible to
-    // PostgREST/RLS and prevents a silent zero-row delete.
     final deletedRows = await _client
         .from('memories')
         .delete()
@@ -284,6 +266,18 @@ class MemoriesRepository {
     if (files.isEmpty) throw ArgumentError('Add at least one photo.');
     if (!isPublic && circleIds.isEmpty) throw ArgumentError('Choose Public or at least one circle to share with.');
 
+    // CreateMemoryScreenV2 still sends the legacy combined value. Canonicalize
+    // it here so every new row has independent title/caption fields.
+    final suppliedTitle = title?.trim();
+    final suppliedCaption = caption?.trim();
+    final separator = suppliedCaption?.indexOf(' — ') ?? -1;
+    final canonicalTitle = suppliedTitle?.isNotEmpty == true
+        ? suppliedTitle
+        : (separator > 0 ? suppliedCaption!.substring(0, separator).trim() : suppliedCaption);
+    final canonicalCaption = suppliedTitle?.isNotEmpty == true
+        ? suppliedCaption
+        : (separator > 0 ? suppliedCaption!.substring(separator + 3).trim() : null);
+
     final id = _generateUuidV4();
     final mediaPaths = <String>[];
     for (final file in files) {
@@ -298,8 +292,8 @@ class MemoriesRepository {
       'uploaded_by': userId,
       'image_url': primaryPath,
       'media_urls': mediaPaths,
-      'title': title?.trim().isEmpty == true ? null : title?.trim(),
-      'caption': caption?.trim().isEmpty == true ? null : caption?.trim(),
+      'title': canonicalTitle?.isEmpty == true ? null : canonicalTitle,
+      'caption': canonicalCaption?.isEmpty == true ? null : canonicalCaption,
       'location': location,
       'is_public': isPublic,
     });
