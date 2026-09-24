@@ -1,6 +1,6 @@
 import 'profile.dart';
 
-enum AppNotificationType { circleMemory, circleJoin, memoryComment }
+enum AppNotificationType { circleMemory, circleJoin, memoryComment, circleDeleted }
 
 class AppNotification {
   final String id;
@@ -11,6 +11,7 @@ class AppNotification {
   final String? memoryId;
   final String? inviteToken;
   final bool isCircleInvite;
+  final String? storedMessage;
   final bool isRead;
   final DateTime createdAt;
 
@@ -23,6 +24,7 @@ class AppNotification {
     this.memoryId,
     this.inviteToken,
     this.isCircleInvite = false,
+    this.storedMessage,
     required this.isRead,
     required this.createdAt,
   });
@@ -37,6 +39,8 @@ class AppNotification {
         // Keep the existing notification UI type so older clients remain
         // compatible; isCircleInvite carries the action-specific meaning.
         return AppNotificationType.circleJoin;
+      case 'circle_deleted':
+        return AppNotificationType.circleDeleted;
       case 'circle_memory':
       default:
         return AppNotificationType.circleMemory;
@@ -58,12 +62,17 @@ class AppNotification {
       memoryId: map['memory_id'] as String?,
       inviteToken: map['invite_token'] as String?,
       isCircleInvite: rawType == 'circle_invite',
+      storedMessage: map['message'] as String?,
       isRead: map['is_read'] as bool? ?? false,
       createdAt: DateTime.parse(map['created_at'] as String),
     );
   }
 
   String get message {
+    if (storedMessage?.trim().isNotEmpty == true) {
+      return storedMessage!.trim();
+    }
+
     if (isCircleInvite) {
       return '${actor.displayName} invited you to join ${circleName ?? 'a circle'}';
     }
