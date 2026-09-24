@@ -146,7 +146,7 @@ export default {
 
       const displayName =
         typeof actorName.data?.full_name === 'string' &&
-        actorName.data.full_name.trim().isNotEmpty
+        actorName.data.full_name.trim().length > 0
           ? actorName.data.full_name.trim()
           : 'Someone';
       const message = displayName + ' has deleted the ' + circle.name;
