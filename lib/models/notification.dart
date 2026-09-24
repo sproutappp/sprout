@@ -84,6 +84,8 @@ class AppNotification {
         return '${actor.displayName} joined ${circleName ?? 'your circle'}';
       case AppNotificationType.memoryComment:
         return '${actor.displayName} commented on your memory';
+      case AppNotificationType.circleDeleted:
+        return '${actor.displayName} has deleted the ${circleName ?? 'circle'}';
     }
   }
 }
