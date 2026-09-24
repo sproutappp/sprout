@@ -119,19 +119,37 @@ class CirclesRepository {
   static Future<void> deleteCircle(Circle circle) async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) throw StateError('Must be signed in to delete a circle');
-    await _client.from('circles').delete().eq('id', circle.id);
-    final coverUrl = circle.coverImageUrl;
-    if (coverUrl != null && coverUrl.isNotEmpty) {
-      final marker = '/storage/v1/object/public/$_circleCoverBucket/';
-      final markerIndex = coverUrl.indexOf(marker);
-      if (markerIndex >= 0) {
-        final objectPath = coverUrl.substring(markerIndex + marker.length);
-        if (objectPath.isNotEmpty) {
-          try {
-            await _client.storage.from(_circleCoverBucket).remove([objectPath]);
-          } catch (_) {}
-        }
-      }
+    if (circle.createdBy != userId) {
+      throw StateError('Only the circle creator can delete this circle');
+    }
+
+    final response = await _client.functions.invoke(
+      'delete-circle',
+      body: {'circleId': circle.id},
+    );
+
+    if (response.status < 200 || response.status >= 300) {
+      final data = response.data;
+      final error = data is Map ? data['error']?.toString() : null;
+      throw StateError(error ?? 'Circle deletion failed');
+    }
+
+    final data = response.data;
+    if (data is! Map || data['success'] != true) {
+      throw StateError('Circle deletion was not confirmed by the server');
+    }
+  }
+
+  static Future<void> leaveCircle(String circleId) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) throw StateError('Must be signed in to leave a circle');
+
+    final result = await _client.rpc(
+      'leave_circle',
+      params: {'p_circle_id': circleId},
+    );
+    if (result != true) {
+      throw StateError('Circle leave was not confirmed by the server');
     }
   }
 
