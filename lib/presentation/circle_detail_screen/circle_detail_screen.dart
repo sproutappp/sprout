@@ -197,13 +197,9 @@ class _CircleDetailScreenState extends State<CircleDetailScreen> {
     if (userId == null || userId != circle.createdBy) return;
 
     try {
-      await SupabaseService.client
-          .from('circles')
-          .delete()
-          .eq('id', circle.id)
-          .eq('created_by', userId);
+      await CirclesRepository.deleteCircle(circle);
       if (!mounted) return;
-      context.pop();
+      context.pop(true);
     } catch (e, st) {
       debugPrint('CircleDetailScreen: delete circle failed: $e\\n$st');
       if (!mounted) return;
@@ -309,13 +305,9 @@ class _CircleDetailScreenState extends State<CircleDetailScreen> {
     if (userId == null) return;
 
     try {
-      await SupabaseService.client
-          .from('circle_members')
-          .delete()
-          .eq('circle_id', circle.id)
-          .eq('user_id', userId);
+      await CirclesRepository.leaveCircle(circle.id);
       if (!mounted) return;
-      context.pop();
+      context.pop(true);
     } catch (e, st) {
       debugPrint('CircleDetailScreen: leave circle failed: $e\\n$st');
       if (!mounted) return;
