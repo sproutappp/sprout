@@ -1,5 +1,13 @@
-# Supabase project configuration
-# Production deployments are managed through the Supabase GitHub integration.
+# Supabase production deployment configuration
+
+[functions.delete-account]
+verify_jwt = true
+
+[functions.report-circle]
+verify_jwt = true
+
+[functions.submit-report]
+verify_jwt = true
 
 [functions.delete-circle]
 verify_jwt = true
