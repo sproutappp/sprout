@@ -122,8 +122,14 @@ class _CirclesScreenWithCoverState extends State<CirclesScreenWithCover> with Wi
     context.push(AppRoutes.circleDetailScreen, extra: newCircleId);
   }
 
-  void _openCircleDetail(Circle circle) {
-    context.push(AppRoutes.circleDetailScreen, extra: circle.id);
+  Future<void> _openCircleDetail(Circle circle) async {
+    final changed = await context.push<bool>(
+      AppRoutes.circleDetailScreen,
+      extra: circle.id,
+    );
+    if (changed == true && mounted) {
+      await _loadCircles();
+    }
   }
 
   Future<void> _openUnreadMemories() async {
