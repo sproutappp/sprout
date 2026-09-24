@@ -107,14 +107,10 @@ class _MemoriesScreenState extends State<MemoriesScreen> {
 
   List<MemoryItem> get _filteredMemories {
     return _allMemories.where((m) {
-      // "All" and "Photos" are the only filters shown — every memory the
-      // app can create is a photo (see MemoriesRepository/CreateMemory:
-      // there's no video or story capture anywhere in the product yet),
-      // so this is a real, correct filter rather than faking categories
-      // that can't actually exist.
       final matchesFilter =
           _activeFilter == 'All' ||
-          (_activeFilter == 'Photos' && m.type == MemoryType.photo);
+          (_activeFilter == 'Photos' && m.privacy == MemoryPrivacy.circle) ||
+          (_activeFilter == 'Public' && m.privacy == MemoryPrivacy.public);
 
       // Filter by search
       final matchesSearch =
