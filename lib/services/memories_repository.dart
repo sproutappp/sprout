@@ -63,50 +63,43 @@ class MemoriesRepository {
   static Future<List<Memory>> fetchAllForUser() async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) throw StateError('Must be signed in to load memories');
-    final memoryById = <String, Map<String, dynamic>>{};
 
-    final ownRows = await _client.from('memories').select('id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, created_at, is_public').eq('uploaded_by', userId);
-    for (final row in (ownRows as List)) {
-      memoryById[row['id'] as String] = Map<String, dynamic>.from(row as Map);
-    }
+    final rows = await _client
+        .from('memories')
+        .select('id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, created_at, is_public')
+        .eq('uploaded_by', userId)
+        .order('created_at', ascending: false);
 
-    final publicRows = await _client.from('memories').select('id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, created_at, is_public').eq('is_public', true);
-    for (final row in (publicRows as List)) {
-      memoryById[row['id'] as String] = Map<String, dynamic>.from(row as Map);
-    }
-
-    final membershipRows = await _client.from('circle_members').select('circle_id').eq('user_id', userId);
-    final circleIds = (membershipRows as List).map((row) => row['circle_id'] as String?).whereType<String>().toSet().toList();
-
-    if (circleIds.isNotEmpty) {
-      final circleMemoryRows = await _client.from('memory_circles').select('memories(id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, created_at, is_public)').inFilter('circle_id', circleIds);
-      for (final row in (circleMemoryRows as List)) {
-        final rawMemory = row['memories'];
-        if (rawMemory is Map) {
-          final memory = Map<String, dynamic>.from(rawMemory);
-          final id = memory['id'] as String?;
-          if (id != null) memoryById[id] = memory;
-        }
-      }
-    }
-
-    final memoryMaps = memoryById.values.toList();
-    memoryMaps.sort((a, b) {
-      final aCreatedAt = a['created_at'];
-      final bCreatedAt = b['created_at'];
-      if (aCreatedAt is! String || bCreatedAt is! String) return 0;
-      return bCreatedAt.compareTo(aCreatedAt);
-    });
+    final memoryMaps = (rows as List)
+        .map((row) => Map<String, dynamic>.from(row as Map))
+        .toList();
     if (memoryMaps.isEmpty) return [];
 
-    final circleIdsForNames = memoryMaps.where((m) => m['is_public'] != true).map((m) => m['circle_id'] as String?).whereType<String>().toSet().toList();
+    final circleIdsForNames = memoryMaps
+        .where((m) => m['is_public'] != true)
+        .map((m) => m['circle_id'] as String?)
+        .whereType<String>()
+        .toSet()
+        .toList();
+
     if (circleIdsForNames.isNotEmpty) {
-      final circles = await _client.from('circles').select('id, name').inFilter('id', circleIdsForNames);
-      final namesById = <String, String>{for (final row in (circles as List)) (row['id'] as String): (row['name'] as String)};
+      final circles = await _client
+          .from('circles')
+          .select('id, name')
+          .inFilter('id', circleIdsForNames);
+      final namesById = <String, String>{
+        for (final row in (circles as List))
+          (row['id'] as String): (row['name'] as String),
+      };
       for (final memory in memoryMaps) {
         final circleId = memory['circle_id'] as String?;
-        if (memory['is_public'] != true && circleId != null && namesById.containsKey(circleId)) {
-          memory['circles'] = {'id': circleId, 'name': namesById[circleId]};
+        if (memory['is_public'] != true &&
+            circleId != null &&
+            namesById.containsKey(circleId)) {
+          memory['circles'] = {
+            'id': circleId,
+            'name': namesById[circleId],
+          };
         }
       }
     }
