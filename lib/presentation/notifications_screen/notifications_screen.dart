@@ -157,6 +157,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return Icons.group_rounded;
       case AppNotificationType.memoryComment:
         return Icons.chat_bubble_rounded;
+      case AppNotificationType.circleDeleted:
+        return Icons.delete_outline_rounded;
     }
   }
 
@@ -168,6 +170,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return const Color(0xFFFF8C39);
       case AppNotificationType.memoryComment:
         return AppTheme.cyanAccent;
+      case AppNotificationType.circleDeleted:
+        return AppTheme.error;
     }
   }
 
