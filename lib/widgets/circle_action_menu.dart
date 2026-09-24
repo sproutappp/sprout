@@ -22,7 +22,10 @@ class CircleActionMenu extends StatelessWidget {
     final action = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (_) => _CircleActionSheet(circleName: circle.name),
+      builder: (_) => _CircleActionSheet(
+        circleName: circle.name,
+        isOwner: CirclesRepository.currentUserId == circle.createdBy,
+      ),
     );
     if (!context.mounted || action == null) return;
     if (action == 'invite') {
@@ -51,6 +54,65 @@ class CircleActionMenu extends StatelessWidget {
         builder: (_) => _CircleEditForm(circle: circle),
       );
       if (saved == true) onChanged?.call();
+    } else if (action == 'leave') {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: AppTheme.surfaceDark,
+          title: Text(
+            'Leave ${circle.name}?',
+            style: GoogleFonts.manrope(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: AppTheme.textPrimary,
+            ),
+          ),
+          content: Text(
+            'You will no longer have access to this circle or its shared memories.',
+            style: GoogleFonts.manrope(
+              fontSize: 13,
+              color: AppTheme.textMuted,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: Text(
+                'Cancel',
+                style: GoogleFonts.manrope(
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textMuted,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: Text(
+                'Leave Circle',
+                style: GoogleFonts.manrope(
+                  fontWeight: FontWeight.w800,
+                  color: AppTheme.error,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !context.mounted) return;
+
+      try {
+        await CirclesRepository.leaveCircle(circle.id);
+        if (!context.mounted) return;
+        onChanged?.call();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('You left ${circle.name}.')),
+        );
+      } catch (_) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Couldn't leave the circle. Try again.")),
+        );
+      }
     } else if (action == 'delete') {
       final confirmed = await showDialog<bool>(
         context: context,
@@ -135,7 +197,11 @@ class CircleActionMenu extends StatelessWidget {
 
 class _CircleActionSheet extends StatelessWidget {
   final String circleName;
-  const _CircleActionSheet({required this.circleName});
+  final bool isOwner;
+  const _CircleActionSheet({
+    required this.circleName,
+    required this.isOwner,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -149,10 +215,13 @@ class _CircleActionSheet extends StatelessWidget {
           const SizedBox(height: 4),
           Text('Circle options', style: GoogleFonts.manrope(fontSize: 13, color: AppTheme.textMuted)),
           const SizedBox(height: 20),
-          _MenuOption(icon: Icons.person_add_rounded, label: 'Invite', color: AppTheme.primaryGreen, onTap: () => Navigator.pop(context, 'invite')),
-          _MenuOption(icon: Icons.share_rounded, label: 'Share', color: AppTheme.cyanAccent, onTap: () => Navigator.pop(context, 'share')),
-          _MenuOption(icon: Icons.edit_rounded, label: 'Edit Circle', color: AppTheme.textPrimary, onTap: () => Navigator.pop(context, 'edit')),
-          _MenuOption(icon: Icons.delete_outline_rounded, label: 'Delete', color: AppTheme.error, onTap: () => Navigator.pop(context, 'delete')),
+          if (isOwner) ...[
+            _MenuOption(icon: Icons.person_add_rounded, label: 'Invite', color: AppTheme.primaryGreen, onTap: () => Navigator.pop(context, 'invite')),
+            _MenuOption(icon: Icons.share_rounded, label: 'Share', color: AppTheme.cyanAccent, onTap: () => Navigator.pop(context, 'share')),
+            _MenuOption(icon: Icons.edit_rounded, label: 'Edit Circle', color: AppTheme.textPrimary, onTap: () => Navigator.pop(context, 'edit')),
+            _MenuOption(icon: Icons.delete_outline_rounded, label: 'Delete', color: AppTheme.error, onTap: () => Navigator.pop(context, 'delete')),
+          ] else
+            _MenuOption(icon: Icons.logout_rounded, label: 'Leave Circle', color: AppTheme.error, onTap: () => Navigator.pop(context, 'leave')),
         ],
       ),
     );
