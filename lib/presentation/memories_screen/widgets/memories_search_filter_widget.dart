@@ -25,14 +25,10 @@ class _MemoriesSearchFilterWidgetState
     extends State<MemoriesSearchFilterWidget> {
   late TextEditingController _controller;
 
-  // Keep all four product filters visible. The current Create Memory flow
-  // creates photos, so Videos/Stories correctly return an empty result until
-  // those media types are supported by the capture flow.
   static const List<String> _filters = [
     'All',
     'Photos',
-    'Videos',
-    'Stories',
+    'Public',
   ];
 
   @override
