@@ -1080,31 +1080,38 @@ class _CircleMenuSheet extends StatelessWidget {
             style: GoogleFonts.manrope(fontSize: 13, color: AppTheme.textMuted),
           ),
           const SizedBox(height: 20),
-          if (isOwner)
+          if (isOwner) ...[
             _MenuOption(
               icon: Icons.edit_rounded,
               label: 'Edit Circle',
               color: AppTheme.textPrimary,
               onTap: () => Navigator.pop(context, 'edit'),
             ),
-          _MenuOption(
-            icon: Icons.person_add_rounded,
-            label: 'Invite People',
-            color: AppTheme.primaryGreen,
-            onTap: () => Navigator.pop(context, 'invite'),
-          ),
-          _MenuOption(
-            icon: Icons.notifications_rounded,
-            label: 'Notifications',
-            color: AppTheme.textPrimary,
-            onTap: () => Navigator.pop(context, 'notifications'),
-          ),
-          _MenuOption(
-            icon: isOwner ? Icons.delete_outline_rounded : Icons.logout_rounded,
-            label: isOwner ? 'Delete Circle' : 'Leave Circle',
-            color: AppTheme.error,
-            onTap: () => Navigator.pop(context, isOwner ? 'delete' : 'leave'),
-          ),
+            _MenuOption(
+              icon: Icons.person_add_rounded,
+              label: 'Invite People',
+              color: AppTheme.primaryGreen,
+              onTap: () => Navigator.pop(context, 'invite'),
+            ),
+            _MenuOption(
+              icon: Icons.notifications_rounded,
+              label: 'Notifications',
+              color: AppTheme.textPrimary,
+              onTap: () => Navigator.pop(context, 'notifications'),
+            ),
+            _MenuOption(
+              icon: Icons.delete_outline_rounded,
+              label: 'Delete Circle',
+              color: AppTheme.error,
+              onTap: () => Navigator.pop(context, 'delete'),
+            ),
+          ] else
+            _MenuOption(
+              icon: Icons.logout_rounded,
+              label: 'Leave Circle',
+              color: AppTheme.error,
+              onTap: () => Navigator.pop(context, 'leave'),
+            ),
         ],
       ),
     );
