@@ -95,7 +95,7 @@ BEGIN
       v_circle_id,
       NEW.memory_id,
       false,
-      v_actor_name || ' has tagged you in new memory'
+      v_actor_name || ' has tagged you in this memory'
     );
 
   RETURN NEW;
