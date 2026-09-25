@@ -147,6 +147,7 @@ class _CreateMemoryScreenV2State extends State<CreateMemoryScreenV2> {
   void _removeImage(int index) {
     setState(() {
       _images.removeAt(index);
+      if (index == 0) _discoverImage = null;
       if (_images.isEmpty) _error = null;
     });
   }
