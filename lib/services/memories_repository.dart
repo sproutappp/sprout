@@ -66,7 +66,7 @@ class MemoriesRepository {
 
     final rows = await _client
         .from('memories')
-        .select('id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, created_at, is_public')
+        .select('id, circle_id, uploaded_by, image_url, discover_image_url, media_urls, title, caption, location, created_at, is_public')
         .eq('uploaded_by', userId)
         .order('created_at', ascending: false);
 
@@ -108,7 +108,7 @@ class MemoriesRepository {
   }
 
   static Future<List<Memory>> fetchPublicMemories() async {
-    final rows = await _client.from('memories').select('id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, created_at, is_public').eq('is_public', true).order('created_at', ascending: false);
+    final rows = await _client.from('memories').select('id, circle_id, uploaded_by, image_url, discover_image_url, media_urls, title, caption, location, created_at, is_public').eq('is_public', true).order('created_at', ascending: false);
     final memoryMaps = (rows as List).map((row) => Map<String, dynamic>.from(row as Map)).toList();
     if (memoryMaps.isEmpty) return [];
     final uploaderIds = memoryMaps.map((m) => m['uploaded_by'] as String?).whereType<String>().toSet().toList();
@@ -161,7 +161,7 @@ class MemoriesRepository {
   static Future<List<Memory>> fetchByUploader(String uploaderId) async {
     final currentUserId = _client.auth.currentUser?.id;
     if (currentUserId != null && currentUserId == uploaderId) return fetchAllForUser();
-    final rows = await _client.from('memories').select('id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, created_at, is_public').eq('uploaded_by', uploaderId).order('created_at', ascending: false);
+    final rows = await _client.from('memories').select('id, circle_id, uploaded_by, image_url, discover_image_url, media_urls, title, caption, location, created_at, is_public').eq('uploaded_by', uploaderId).order('created_at', ascending: false);
     return _withoutDeleted(await _toMemoriesWithSignedUrls(rows as List));
   }
 
@@ -284,7 +284,7 @@ class MemoriesRepository {
       rethrow;
     }
 
-    final row = await _client.from('memories').select('id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, created_at, is_public').eq('id', id).single();
+    final row = await _client.from('memories').select('id, circle_id, uploaded_by, image_url, discover_image_url, media_urls, title, caption, location, created_at, is_public').eq('id', id).single();
     final resolved = await _toMemoriesWithSignedUrls([row]);
     return resolved.first;
   }
