@@ -18,7 +18,9 @@ ALTER TABLE public.notifications
     )
   );
 
-CREATE OR REPLACE FUNCTION public.memory_person_is_member_of_shared_circle(
+CREATE SCHEMA IF NOT EXISTS private;
+
+CREATE OR REPLACE FUNCTION private.memory_person_is_member_of_shared_circle(
   p_memory_id uuid,
   p_person_id uuid
 )
@@ -38,8 +40,9 @@ AS $$
   );
 $$;
 
-REVOKE ALL ON FUNCTION public.memory_person_is_member_of_shared_circle(uuid, uuid) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.memory_person_is_member_of_shared_circle(uuid, uuid) TO authenticated;
+REVOKE ALL ON FUNCTION private.memory_person_is_member_of_shared_circle(uuid, uuid) FROM PUBLIC;
+GRANT USAGE ON SCHEMA private TO authenticated;
+GRANT EXECUTE ON FUNCTION private.memory_person_is_member_of_shared_circle(uuid, uuid) TO authenticated;
 
 DROP POLICY IF EXISTS "memory owner can add people tags" ON public.memory_people;
 
@@ -55,7 +58,7 @@ CREATE POLICY "memory owner can add people tags"
       WHERE m.id = memory_id
         AND m.uploaded_by = (SELECT auth.uid())
     )
-    AND public.memory_person_is_member_of_shared_circle(memory_id, person_id)
+    AND private.memory_person_is_member_of_shared_circle(memory_id, person_id)
   );
 
 CREATE OR REPLACE FUNCTION public.notify_on_memory_person_tagged()
