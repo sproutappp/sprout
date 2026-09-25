@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/supabase/supabase_service.dart';
+import '../../models/circle.dart';
 import '../../models/comment.dart';
 import '../../models/memory.dart';
 import '../../models/profile.dart';
@@ -168,7 +169,22 @@ class _MemoryDetailScreenV3State extends State<MemoryDetailScreenV3> {
     setState(() => _addingToCircle = true);
 
     try {
-      final circles = await CirclesRepository.fetchMyCircles();
+      final results = await Future.wait([
+        CirclesRepository.fetchMyCircles(),
+        MemoryEditRepository.fetchCircleIds(_id),
+      ]);
+      final allCircles = results[0] as List<Circle>;
+      final existingCircleIds = (results[1] as List<String>).toSet();
+
+      // Public memories can be added to any circle. For private memories,
+      // hide every circle that already contains this memory so the picker
+      // only offers circles where it is not already shared.
+      final circles = _memory?.isPublic == true
+          ? allCircles
+          : allCircles
+              .where((circle) => !existingCircleIds.contains(circle.id))
+              .toList();
+
       if (!mounted) return;
       setState(() => _addingToCircle = false);
 
