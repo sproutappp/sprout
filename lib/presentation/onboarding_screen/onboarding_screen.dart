@@ -99,7 +99,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 
   void _onGetStarted() {
-    context.push(AppRoutes.signUpLoginScreen);
+    // Login is the entry point, not a page that should remain underneath
+    // the authenticated app in the back stack.
+    context.go(AppRoutes.signUpLoginScreen);
   }
 
   @override
