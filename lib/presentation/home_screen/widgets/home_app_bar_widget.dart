@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -6,22 +7,75 @@ import 'package:go_router/go_router.dart';
 
 import '../../../theme/app_theme.dart';
 import '../../../routes/app_routes.dart';
+import '../../../services/notifications_repository.dart';
 import '../../../widgets/current_user_avatar_widget.dart';
 
-class HomeAppBarWidget extends StatelessWidget {
+class HomeAppBarWidget extends StatefulWidget {
   final double scrollOffset;
 
   const HomeAppBarWidget({super.key, required this.scrollOffset});
 
   @override
+  State<HomeAppBarWidget> createState() => _HomeAppBarWidgetState();
+}
+
+class _HomeAppBarWidgetState extends State<HomeAppBarWidget>
+    with WidgetsBindingObserver {
+  static const _refreshInterval = Duration(seconds: 10);
+
+  Timer? _refreshTimer;
+  int _unreadCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _loadUnreadCount();
+    _refreshTimer = Timer.periodic(_refreshInterval, (_) => _loadUnreadCount());
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _loadUnreadCount();
+    }
+  }
+
+  Future<void> _loadUnreadCount() async {
+    try {
+      final count = await NotificationsRepository.fetchUnreadCount();
+      if (!mounted) return;
+      if (count != _unreadCount) {
+        setState(() => _unreadCount = count);
+      }
+    } catch (_) {
+      // Keep the current badge when a transient count request fails.
+    }
+  }
+
+  Future<void> _openNotifications(BuildContext context) async {
+    await context.push(AppRoutes.notificationsScreen);
+    await _loadUnreadCount();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final topPadding = MediaQuery.of(context).padding.top;
-    final blurOpacity = (scrollOffset / 60).clamp(0.0, 1.0);
+    final blurOpacity = (widget.scrollOffset / 60).clamp(0.0, 1.0);
+    final badgeText = _unreadCount > 99 ? '99+' : '$_unreadCount';
+    final semanticLabel = _unreadCount > 0
+        ? 'Notifications — $_unreadCount unread'
+        : 'Notifications';
 
     return Positioned(
-      // Keep the header in the same Stack layer for reliable tap handling,
-      // but move it with the scroll content so it is not fixed to the screen.
-      top: -scrollOffset,
+      top: -widget.scrollOffset,
       left: 0,
       right: 0,
       child: ClipRect(
@@ -35,7 +89,7 @@ class HomeAppBarWidget extends StatelessWidget {
             height: topPadding + 64,
             decoration: BoxDecoration(
               color: AppTheme.backgroundDark.withOpacity(0.5 * blurOpacity),
-              border: scrollOffset > 10
+              border: widget.scrollOffset > 10
                   ? const Border(
                       bottom: BorderSide(color: AppTheme.outline, width: 0.5),
                     )
@@ -55,12 +109,12 @@ class HomeAppBarWidget extends StatelessWidget {
 
                 const Spacer(),
 
-                // Notification bell
+                // Notification bell with the exact unread count.
                 _AppBarAction(
                   icon: Icons.notifications_outlined,
-                  hasBadge: true,
-                  semanticLabel: 'Notifications — 3 new',
-                  onTap: () => context.push(AppRoutes.notificationsScreen),
+                  badgeText: _unreadCount > 0 ? badgeText : null,
+                  semanticLabel: semanticLabel,
+                  onTap: () => _openNotifications(context),
                 ),
 
                 const SizedBox(width: 10),
@@ -81,13 +135,13 @@ class HomeAppBarWidget extends StatelessWidget {
 
 class _AppBarAction extends StatelessWidget {
   final IconData icon;
-  final bool hasBadge;
+  final String? badgeText;
   final String semanticLabel;
   final VoidCallback onTap;
 
   const _AppBarAction({
     required this.icon,
-    required this.hasBadge,
+    required this.badgeText,
     required this.semanticLabel,
     required this.onTap,
   });
@@ -111,19 +165,30 @@ class _AppBarAction extends StatelessWidget {
             alignment: Alignment.center,
             children: [
               Icon(icon, size: 20, color: AppTheme.textSecondary),
-              if (hasBadge)
+              if (badgeText != null)
                 Positioned(
-                  top: 9,
-                  right: 9,
+                  top: 3,
+                  right: 2,
                   child: Container(
-                    width: 7,
-                    height: 7,
+                    constraints: const BoxConstraints(minWidth: 17),
+                    height: 17,
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: AppTheme.primaryGreen,
-                      shape: BoxShape.circle,
+                      borderRadius: BorderRadius.circular(9),
                       border: Border.all(
                         color: AppTheme.backgroundDark,
                         width: 1.5,
+                      ),
+                    ),
+                    child: Text(
+                      badgeText!,
+                      style: const TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.black,
+                        height: 1,
                       ),
                     ),
                   ),
