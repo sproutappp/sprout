@@ -39,7 +39,7 @@ class MemoriesRepository {
 
   static Future<Memory?> fetchById(String memoryId) async {
     if (_deletedMemoryIds.contains(memoryId)) return null;
-    final row = await _client.from('memories').select('id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, created_at, is_public').eq('id', memoryId).maybeSingle();
+    final row = await _client.from('memories').select('id, circle_id, uploaded_by, image_url, discover_image_url, media_urls, title, caption, location, created_at, is_public').eq('id', memoryId).maybeSingle();
     if (row == null) return null;
     final resolved = Map<String, dynamic>.from(row);
     final uploaderId = resolved['uploaded_by'] as String?;
@@ -130,6 +130,8 @@ class MemoriesRepository {
     final allPaths = <String>[];
     for (final map in maps) {
       final primary = map['image_url'] as String?;
+      final discover = map['discover_image_url'] as String?;
+      if (discover != null && discover.isNotEmpty) allPaths.add(discover);
       if (primary != null && primary.isNotEmpty) allPaths.add(primary);
       final rawMedia = map['media_urls'];
       if (rawMedia is List) allPaths.addAll(rawMedia.whereType<String>().where((p) => p.isNotEmpty));
@@ -145,7 +147,9 @@ class MemoriesRepository {
         }
         for (final map in maps) {
           final primary = map['image_url'] as String?;
+          final discover = map['discover_image_url'] as String?;
           if (primary != null && signedByPath.containsKey(primary)) map['image_url'] = signedByPath[primary];
+          if (discover != null && signedByPath.containsKey(discover)) map['discover_image_url'] = signedByPath[discover];
           final rawMedia = map['media_urls'];
           if (rawMedia is List) map['media_urls'] = rawMedia.whereType<String>().map((p) => signedByPath[p] ?? p).toList();
         }
@@ -203,6 +207,7 @@ class MemoriesRepository {
     String? title,
     String? caption,
     String? location,
+    File? discoverImageFile,
     bool isPublic = false,
     List<String> circleIds = const [],
   }) async {
@@ -223,9 +228,15 @@ class MemoriesRepository {
 
     final id = _generateUuidV4();
     final mediaPaths = <String>[];
+    String? discoverImagePath;
     for (final file in files) {
       final ext = file.path.split('.').last.toLowerCase();
       mediaPaths.add('$id/${DateTime.now().microsecondsSinceEpoch}_${mediaPaths.length}.$ext');
+    }
+
+    if (discoverImageFile != null) {
+      final ext = discoverImageFile.path.split('.').last.toLowerCase();
+      discoverImagePath = '$id/discover_${DateTime.now().microsecondsSinceEpoch}.$ext';
     }
 
     // Create the memory row before uploading. The storage RLS policy checks
@@ -238,6 +249,7 @@ class MemoriesRepository {
         'circle_id': isPublic ? null : circleIds.first,
         'uploaded_by': userId,
         'image_url': mediaPaths.first,
+        'discover_image_url': discoverImagePath,
         'media_urls': mediaPaths,
         'title': canonicalTitle?.isEmpty == true ? null : canonicalTitle,
         'caption': canonicalCaption?.isEmpty == true ? null : canonicalCaption,
@@ -248,6 +260,10 @@ class MemoriesRepository {
       for (var i = 0; i < files.length; i++) {
         await _client.storage.from(_bucket).upload(mediaPaths[i], files[i]);
         uploadedPaths.add(mediaPaths[i]);
+      }
+      if (discoverImageFile != null && discoverImagePath != null) {
+        await _client.storage.from(_bucket).upload(discoverImagePath!, discoverImageFile);
+        uploadedPaths.add(discoverImagePath!);
       }
 
       if (!isPublic) {
