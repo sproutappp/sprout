@@ -170,7 +170,7 @@ class MemoriesRepository {
     if (userId == null) throw StateError('Must be signed in to delete a memory');
     if (_deletedMemoryIds.contains(memoryId)) return;
 
-    final row = await _client.from('memories').select('id, image_url, media_urls, uploaded_by').eq('id', memoryId).eq('uploaded_by', userId).maybeSingle();
+    final row = await _client.from('memories').select('id, image_url, discover_image_url, media_urls, uploaded_by').eq('id', memoryId).eq('uploaded_by', userId).maybeSingle();
     if (row == null) throw StateError('Memory not found or you do not own it');
 
     // The database function performs the delete as the owner atomically and
@@ -185,7 +185,9 @@ class MemoriesRepository {
 
     final paths = <String>[];
     final imagePath = row['image_url'] as String?;
+    final discoverImagePath = row['discover_image_url'] as String?;
     if (imagePath != null && imagePath.isNotEmpty) paths.add(imagePath);
+    if (discoverImagePath != null && discoverImagePath.isNotEmpty) paths.add(discoverImagePath);
     final rawMedia = row['media_urls'];
     if (rawMedia is List) paths.addAll(rawMedia.whereType<String>().where((p) => p.isNotEmpty));
     if (paths.isNotEmpty) {
