@@ -1,6 +1,6 @@
 import 'profile.dart';
 
-enum AppNotificationType { circleMemory, circleJoin, memoryComment, circleDeleted }
+enum AppNotificationType { circleMemory, circleJoin, memoryComment, circleDeleted, memoryTagged }
 
 class AppNotification {
   final String id;
@@ -41,6 +41,8 @@ class AppNotification {
         return AppNotificationType.circleJoin;
       case 'circle_deleted':
         return AppNotificationType.circleDeleted;
+      case 'memory_tagged':
+        return AppNotificationType.memoryTagged;
       case 'circle_memory':
       default:
         return AppNotificationType.circleMemory;
@@ -86,6 +88,8 @@ class AppNotification {
         return '${actor.displayName} commented on your memory';
       case AppNotificationType.circleDeleted:
         return '${actor.displayName} has deleted the ${circleName ?? 'circle'}';
+      case AppNotificationType.memoryTagged:
+        return '${actor.displayName} has tagged you in new memory';
     }
   }
 }

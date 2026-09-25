@@ -82,7 +82,9 @@ class _CreateMemoryScreenV2State extends State<CreateMemoryScreenV2> {
     }
     if (mounted) setState(() => _loadingPeople = true);
     try {
-      final people = await CirclesRepository.fetchMembersForCircles(_circleIds.toList());
+      final currentUserId = CirclesRepository.currentUserId;
+      final allPeople = await CirclesRepository.fetchMembersForCircles(_circleIds.toList());
+      final people = allPeople.where((p) => p.id != currentUserId).toList();
       final ids = people.map((p) => p.id).toSet();
       if (!mounted) return;
       setState(() {

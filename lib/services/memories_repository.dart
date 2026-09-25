@@ -228,15 +228,11 @@ class MemoriesRepository {
       mediaPaths.add('$id/${DateTime.now().microsecondsSinceEpoch}_${mediaPaths.length}.$ext');
     }
 
-    // Upload all assets before creating the database row. If any upload fails,
-    // the catch block removes any successful uploads and no memory row exists.
+    // Create the memory row before uploading. The storage RLS policy checks
+    // that the current user owns the memory id in the first path segment.
+    // Creating the row first is therefore required for circle/private uploads.
     final uploadedPaths = <String>[];
     try {
-      for (var i = 0; i < files.length; i++) {
-        await _client.storage.from(_bucket).upload(mediaPaths[i], files[i]);
-        uploadedPaths.add(mediaPaths[i]);
-      }
-
       await _client.from('memories').insert({
         'id': id,
         'circle_id': isPublic ? null : circleIds.first,
@@ -249,17 +245,24 @@ class MemoriesRepository {
         'is_public': isPublic,
       });
 
+      for (var i = 0; i < files.length; i++) {
+        await _client.storage.from(_bucket).upload(mediaPaths[i], files[i]);
+        uploadedPaths.add(mediaPaths[i]);
+      }
+
       if (!isPublic) {
         await _client.from('memory_circles').insert([
           for (final circleId in circleIds) {'memory_id': id, 'circle_id': circleId},
         ]);
       }
     } catch (e) {
-      try { await _client.from('memory_circles').delete().eq('memory_id', id); } catch (_) {}
-      try { await _client.from('memories').delete().eq('id', id).eq('uploaded_by', userId); } catch (_) {}
+      // Storage deletion must happen while the memory row still exists because
+      // the storage DELETE policy verifies ownership through public.memories.
       if (uploadedPaths.isNotEmpty) {
         try { await _client.storage.from(_bucket).remove(uploadedPaths.toSet().toList()); } catch (_) {}
       }
+      try { await _client.from('memory_circles').delete().eq('memory_id', id); } catch (_) {}
+      try { await _client.from('memories').delete().eq('id', id).eq('uploaded_by', userId); } catch (_) {}
       rethrow;
     }
 

@@ -159,6 +159,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return Icons.chat_bubble_rounded;
       case AppNotificationType.circleDeleted:
         return Icons.delete_outline_rounded;
+      case AppNotificationType.memoryTagged:
+        return Icons.person_add_alt_1_rounded;
     }
   }
 
@@ -172,6 +174,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return AppTheme.cyanAccent;
       case AppNotificationType.circleDeleted:
         return AppTheme.error;
+      case AppNotificationType.memoryTagged:
+        return AppTheme.cyanAccent;
     }
   }
 
