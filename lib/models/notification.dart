@@ -89,7 +89,7 @@ class AppNotification {
       case AppNotificationType.circleDeleted:
         return '${actor.displayName} has deleted the ${circleName ?? 'circle'}';
       case AppNotificationType.memoryTagged:
-        return '${actor.displayName} has tagged you in new memory';
+        return '${actor.displayName} has tagged you in this memory';
     }
   }
 }
