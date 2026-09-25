@@ -27,6 +27,20 @@ class NotificationsRepository {
     return response.count;
   }
 
+  /// Exact unread notification count for the home-screen bell.
+  /// This includes every notification type.
+  static Future<int> fetchUnreadCount() async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return 0;
+    final response = await _client
+        .from('notifications')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('is_read', false)
+        .count(CountOption.exact);
+    return response.count;
+  }
+
   static Future<List<AppNotification>> fetchForUser() async {
     // Two separate FKs from notifications -> profiles (user_id, actor_id)
     // means we have to disambiguate which one PostgREST should embed —
