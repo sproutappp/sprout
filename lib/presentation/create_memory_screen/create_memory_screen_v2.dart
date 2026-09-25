@@ -149,10 +149,21 @@ class _CreateMemoryScreenV2State extends State<CreateMemoryScreenV2> {
     });
   }
 
-  Future<void> _locate() async {
+  Future<void> _locate({bool showGpsPrompt = false}) async {
     if (mounted) setState(() => _locating = true);
     try {
-      if (!await Geolocator.isLocationServiceEnabled()) return;
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        if (showGpsPrompt && mounted) {
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please turn on your GPS'),
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+        return;
+      }
       var permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
@@ -518,7 +529,10 @@ class _CreateMemoryScreenV2State extends State<CreateMemoryScreenV2> {
           hintText: _locating ? 'Finding location...' : 'Optional location',
           hintStyle: const TextStyle(color: AppTheme.textDisabled),
           prefixIcon: const Icon(Icons.location_on_outlined, color: AppTheme.textMuted),
-          suffixIcon: IconButton(onPressed: _locating ? null : _locate, icon: const Icon(Icons.my_location_rounded, color: AppTheme.primaryGreen)),
+          suffixIcon: IconButton(
+            onPressed: _locating ? null : () => _locate(showGpsPrompt: true),
+            icon: const Icon(Icons.my_location_rounded, color: AppTheme.primaryGreen),
+          ),
           filled: true,
           fillColor: AppTheme.cardDark,
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: AppTheme.outline)),
