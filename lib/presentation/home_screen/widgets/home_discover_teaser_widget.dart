@@ -74,7 +74,7 @@ class _HomeDiscoverTeaserWidgetState extends State<HomeDiscoverTeaserWidget> {
         for (final m in visibleMemories)
           _ExperiencePreview(
             memoryId: m.id,
-            coverImageUrl: m.imageUrl,
+            coverImageUrl: m.discoverImageUrl ?? m.imageUrl,
             likeCount: likeCounts[m.id] ?? 0,
             commentCount: commentCounts[m.id] ?? 0,
           ),
