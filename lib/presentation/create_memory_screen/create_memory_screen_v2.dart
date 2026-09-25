@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:geocoding/geocoding.dart';
+import 'package:image_cropper/image_cropper.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
@@ -32,6 +33,7 @@ class _CreateMemoryScreenV2State extends State<CreateMemoryScreenV2> {
   List<Circle> _circles = [];
   List<Profile> _people = [];
   final List<File> _images = [];
+  File? _discoverImage;
   bool _public = false;
   bool _loading = true;
   bool _loadingPeople = false;
@@ -149,6 +151,91 @@ class _CreateMemoryScreenV2State extends State<CreateMemoryScreenV2> {
     });
   }
 
+
+  Future<File?> _cropImage(
+    File source, {
+    required String title,
+    CropAspectRatio? aspectRatio,
+    bool locked = false,
+  }) async {
+    final result = await ImageCropper().cropImage(
+      sourcePath: source.path,
+      aspectRatio: aspectRatio,
+      compressFormat: ImageCompressFormat.jpg,
+      compressQuality: 92,
+      uiSettings: [
+        AndroidUiSettings(
+          toolbarTitle: title,
+          toolbarColor: AppTheme.backgroundDark,
+          toolbarWidgetColor: AppTheme.textPrimary,
+          initAspectRatio: CropAspectRatioPreset.original,
+          lockAspectRatio: locked,
+          cropStyle: CropStyle.rectangle,
+          aspectRatioPresets: const [
+            CropAspectRatioPreset.original,
+            CropAspectRatioPreset.square,
+            CropAspectRatioPreset.ratio4x3,
+            CropAspectRatioPreset.ratio16x9,
+            CropAspectRatioPreset.ratio3x2,
+          ],
+        ),
+        IOSUiSettings(
+          title: title,
+          aspectRatioLockEnabled: locked,
+          aspectRatioPresets: const [
+            CropAspectRatioPreset.original,
+            CropAspectRatioPreset.square,
+            CropAspectRatioPreset.ratio4x3,
+            CropAspectRatioPreset.ratio16x9,
+            CropAspectRatioPreset.ratio3x2,
+          ],
+        ),
+      ],
+    );
+    return result == null ? null : File(result.path);
+  }
+
+  Future<void> _resizeMainImage() async {
+    if (_images.isEmpty || _saving) return;
+    try {
+      final cropped = await _cropImage(
+        _images.first,
+        title: 'Resize Main Image',
+      );
+      if (!mounted || cropped == null) return;
+      setState(() {
+        _images[0] = cropped;
+        _discoverImage = null;
+        _error = null;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = "Couldn't edit the main image.");
+      }
+    }
+  }
+
+  Future<void> _setDiscoverImage() async {
+    if (_images.isEmpty || _saving) return;
+    try {
+      final cropped = await _cropImage(
+        _images.first,
+        title: 'Set Home Discover Image',
+        aspectRatio: const CropAspectRatio(ratioX: 16, ratioY: 9),
+        locked: true,
+      );
+      if (!mounted || cropped == null) return;
+      setState(() {
+        _discoverImage = cropped;
+        _error = null;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = "Couldn't set the Home Discover image.");
+      }
+    }
+  }
+
   Future<void> _locate({bool showGpsPrompt = false}) async {
     if (mounted) setState(() => _locating = true);
     try {
@@ -205,6 +292,7 @@ class _CreateMemoryScreenV2State extends State<CreateMemoryScreenV2> {
       final caption = _caption.text.trim();
       final memory = await MemoriesRepository.addMemory(
         files: List<File>.unmodifiable(_images),
+        discoverImageFile: _discoverImage,
         title: title.isEmpty ? null : title,
         caption: caption.isEmpty ? null : caption,
         location: _location.text.trim().isEmpty ? null : _location.text.trim(),
@@ -483,6 +571,45 @@ class _CreateMemoryScreenV2State extends State<CreateMemoryScreenV2> {
               TextButton.icon(onPressed: _pickFromGallery, icon: const Icon(Icons.add_photo_alternate_outlined, size: 17), label: const Text('Add more')),
             ],
           ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _saving ? null : _resizeMainImage,
+                  icon: const Icon(Icons.crop_rotate_rounded, size: 17),
+                  label: const Text('Resize Main Image'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _saving ? null : _setDiscoverImage,
+                  icon: Icon(
+                    _discoverImage == null
+                        ? Icons.crop_rounded
+                        : Icons.check_circle_outline_rounded,
+                    size: 17,
+                  ),
+                  label: Text(
+                    _discoverImage == null
+                        ? 'Set Discover 16:9'
+                        : 'Edit Discover 16:9',
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (_discoverImage != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              'This crop will appear in Home → Discover.',
+              style: GoogleFonts.manrope(
+                fontSize: 10,
+                color: AppTheme.primaryGreen,
+              ),
+            ),
+          ],
           SizedBox(
             height: 72,
             child: ListView.separated(
