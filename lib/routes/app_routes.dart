@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/supabase/supabase_service.dart';
+
 import '../presentation/home_screen/home_screen.dart';
 import '../presentation/memories_screen/memories_screen.dart';
 import '../presentation/onboarding_screen/onboarding_screen.dart';
@@ -47,6 +49,22 @@ class AppRoutes {
 
 final GoRouter appRouter = GoRouter(
   initialLocation: AppRoutes.initial,
+  redirect: (context, state) {
+    final isSignedIn = SupabaseService.client.auth.currentSession != null;
+    final location = state.matchedLocation;
+    final isAuthEntry = location == AppRoutes.initial ||
+        location == AppRoutes.onboardingScreen ||
+        location == AppRoutes.signUpLoginScreen;
+
+    // Once authenticated, never allow the back stack to return the user
+    // to onboarding/login. This is especially important after Google OAuth,
+    // where the system back gesture can revisit the pre-auth route.
+    if (isSignedIn && isAuthEntry) {
+      return AppRoutes.homeScreen;
+    }
+
+    return null;
+  },
   routes: [
     GoRoute(path: AppRoutes.initial, builder: (context, state) => const OnboardingScreen()),
     GoRoute(path: AppRoutes.onboardingScreen, builder: (context, state) => const OnboardingScreen()),
