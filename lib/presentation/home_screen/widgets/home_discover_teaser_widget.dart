@@ -189,7 +189,7 @@ class _ExperiencePreviewCardState extends State<_ExperiencePreviewCard> {
       onTapUp: (_) => setState(() => _pressed = false),
       onTapCancel: () => setState(() => _pressed = false),
       onTap: () {
-        context.go(AppRoutes.discoverScreen);
+        context.push('/memory/${e.memoryId}');
       },
       child: AnimatedScale(
         scale: _pressed ? 0.97 : 1.0,
