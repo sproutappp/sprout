@@ -72,18 +72,6 @@ class _SetHomePreviewScreenState extends State<SetHomePreviewScreen> {
       ),
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-            child: Text(
-              'Choose how your photo will appear in Home → Discover.',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.manrope(
-                color: AppTheme.textMuted,
-                fontSize: 12,
-                height: 1.4,
-              ),
-            ),
-          ),
           Expanded(
             child: Container(
               margin: const EdgeInsets.symmetric(horizontal: 12),
