@@ -11,7 +11,6 @@ import '../../models/profile.dart';
 import '../../services/circles_repository.dart';
 import '../../services/memory_people_repository.dart';
 import '../../services/memories_repository.dart';
-import 'set_home_preview_screen.dart';
 import '../../theme/app_theme.dart';
 
 class CreateMemoryScreenV2 extends StatefulWidget {
@@ -33,7 +32,6 @@ class _CreateMemoryScreenV2State extends State<CreateMemoryScreenV2> {
   List<Circle> _circles = [];
   List<Profile> _people = [];
   final List<File> _images = [];
-  File? _discoverImage;
   bool _public = false;
   bool _loading = true;
   bool _loadingPeople = false;
@@ -104,26 +102,6 @@ class _CreateMemoryScreenV2State extends State<CreateMemoryScreenV2> {
     }
   }
 
-  Future<File?> _openHomePreview(File source) async {
-    try {
-      final bytes = await source.readAsBytes();
-      if (!mounted) return null;
-      return Navigator.of(context).push<File?>(
-        MaterialPageRoute(
-          builder: (_) => SetHomePreviewScreen(
-            imageBytes: bytes,
-            sourceExtension: source.path.split('.').last,
-          ),
-        ),
-      );
-    } catch (_) {
-      if (mounted) {
-        setState(() => _error = "Couldn't prepare the Home Preview.");
-      }
-      return null;
-    }
-  }
-
   Future<void> _pickFromGallery() async {
     try {
       final picked = await _picker.pickMultiImage(
@@ -137,16 +115,8 @@ class _CreateMemoryScreenV2State extends State<CreateMemoryScreenV2> {
           .where((file) => !existing.contains(file.path))
           .toList();
       if (additions.isEmpty) return;
-
-      File? homePreview;
-      if (_images.isEmpty) {
-        homePreview = await _openHomePreview(additions.first);
-        if (!mounted) return;
-      }
-
       setState(() {
         _images.addAll(additions);
-        _discoverImage = homePreview;
         _error = null;
       });
     } catch (_) {
@@ -161,20 +131,12 @@ class _CreateMemoryScreenV2State extends State<CreateMemoryScreenV2> {
         maxWidth: 2048,
         imageQuality: 88,
       );
-      if (picked == null || !mounted) return;
-
-      final image = File(picked.path);
-      File? homePreview;
-      if (_images.isEmpty) {
-        homePreview = await _openHomePreview(image);
-        if (!mounted) return;
+      if (picked != null && mounted) {
+        setState(() {
+          _images.add(File(picked.path));
+          _error = null;
+        });
       }
-
-      setState(() {
-        _images.add(image);
-        _discoverImage = homePreview;
-        _error = null;
-      });
     } catch (_) {
       if (mounted) setState(() => _error = "Couldn't access your camera.");
     }
@@ -183,11 +145,9 @@ class _CreateMemoryScreenV2State extends State<CreateMemoryScreenV2> {
   void _removeImage(int index) {
     setState(() {
       _images.removeAt(index);
-      if (index == 0) _discoverImage = null;
       if (_images.isEmpty) _error = null;
     });
   }
-
 
   Future<void> _locate({bool showGpsPrompt = false}) async {
     if (mounted) setState(() => _locating = true);
@@ -245,7 +205,6 @@ class _CreateMemoryScreenV2State extends State<CreateMemoryScreenV2> {
       final caption = _caption.text.trim();
       final memory = await MemoriesRepository.addMemory(
         files: List<File>.unmodifiable(_images),
-        discoverImageFile: _discoverImage,
         title: title.isEmpty ? null : title,
         caption: caption.isEmpty ? null : caption,
         location: _location.text.trim().isEmpty ? null : _location.text.trim(),
@@ -524,7 +483,6 @@ class _CreateMemoryScreenV2State extends State<CreateMemoryScreenV2> {
               TextButton.icon(onPressed: _pickFromGallery, icon: const Icon(Icons.add_photo_alternate_outlined, size: 17), label: const Text('Add more')),
             ],
           ),
-
           SizedBox(
             height: 72,
             child: ListView.separated(
