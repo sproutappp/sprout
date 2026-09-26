@@ -50,7 +50,9 @@ class _HomeDiscoverTeaserWidgetState extends State<HomeDiscoverTeaserWidget> {
   Future<void> _load() async {
     try {
       final memories = await MemoriesRepository.fetchPublicMemories();
-      final visibleMemories = memories.take(2).toList();
+      // Home Discover has no artificial item cap; it mirrors the full public
+      // Discover feed while keeping each card compact as a teaser.
+      final visibleMemories = memories;
       final memoryIds = visibleMemories.map((memory) => memory.id).toList();
       final likeCountsFuture = ReactionsRepository.fetchLikeCounts(memoryIds);
       final commentCountsFuture = Future.wait(
