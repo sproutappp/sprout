@@ -8,19 +8,21 @@ import '../../../services/comments_repository.dart';
 import '../../../services/memories_repository.dart';
 import '../../../services/reactions_repository.dart';
 
-/// A small preview of public memories, linking into the full Discover screen.
+/// A compact Home teaser for public memories.
 ///
-/// Public memories intentionally have no circle-name/tag/count embossed on
-/// the card. Circle names are reserved for private circle memories.
+/// The image uses the same 1.12 aspect ratio as the full Discover memory
+/// card. Home intentionally shows only the image, creator name, and counts.
 class _ExperiencePreview {
   final String memoryId;
   final String coverImageUrl;
+  final String creatorName;
   final int likeCount;
   final int commentCount;
 
   const _ExperiencePreview({
     required this.memoryId,
     required this.coverImageUrl,
+    required this.creatorName,
     required this.likeCount,
     required this.commentCount,
   });
@@ -74,7 +76,8 @@ class _HomeDiscoverTeaserWidgetState extends State<HomeDiscoverTeaserWidget> {
         for (final m in visibleMemories)
           _ExperiencePreview(
             memoryId: m.id,
-            coverImageUrl: m.discoverImageUrl ?? m.imageUrl,
+            coverImageUrl: m.imageUrl,
+            creatorName: m.contributor?.displayName ?? 'Sprout member',
             likeCount: likeCounts[m.id] ?? 0,
             commentCount: commentCounts[m.id] ?? 0,
           ),
@@ -195,17 +198,18 @@ class _ExperiencePreviewCardState extends State<_ExperiencePreviewCard> {
         scale: _pressed ? 0.97 : 1.0,
         duration: const Duration(milliseconds: 120),
         child: Container(
-          height: 160,
           decoration: BoxDecoration(
+            color: AppTheme.surfaceDark,
             borderRadius: BorderRadius.circular(20),
             border: Border.all(color: AppTheme.outline, width: 0.5),
           ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                CachedNetworkImage(
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              AspectRatio(
+                aspectRatio: 1.12,
+                child: CachedNetworkImage(
                   imageUrl: e.coverImageUrl,
                   fit: BoxFit.cover,
                   placeholder: (_, __) =>
@@ -219,68 +223,60 @@ class _ExperiencePreviewCardState extends State<_ExperiencePreviewCard> {
                     ),
                   ),
                 ),
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  height: 52,
-                  child: IgnorePointer(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.transparent,
-                            Colors.black.withAlpha(51),
-                          ],
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 11),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        e.creatorName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontFamily: 'Manrope',
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.textPrimary,
                         ),
                       ),
                     ),
-                  ),
+                    const SizedBox(width: 12),
+                    const Icon(
+                      Icons.favorite_border_rounded,
+                      size: 15,
+                      color: AppTheme.textMuted,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${e.likeCount}',
+                      style: const TextStyle(
+                        fontFamily: 'Manrope',
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textMuted,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    const Icon(
+                      Icons.chat_bubble_outline_rounded,
+                      size: 14,
+                      color: AppTheme.textMuted,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${e.commentCount}',
+                      style: const TextStyle(
+                        fontFamily: 'Manrope',
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textMuted,
+                      ),
+                    ),
+                  ],
                 ),
-                Positioned(
-                  left: 12,
-                  right: 12,
-                  bottom: 9,
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.favorite_border_rounded,
-                        size: 16,
-                        color: Colors.white,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${e.likeCount}',
-                        style: const TextStyle(
-                          fontFamily: 'Manrope',
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      const Icon(
-                        Icons.chat_bubble_outline_rounded,
-                        size: 15,
-                        color: Colors.white,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${e.commentCount}',
-                        style: const TextStyle(
-                          fontFamily: 'Manrope',
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
