@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:geocoding/geocoding.dart';
-import 'package:image_cropper/image_cropper.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
@@ -12,6 +11,7 @@ import '../../models/profile.dart';
 import '../../services/circles_repository.dart';
 import '../../services/memory_people_repository.dart';
 import '../../services/memories_repository.dart';
+import 'set_home_preview_screen.dart';
 import '../../theme/app_theme.dart';
 
 class CreateMemoryScreenV2 extends StatefulWidget {
@@ -104,6 +104,26 @@ class _CreateMemoryScreenV2State extends State<CreateMemoryScreenV2> {
     }
   }
 
+  Future<File?> _openHomePreview(File source) async {
+    try {
+      final bytes = await source.readAsBytes();
+      if (!mounted) return null;
+      return Navigator.of(context).push<File?>(
+        MaterialPageRoute(
+          builder: (_) => SetHomePreviewScreen(
+            imageBytes: bytes,
+            sourceExtension: source.path.split('.').last,
+          ),
+        ),
+      );
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = "Couldn't prepare the Home Preview.");
+      }
+      return null;
+    }
+  }
+
   Future<void> _pickFromGallery() async {
     try {
       final picked = await _picker.pickMultiImage(
@@ -117,8 +137,16 @@ class _CreateMemoryScreenV2State extends State<CreateMemoryScreenV2> {
           .where((file) => !existing.contains(file.path))
           .toList();
       if (additions.isEmpty) return;
+
+      File? homePreview;
+      if (_images.isEmpty) {
+        homePreview = await _openHomePreview(additions.first);
+        if (!mounted) return;
+      }
+
       setState(() {
         _images.addAll(additions);
+        _discoverImage = homePreview;
         _error = null;
       });
     } catch (_) {
@@ -133,12 +161,20 @@ class _CreateMemoryScreenV2State extends State<CreateMemoryScreenV2> {
         maxWidth: 2048,
         imageQuality: 88,
       );
-      if (picked != null && mounted) {
-        setState(() {
-          _images.add(File(picked.path));
-          _error = null;
-        });
+      if (picked == null || !mounted) return;
+
+      final image = File(picked.path);
+      File? homePreview;
+      if (_images.isEmpty) {
+        homePreview = await _openHomePreview(image);
+        if (!mounted) return;
       }
+
+      setState(() {
+        _images.add(image);
+        _discoverImage = homePreview;
+        _error = null;
+      });
     } catch (_) {
       if (mounted) setState(() => _error = "Couldn't access your camera.");
     }
@@ -152,90 +188,6 @@ class _CreateMemoryScreenV2State extends State<CreateMemoryScreenV2> {
     });
   }
 
-
-  Future<File?> _cropImage(
-    File source, {
-    required String title,
-    CropAspectRatio? aspectRatio,
-    bool locked = false,
-  }) async {
-    final result = await ImageCropper().cropImage(
-      sourcePath: source.path,
-      aspectRatio: aspectRatio,
-      compressFormat: ImageCompressFormat.jpg,
-      compressQuality: 92,
-      uiSettings: [
-        AndroidUiSettings(
-          toolbarTitle: title,
-          toolbarColor: AppTheme.backgroundDark,
-          toolbarWidgetColor: AppTheme.textPrimary,
-          initAspectRatio: CropAspectRatioPreset.original,
-          lockAspectRatio: locked,
-          cropStyle: CropStyle.rectangle,
-          aspectRatioPresets: const [
-            CropAspectRatioPreset.original,
-            CropAspectRatioPreset.square,
-            CropAspectRatioPreset.ratio4x3,
-            CropAspectRatioPreset.ratio16x9,
-            CropAspectRatioPreset.ratio3x2,
-          ],
-        ),
-        IOSUiSettings(
-          title: title,
-          aspectRatioLockEnabled: locked,
-          aspectRatioPresets: const [
-            CropAspectRatioPreset.original,
-            CropAspectRatioPreset.square,
-            CropAspectRatioPreset.ratio4x3,
-            CropAspectRatioPreset.ratio16x9,
-            CropAspectRatioPreset.ratio3x2,
-          ],
-        ),
-      ],
-    );
-    return result == null ? null : File(result.path);
-  }
-
-  Future<void> _resizeMainImage() async {
-    if (_images.isEmpty || _saving) return;
-    try {
-      final cropped = await _cropImage(
-        _images.first,
-        title: 'Resize Main Image',
-      );
-      if (!mounted || cropped == null) return;
-      setState(() {
-        _images[0] = cropped;
-        _discoverImage = null;
-        _error = null;
-      });
-    } catch (_) {
-      if (mounted) {
-        setState(() => _error = "Couldn't edit the main image.");
-      }
-    }
-  }
-
-  Future<void> _setDiscoverImage() async {
-    if (_images.isEmpty || _saving) return;
-    try {
-      final cropped = await _cropImage(
-        _images.first,
-        title: 'Set Home Discover Image',
-        aspectRatio: const CropAspectRatio(ratioX: 16, ratioY: 9),
-        locked: true,
-      );
-      if (!mounted || cropped == null) return;
-      setState(() {
-        _discoverImage = cropped;
-        _error = null;
-      });
-    } catch (_) {
-      if (mounted) {
-        setState(() => _error = "Couldn't set the Home Discover image.");
-      }
-    }
-  }
 
   Future<void> _locate({bool showGpsPrompt = false}) async {
     if (mounted) setState(() => _locating = true);
@@ -572,45 +524,7 @@ class _CreateMemoryScreenV2State extends State<CreateMemoryScreenV2> {
               TextButton.icon(onPressed: _pickFromGallery, icon: const Icon(Icons.add_photo_alternate_outlined, size: 17), label: const Text('Add more')),
             ],
           ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _saving ? null : _resizeMainImage,
-                  icon: const Icon(Icons.crop_rotate_rounded, size: 17),
-                  label: const Text('Resize Main Image'),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _saving ? null : _setDiscoverImage,
-                  icon: Icon(
-                    _discoverImage == null
-                        ? Icons.crop_rounded
-                        : Icons.check_circle_outline_rounded,
-                    size: 17,
-                  ),
-                  label: Text(
-                    _discoverImage == null
-                        ? 'Set Discover 16:9'
-                        : 'Edit Discover 16:9',
-                  ),
-                ),
-              ),
-            ],
-          ),
-          if (_discoverImage != null) ...[
-            const SizedBox(height: 8),
-            Text(
-              'This crop will appear in Home → Discover.',
-              style: GoogleFonts.manrope(
-                fontSize: 10,
-                color: AppTheme.primaryGreen,
-              ),
-            ),
-          ],
+
           SizedBox(
             height: 72,
             child: ListView.separated(
