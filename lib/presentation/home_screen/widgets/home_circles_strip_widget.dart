@@ -67,10 +67,14 @@ class _HomeCirclesStripWidgetState extends State<HomeCirclesStripWidget> {
       final circles = await CirclesRepository.fetchMyCircles();
       if (!mounted) return;
       setState(() {
-        // Home strip shows a quick top few, not the full list.
+        // Home shows only the three newest circles. Sort by the circle's
+        // creation time rather than membership/join order so the newest
+        // circles created by the user are always surfaced first.
+        final newestCircles = [...circles]
+          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
         _circles = [
-          for (var i = 0; i < circles.length && i < 4; i++)
-            _CircleModel.fromCircle(circles[i], i),
+          for (var i = 0; i < newestCircles.length && i < 3; i++)
+            _CircleModel.fromCircle(newestCircles[i], i),
         ];
         _isLoading = false;
       });
