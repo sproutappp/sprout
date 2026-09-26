@@ -11,6 +11,25 @@ import '../widgets/custom_error_widget.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  bool hasShownError = false;
+
+  // 🚨 CRITICAL: Custom error handling - DO NOT REMOVE
+  ErrorWidget.builder = (FlutterErrorDetails details) {
+    if (!hasShownError) {
+      hasShownError = true;
+
+      Future.delayed(const Duration(seconds: 5), () {
+        hasShownError = false;
+      });
+
+      return CustomErrorWidget(errorDetails: details);
+    }
+    return const SizedBox.shrink();
+  };
+
+  // 🚨 CRITICAL: Device orientation lock - DO NOT REMOVE
+  SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+
   // Start rendering immediately so a slow first-run SDK initialization never
   // leaves the native launch screen looking blank.
   runApp(const _BootstrapApp());
