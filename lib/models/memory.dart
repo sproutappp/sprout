@@ -7,7 +7,6 @@ class Memory {
   final String? circleId;
   final String uploadedBy;
   final String imageUrl;
-  final String? discoverImageUrl;
   final List<String> mediaUrls;
   final String title;
   final String? caption;
@@ -22,7 +21,6 @@ class Memory {
     this.circleId,
     required this.uploadedBy,
     required this.imageUrl,
-    this.discoverImageUrl,
     this.mediaUrls = const [],
     this.title = 'A memory',
     this.caption,
@@ -66,7 +64,6 @@ class Memory {
       circleId: map['circle_id'] as String?,
       uploadedBy: map['uploaded_by'] as String,
       imageUrl: imageUrl,
-      discoverImageUrl: map['discover_image_url'] as String?,
       mediaUrls: mediaUrls.isEmpty ? [imageUrl] : mediaUrls,
       title: title,
       caption: caption?.isEmpty == true ? null : caption,
