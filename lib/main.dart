@@ -24,11 +24,23 @@ class _BootstrapApp extends StatefulWidget {
 }
 
 class _BootstrapAppState extends State<_BootstrapApp> {
-  late final Future<void> _initialization = _initialize();
+  late Future<void> _initialization;
+
+  @override
+  void initState() {
+    super.initState();
+    _initialization = _initialize();
+  }
 
   Future<void> _initialize() async {
     await Firebase.initializeApp();
     await SupabaseService.initialize();
+
+    SupabaseService.client.auth.onAuthStateChange.listen((data) {
+      if (data.event == AuthChangeEvent.signedIn) {
+        appRouter.go(AppRoutes.homeScreen);
+      }
+    });
   }
 
   @override
