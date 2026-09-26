@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:sizer/sizer.dart';
 
 import '../core/app_export.dart';
@@ -101,8 +102,8 @@ class _StartupScreen extends StatelessWidget {
       home: Scaffold(
         backgroundColor: AppTheme.backgroundDark,
         body: Center(
-          child: Image.asset(
-            'assets/images/sprout_logo.png',
+          child: SvgPicture.asset(
+            'assets/images/sprout_logo.svg',
             width: 76,
             height: 76,
           ),
@@ -134,8 +135,8 @@ class _StartupErrorScreen extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Image.asset(
-                  'assets/images/sprout_logo.png',
+                SvgPicture.asset(
+                  'assets/images/sprout_logo.svg',
                   width: 64,
                   height: 64,
                 ),
