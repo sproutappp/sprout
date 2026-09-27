@@ -11,9 +11,11 @@ class MemoriesRepository {
   static const _bucket = 'memories';
   static const _signedUrlExpirySeconds = 60 * 60 * 24 * 7;
   static final _memoryDeletedController = StreamController<String>.broadcast();
+  static final _memoryCreatedController = StreamController<String>.broadcast();
   static final Set<String> _deletedMemoryIds = <String>{};
 
   static Stream<String> get memoryDeleted => _memoryDeletedController.stream;
+  static Stream<String> get memoryCreated => _memoryCreatedController.stream;
 
   static List<Memory> _withoutDeleted(List<Memory> memories) {
     if (_deletedMemoryIds.isEmpty) return memories;
@@ -268,6 +270,8 @@ class MemoriesRepository {
 
     final row = await _client.from('memories').select('id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, created_at, is_public').eq('id', id).single();
     final resolved = await _toMemoriesWithSignedUrls([row]);
-    return resolved.first;
+    final memory = resolved.first;
+    _memoryCreatedController.add(memory.id);
+    return memory;
   }
 }
