@@ -120,9 +120,17 @@ export default {
       // Delete physical files through the Storage API before cascading the
       // database rows. This also removes files uploaded by other circle
       // members because this function uses the server-side service client.
-      await removeStoragePaths(admin, 'memories', memoryPaths);
+      try {
+        await removeStoragePaths(admin, 'memories', memoryPaths);
+      } catch (storageError) {
+        console.error('delete-circle: memory storage cleanup failed', storageError);
+      }
       if (coverPath) {
-        await removeStoragePaths(admin, 'circle-covers', [coverPath]);
+        try {
+          await removeStoragePaths(admin, 'circle-covers', [coverPath]);
+        } catch (storageError) {
+          console.error('delete-circle: cover storage cleanup failed', storageError);
+        }
       }
 
       // Persist deletion notifications before deleting the circle. The
@@ -136,19 +144,23 @@ export default {
 
       if (membersError) throw membersError;
 
-      const actorName = await admin
-        .from('profiles')
-        .select('full_name')
-        .eq('id', userId)
-        .maybeSingle();
+      let displayName = 'Someone';
+      try {
+        const actorName = await admin
+          .from('profiles')
+          .select('full_name')
+          .eq('id', userId)
+          .maybeSingle();
 
-      if (actorName.error) throw actorName.error;
+        if (!actorName.error &&
+            typeof actorName.data?.full_name === 'string' &&
+            actorName.data.full_name.trim().length > 0) {
+          displayName = actorName.data.full_name.trim();
+        }
+      } catch (profileError) {
+        console.error('delete-circle: profile lookup failed', profileError);
+      }
 
-      const displayName =
-        typeof actorName.data?.full_name === 'string' &&
-        actorName.data.full_name.trim().length > 0
-          ? actorName.data.full_name.trim()
-          : 'Someone';
       const message = displayName + ' has deleted the ' + circle.name;
 
       if ((members ?? []).length) {
@@ -162,11 +174,17 @@ export default {
           is_read: false,
         }));
 
-        const { error: notificationError } = await admin
-          .from('notifications')
-          .insert(notifications);
+        try {
+          const { error: notificationError } = await admin
+            .from('notifications')
+            .insert(notifications);
 
-        if (notificationError) throw notificationError;
+          if (notificationError) {
+            console.error('delete-circle: notification insert failed', notificationError);
+          }
+        } catch (notificationError) {
+          console.error('delete-circle: notification insert failed', notificationError);
+        }
       }
 
       const { error: deleteError } = await admin
