@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import '../core/supabase/supabase_service.dart';
@@ -8,6 +9,8 @@ class CirclesRepository {
   CirclesRepository._();
   static final _client = SupabaseService.client;
   static const _circleCoverBucket = 'circle-covers';
+  static final _circleChangedController = StreamController<String>.broadcast();
+  static Stream<String> get circleChanged => _circleChangedController.stream;
 
   static String? get currentUserId => _client.auth.currentUser?.id;
 
@@ -84,7 +87,9 @@ class CirclesRepository {
       circleId = circleRow['id'] as String;
       await _client.from('circle_members').insert({'circle_id': circleId, 'user_id': userId, 'role': 'admin'});
       circleRow['member_count'] = 1;
-      return Circle.fromMap(circleRow);
+      final circle = Circle.fromMap(circleRow);
+      _circleChangedController.add(circle.id);
+      return circle;
     } catch (e) {
       if (circleId != null) { try { await _client.from('circles').delete().eq('id', circleId); } catch (_) {} }
       try { await _client.storage.from(_circleCoverBucket).remove([coverPath]); } catch (_) {}
@@ -109,7 +114,9 @@ class CirclesRepository {
       final row = await _client.from('circles').update(update).eq('id', circleId).select().single();
       final memberCount = await _client.from('circle_members').select('user_id').eq('circle_id', circleId);
       row['member_count'] = (memberCount as List).length;
-      return Circle.fromMap(row);
+      final circle = Circle.fromMap(row);
+      _circleChangedController.add(circle.id);
+      return circle;
     } catch (e) {
       if (newCoverPath != null) { try { await _client.storage.from(_circleCoverBucket).remove([newCoverPath]); } catch (_) {} }
       rethrow;
@@ -138,6 +145,7 @@ class CirclesRepository {
     if (data is! Map || data['success'] != true) {
       throw StateError('Circle deletion was not confirmed by the server');
     }
+    _circleChangedController.add(circle.id);
   }
 
   static Future<void> leaveCircle(String circleId) async {
@@ -151,6 +159,7 @@ class CirclesRepository {
     if (result != true) {
       throw StateError('Circle leave was not confirmed by the server');
     }
+    _circleChangedController.add(circleId);
   }
 
   static Future<({Circle circle, List<Profile> members})> fetchCircleDetail(String circleId) async {
