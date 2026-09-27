@@ -164,11 +164,28 @@ class CirclesRepository {
       if (result != true) {
         throw StateError('Circle deletion was not confirmed by the server');
       }
-    } catch (e) {
-      throw StateError(
-        'Circle deletion failed: ' + e.toString()
-        + (edgeFailure == null ? '' : ' (Edge Function: ' + edgeFailure.toString() + ')'),
-      );
+    } catch (rpcError) {
+      // Final authenticated fallback. The circles table has an owner-only
+      // DELETE policy, so this path can still remove the database row if the
+      // RPC's notification work is the part that failed.
+      try {
+        final deleted = await _client
+            .from('circles')
+            .delete()
+            .eq('id', circle.id)
+            .eq('created_by', userId)
+            .select('id')
+            .maybeSingle();
+        if (deleted == null) {
+          throw StateError('Circle deletion was not confirmed by the server');
+        }
+      } catch (directDeleteError) {
+        throw StateError(
+          'Circle deletion failed: ' + directDeleteError.toString()
+          + ' (RPC: ' + rpcError.toString() + ')'
+          + (edgeFailure == null ? '' : ' (Edge Function: ' + edgeFailure.toString() + ')'),
+        );
+      }
     }
 
     _circleChangedController.add(circle.id);  }
