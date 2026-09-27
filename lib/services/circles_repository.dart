@@ -130,23 +130,48 @@ class CirclesRepository {
       throw StateError('Only the circle creator can delete this circle');
     }
 
-    final response = await _client.functions.invoke(
-      'delete-circle',
-      body: {'circleId': circle.id},
-    );
+    Object? edgeFailure;
+    try {
+      final response = await _client.functions.invoke(
+        'delete-circle',
+        body: {'circleId': circle.id},
+      );
 
-    if (response.status < 200 || response.status >= 300) {
+      if (response.status >= 200 &&
+          response.status < 300 &&
+          response.data is Map &&
+          response.data['success'] == true) {
+        _circleChangedController.add(circle.id);
+        return;
+      }
+
       final data = response.data;
       final error = data is Map ? data['error']?.toString() : null;
-      throw StateError(error ?? 'Circle deletion failed');
+      edgeFailure = StateError(error ?? 'Circle deletion failed');
+    } catch (e) {
+      edgeFailure = e;
     }
 
-    final data = response.data;
-    if (data is! Map || data['success'] != true) {
-      throw StateError('Circle deletion was not confirmed by the server');
+    // The Edge Function is responsible for storage cleanup, but the database
+    // RPC is the authoritative deletion path. If the function cannot complete
+    // (for example because a stale storage object blocks cleanup), still make
+    // sure the circle itself is actually deleted.
+    try {
+      final result = await _client.rpc(
+        'delete_circle',
+        params: {'p_circle_id': circle.id},
+      );
+      if (result != true) {
+        throw StateError('Circle deletion was not confirmed by the server');
+      }
+    } catch (e) {
+      throw StateError(
+        'Circle deletion failed: ' + e.toString()
+        + (edgeFailure == null ? '' : ' (Edge Function: ' + edgeFailure.toString() + ')'),
+      );
     }
-    _circleChangedController.add(circle.id);
-  }
+
+    _circleChangedController.add(circle.id);  }
 
   static Future<void> leaveCircle(String circleId) async {
     final userId = _client.auth.currentUser?.id;
