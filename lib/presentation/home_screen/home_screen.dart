@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:async';
+
 import 'package:go_router/go_router.dart';
 
 import '../../theme/app_theme.dart';
 import '../../routes/app_routes.dart';
+import '../../services/circles_repository.dart';
+import '../../services/memories_repository.dart';
 import './widgets/home_app_bar_widget.dart';
 import './widgets/home_circles_strip_widget.dart';
 import './widgets/home_discover_teaser_widget.dart';
@@ -26,6 +30,8 @@ class _HomeScreenState extends State<HomeScreen> {
   // to fully rebuild (new key -> new State -> initState re-runs -> re-fetch)
   // after something changes elsewhere (e.g. a new memory was captured).
   int _refreshKey = 0;
+  StreamSubscription<String>? _memoryCreatedSubscription;
+  StreamSubscription<String>? _circleChangedSubscription;
 
   @override
   void initState() {
@@ -34,10 +40,18 @@ class _HomeScreenState extends State<HomeScreen> {
     _scrollController.addListener(() {
       setState(() => _scrollOffset = _scrollController.offset);
     });
+    _memoryCreatedSubscription = MemoriesRepository.memoryCreated.listen((_) {
+      if (mounted) _refresh();
+    });
+    _circleChangedSubscription = CirclesRepository.circleChanged.listen((_) {
+      if (mounted) _refresh();
+    });
   }
 
   @override
   void dispose() {
+    _memoryCreatedSubscription?.cancel();
+    _circleChangedSubscription?.cancel();
     _scrollController.dispose();
     super.dispose();
   }
