@@ -10,6 +10,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../models/circle.dart';
 import '../../routes/app_routes.dart';
 import '../../services/circles_repository.dart';
+import '../../services/memories_repository.dart';
 import '../../services/notifications_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/circle_action_menu.dart';
@@ -27,6 +28,8 @@ class _CirclesScreenState extends State<CirclesScreen> with WidgetsBindingObserv
   int _unreadMemoryCount = 0;
   int _pendingInviteCount = 0;
   Timer? _pendingInviteTimer;
+  StreamSubscription<String>? _circleChangedSubscription;
+  StreamSubscription<String>? _memoryCreatedSubscription;
 
   @override
   void initState() {
@@ -37,6 +40,12 @@ class _CirclesScreenState extends State<CirclesScreen> with WidgetsBindingObserv
     _loadPendingInvites();
     _pendingInviteTimer = Timer.periodic(const Duration(seconds: 10), (_) {
       _loadPendingInvites();
+    });
+    _circleChangedSubscription = CirclesRepository.circleChanged.listen((_) {
+      if (mounted) _load();
+    });
+    _memoryCreatedSubscription = MemoriesRepository.memoryCreated.listen((_) {
+      if (mounted) _load();
     });
   }
 
@@ -52,6 +61,8 @@ class _CirclesScreenState extends State<CirclesScreen> with WidgetsBindingObserv
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _pendingInviteTimer?.cancel();
+    _circleChangedSubscription?.cancel();
+    _memoryCreatedSubscription?.cancel();
     super.dispose();
   }
 
