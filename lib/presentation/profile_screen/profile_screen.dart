@@ -200,10 +200,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
         circles.map((circle) => circle.id).toList(),
       );
       if (!mounted) return;
+      // Keep the complete list for profile stats/activity, but keep the
+      // visible preview consistent with Home: newest circles first.
+      final sortedCircles = [...circles]
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
       setState(() {
         _myCircles = [
-          for (var i = 0; i < circles.length; i++)
-            _CircleRow.fromCircle(circles[i], i),
+          for (var i = 0; i < sortedCircles.length; i++)
+            _CircleRow.fromCircle(sortedCircles[i], i),
         ];
         _peopleCount = memberProfiles.length;
       });
@@ -677,7 +681,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         child: _CircleRowItem(circle: c, onChanged: _load),
                       ),
                     );
-                  }, childCount: _myCircles.length),
+                  }, childCount: _myCircles.length > 3 ? 3 : _myCircles.length),
                 ),
 
               // ── Activity / About ─────────────────────────────────────────
