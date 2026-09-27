@@ -27,6 +27,7 @@ class _MemoriesScreenState extends State<MemoriesScreen> {
   bool _isLoading = true;
   String? _error;
   StreamSubscription<String>? _memoryDeletedSubscription;
+  StreamSubscription<String>? _memoryCreatedSubscription;
 
   static const _palette = [
     Color(0xFFFFB84D),
@@ -43,6 +44,9 @@ class _MemoriesScreenState extends State<MemoriesScreen> {
       setState(() => _scrollOffset = _scrollController.offset);
     });
     _memoryDeletedSubscription = MemoriesRepository.memoryDeleted.listen(_removeDeletedMemory);
+    _memoryCreatedSubscription = MemoriesRepository.memoryCreated.listen((_) {
+      if (mounted) _load();
+    });
     _load();
   }
 
@@ -101,6 +105,7 @@ class _MemoriesScreenState extends State<MemoriesScreen> {
   @override
   void dispose() {
     _memoryDeletedSubscription?.cancel();
+    _memoryCreatedSubscription?.cancel();
     _scrollController.dispose();
     super.dispose();
   }
