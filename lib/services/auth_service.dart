@@ -90,6 +90,7 @@ class AuthService {
         idToken: idToken,
         accessToken: authorization.accessToken,
       );
+      return;
     }
 
     final launched = await _auth.signInWithOAuth(
