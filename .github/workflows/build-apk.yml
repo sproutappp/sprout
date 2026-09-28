@@ -61,7 +61,14 @@ jobs:
         if: ${{ env.ANDROID_KEYSTORE_BASE64 != '' }}
         run: |
           echo "Release signing certificate SHA-1:"
-          keytool -list -v -keystore "$ANDROID_KEYSTORE_PATH" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" | grep -i "SHA1:"
+          keytool -list -v \
+            -keystore "$ANDROID_KEYSTORE_PATH" \
+            -storepass "$ANDROID_KEYSTORE_PASSWORD" \
+            -alias "$ANDROID_KEY_ALIAS" \
+            | grep -i "SHA1"
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
 
       # Memory card constructor keys are fixed on main; this workflow commit
       # intentionally only triggers a fresh APK build from that corrected tree.
