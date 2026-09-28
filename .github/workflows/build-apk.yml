@@ -55,6 +55,14 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
+      # Print the release certificate fingerprint used by CI so Google Sign-In configuration can be verified.
+      # This exposes only the public SHA-1 fingerprint, never the keystore/password.
+      - name: Verify Google Sign-In release SHA-1
+        if: ${{ env.ANDROID_KEYSTORE_BASE64 != '' }}
+        run: |
+          echo "Release signing certificate SHA-1:"
+          keytool -list -v -keystore "$ANDROID_KEYSTORE_PATH" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" | grep -i "SHA1:"
+
       # Memory card constructor keys are fixed on main; this workflow commit
       # intentionally only triggers a fresh APK build from that corrected tree.
       - name: Build release APK
