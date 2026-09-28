@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -59,6 +60,18 @@ class _SignUpLoginScreenState extends State<SignUpLoginScreen>
     } on AuthException catch (e) {
       if (!mounted) return;
       setState(() => _errorMessage = e.message);
+    } on GoogleSignInException catch (e) {
+      if (!mounted) return;
+      if (e.code == GoogleSignInExceptionCode.canceled) return;
+      setState(
+        () => _errorMessage =
+            e.description ?? 'Google sign-in could not be completed.',
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(
+        () => _errorMessage = 'Google sign-in could not be completed. Please try again.',
+      );
     }
   }
 
