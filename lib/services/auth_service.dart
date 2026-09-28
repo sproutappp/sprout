@@ -9,7 +9,6 @@ import '../core/supabase/supabase_service.dart';
 class AuthService {
   static GoTrueClient get _auth => SupabaseService.client.auth;
 
-  static bool _googleInitialized = false;
   static Future<void>? _googleInitialization;
 
   static User? get currentUser => _auth.currentUser;
@@ -70,10 +69,6 @@ class AuthService {
       );
 
       await _googleInitialization;
-
-      if (!_googleInitialized) {
-        _googleInitialized = true;
-      }
 
       final googleUser = await googleSignIn.authenticate();
       final idToken = googleUser.authentication.idToken;
