@@ -7,6 +7,7 @@ import 'package:sizer/sizer.dart';
 
 import '../core/app_export.dart';
 import '../core/supabase/supabase_service.dart';
+import '../services/profiles_repository.dart';
 import '../widgets/custom_error_widget.dart';
 
 Future<void> main() async {
@@ -56,9 +57,45 @@ class _BootstrapAppState extends State<_BootstrapApp> {
     await Firebase.initializeApp();
     await SupabaseService.initialize();
 
+    final auth = SupabaseService.client.auth;
+
+    // Supabase Flutter restores a locally persisted session during startup.
+    // Do not trust a stale/invalid restored session as proof that the user
+    // should enter the authenticated app. Supabase v2 can return before a
+    // stored session has been refreshed, so explicitly refresh an expired
+    // session and verify that the matching Sprout profile still exists.
+    var session = auth.currentSession;
+    if (session?.isExpired == true) {
+      try {
+        final refreshed = await auth.refreshSession();
+        session = refreshed.session;
+      } catch (_) {
+        session = null;
+      }
+    }
+
+    if (session != null) {
+      try {
+        final profile = await ProfilesRepository.fetchCurrentUser();
+        if (profile == null) {
+          // A persisted auth session without a corresponding Sprout profile
+          // is not a usable signed-in state. Clear it so the user gets the
+          // normal Get Started -> Login flow instead of a broken Home shell.
+          await auth.signOut();
+        }
+      } catch (_) {
+        // If the backend is temporarily unavailable, do not throw the user
+        // into a partially loaded Home screen. The startup error screen gives
+        // them a retry path instead.
+        rethrow;
+      }
+    }
+
     SupabaseService.client.auth.onAuthStateChange.listen((data) {
       if (data.event == AuthChangeEvent.signedIn) {
         appRouter.go(AppRoutes.homeScreen);
+      } else if (data.event == AuthChangeEvent.signedOut) {
+        appRouter.go(AppRoutes.initial);
       }
     });
   }
