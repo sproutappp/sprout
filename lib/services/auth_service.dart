@@ -85,7 +85,7 @@ class AuthService {
         const <String>['email', 'profile'],
       );
 
-      return _auth.signInWithIdToken(
+      await _auth.signInWithIdToken(
         provider: OAuthProvider.google,
         idToken: idToken,
         accessToken: authorization.accessToken,
