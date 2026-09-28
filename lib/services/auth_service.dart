@@ -57,7 +57,7 @@ class AuthService {
   /// Chrome. This means there is no external browser tab left behind after
   /// the user returns to Sprout. Other platforms keep the existing Supabase
   /// OAuth flow for now.
-  static Future<AuthResponse> signInWithGoogle() async {
+  static Future<void> signInWithGoogle() async {
     if (defaultTargetPlatform == TargetPlatform.android) {
       final googleSignIn = GoogleSignIn.instance;
 
@@ -92,9 +92,12 @@ class AuthService {
       );
     }
 
-    return _auth.signInWithOAuth(
+    final launched = await _auth.signInWithOAuth(
       OAuthProvider.google,
       redirectTo: 'app.sprout.auth://login-callback/',
     );
+    if (!launched) {
+      throw const AuthException('Could not start Google sign-in.');
+    }
   }
 }
