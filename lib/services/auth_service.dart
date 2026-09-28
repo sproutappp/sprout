@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../core/supabase/supabase_service.dart';
 
@@ -58,12 +59,31 @@ class AuthService {
   /// the user returns to Sprout. Other platforms keep the existing Supabase
   /// OAuth flow for now.
   static Future<void> signInWithGoogle() async {
-    if (defaultTargetPlatform == TargetPlatform.android) {
+    Future<void> launchSupabaseGoogleOAuth() async {
+      final launched = await _auth.signInWithOAuth(
+        OAuthProvider.google,
+        redirectTo: 'app.sprout.auth://login-callback/',
+        authScreenLaunchMode: LaunchMode.externalApplication,
+      );
+      if (!launched) {
+        throw const AuthException('Could not start Google sign-in.');
+      }
+    }
+
+    if (defaultTargetPlatform != TargetPlatform.android) {
+      await launchSupabaseGoogleOAuth();
+      return;
+    }
+
+    // Android first uses the native Credential Manager flow. If Google
+    // returns the ambiguous "canceled" result after account selection
+    // (which google_sign_in can use for configuration failures), or Supabase
+    // rejects the native ID token, immediately fall back to the proven
+    // Supabase OAuth flow instead of silently returning to the login screen.
+    try {
       final googleSignIn = GoogleSignIn.instance;
 
       _googleInitialization ??= googleSignIn.initialize(
-        // This is the web OAuth client from google-services.json. Supabase
-        // validates the Google ID token against the same client configuration.
         serverClientId:
             '734501171389-8199tv2f24r3tt47clc462detk6avn00.apps.googleusercontent.com',
       );
@@ -72,33 +92,51 @@ class AuthService {
 
       final googleUser = await googleSignIn.authenticate();
       final idToken = googleUser.authentication.idToken;
-
       if (idToken == null) {
         throw const AuthException(
           'Google sign-in did not return an ID token.',
         );
       }
 
-      // google_sign_in 7 separates authentication from authorization.
       // Supabase requires a Google access token as well as the ID token.
-      final authorization = await googleUser.authorizationClient.authorizeScopes(
-        const <String>['email', 'profile'],
+      // authorizationForScopes([]) follows the current google_sign_in 7 API
+      // for retrieving the already-granted client authorization without
+      // unnecessarily starting a second consent flow.
+      final authorization =
+          await googleUser.authorizationClient.authorizationForScopes(
+        const <String>[],
       );
+      final accessToken = authorization?.accessToken;
+      if (accessToken == null || accessToken.isEmpty) {
+        throw const AuthException(
+          'Google sign-in did not return an access token.',
+        );
+      }
 
       await _auth.signInWithIdToken(
         provider: OAuthProvider.google,
         idToken: idToken,
-        accessToken: authorization.accessToken,
+        accessToken: accessToken,
       );
+
+      if (_auth.currentSession == null) {
+        throw const AuthException(
+          'Google sign-in completed without creating a Sprout session.',
+        );
+      }
       return;
+    } on GoogleSignInException {
+      // Credential Manager may report a configuration failure as "canceled"
+      // after the user has selected an account. Do not treat that as a silent
+      // exit; fall through to the browser OAuth path.
+    } on AuthException {
+      // If Supabase rejects the native token (for example because the
+      // provider configuration is not accepted), use the OAuth path instead
+      // of leaving the user stranded on the login screen.
+    } catch (_) {
+      // Native Google is best-effort; OAuth remains the reliable fallback.
     }
 
-    final launched = await _auth.signInWithOAuth(
-      OAuthProvider.google,
-      redirectTo: 'app.sprout.auth://login-callback/',
-    );
-    if (!launched) {
-      throw const AuthException('Could not start Google sign-in.');
-    }
+    await launchSupabaseGoogleOAuth();
   }
 }
