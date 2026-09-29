@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -15,6 +16,8 @@ import '../../theme/app_theme.dart';
 import '../memories_screen/widgets/memories_grid_widget.dart'
     show MemoryItem, MemoryPrivacy, MemoryType;
 
+enum _DiscoverMode { forYou, nearby }
+
 class DiscoverScreen extends StatefulWidget {
   const DiscoverScreen({super.key});
 
@@ -25,6 +28,7 @@ class DiscoverScreen extends StatefulWidget {
 class _DiscoverScreenState extends State<DiscoverScreen> {
   bool _isLoading = true;
   bool _loadFailed = false;
+  _DiscoverMode _mode = _DiscoverMode.forYou;
   List<Memory> _memories = [];
   Map<String, int> _likeCounts = {};
   Map<String, int> _commentCounts = {};
@@ -51,6 +55,46 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     if (mounted) _load();
   }
 
+  Future<bool> _ensureLocationPermission() async {
+    if (!await Geolocator.isLocationServiceEnabled()) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Turn on location to see nearby memories.')),
+        );
+      }
+      return false;
+    }
+
+    var permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Location permission is needed for Nearby.')),
+        );
+      }
+      return false;
+    }
+
+    return true;
+  }
+
+  Future<void> _selectMode(_DiscoverMode mode) async {
+    if (_mode == mode) return;
+
+    setState(() {
+      _mode = mode;
+      _isLoading = true;
+      _loadFailed = false;
+    });
+
+    await _load();
+  }
+
   Future<void> _load() async {
     if (mounted) {
       setState(() {
@@ -60,7 +104,35 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     }
 
     try {
-      final memories = await MemoriesRepository.fetchPublicMemories();
+      List<Memory> memories;
+
+      if (_mode == _DiscoverMode.forYou) {
+        memories = await MemoriesRepository.fetchPublicMemories();
+      } else {
+        final allowed = await _ensureLocationPermission();
+        if (!allowed) {
+          if (!mounted) return;
+          setState(() {
+            _memories = [];
+            _likeCounts = {};
+            _commentCounts = {};
+            _isLoading = false;
+          });
+          return;
+        }
+
+        final position = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.medium,
+          ),
+        );
+
+        memories = await MemoriesRepository.fetchNearbyPublicMemories(
+          latitude: position.latitude,
+          longitude: position.longitude,
+        );
+      }
+
       if (!mounted) return;
 
       final memoryIds = memories.map((memory) => memory.id).toList();
@@ -68,7 +140,10 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       final commentResultsFuture = Future.wait(
         memories.map((memory) async {
           try {
-            return MapEntry(memory.id, (await CommentsRepository.fetchForMemory(memory.id)).length);
+            return MapEntry(
+              memory.id,
+              (await CommentsRepository.fetchForMemory(memory.id)).length,
+            );
           } catch (_) {
             return MapEntry(memory.id, 0);
           }
@@ -88,7 +163,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         _isLoading = false;
       });
     } catch (e, st) {
-      debugPrint('DiscoverScreen: fetchPublicMemories failed: $e\n$st');
+      debugPrint('DiscoverScreen: load failed: $e\\n$st');
       if (!mounted) return;
       setState(() {
         _loadFailed = true;
@@ -117,6 +192,37 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     if (deleted == true && mounted) {
       await _load();
     }
+  }
+
+  Widget _modePill({
+    required _DiscoverMode mode,
+    required String label,
+  }) {
+    final selected = _mode == mode;
+    return GestureDetector(
+      onTap: () => _selectMode(mode),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? AppTheme.primaryGreen : AppTheme.surfaceVariantDark,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: selected
+                ? AppTheme.primaryGreen
+                : AppTheme.outline.withAlpha(90),
+          ),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.manrope(
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+            color: selected ? Colors.black : AppTheme.textMuted,
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -164,7 +270,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                                 ),
                                 const SizedBox(height: 3),
                                 Text(
-                                  'Moments worth remembering, from\naround the world.',
+                                  'Moments worth remembering, from\\naround the world.',
                                   style: GoogleFonts.manrope(
                                     fontSize: 12,
                                     height: 1.35,
@@ -187,6 +293,26 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                               color: AppTheme.textPrimary,
                               size: 20,
                             ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SliverToBoxAdapter(child: SizedBox(height: 16)),
+                  SliverToBoxAdapter(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Row(
+                        children: [
+                          _modePill(
+                            mode: _DiscoverMode.forYou,
+                            label: 'For You',
+                          ),
+                          const SizedBox(width: 7),
+                          _modePill(
+                            mode: _DiscoverMode.nearby,
+                            label: 'Nearby',
                           ),
                         ],
                       ),
@@ -226,7 +352,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                           vertical: 70,
                         ),
                         child: Text(
-                          'Public memories will appear here when people share them.',
+                          _mode == _DiscoverMode.nearby
+                              ? 'No nearby public memories with location data yet.'
+                              : 'Public memories will appear here when people share them.',
                           textAlign: TextAlign.center,
                           style: GoogleFonts.manrope(
                             color: AppTheme.textMuted,
