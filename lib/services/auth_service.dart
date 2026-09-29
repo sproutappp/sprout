@@ -97,12 +97,13 @@ class AuthService {
       }
 
       // Supabase requires a Google access token as well as the ID token.
-      // authorizationForScopes([]) follows the current google_sign_in 7 API
-      // for retrieving the already-granted client authorization without
-      // unnecessarily starting a second consent flow.
+      // google_sign_in 7.x requires at least one non-empty scope here.
+      // Email is already part of the standard Google sign-in permission set,
+      // so requesting it lets us retrieve the access token without adding
+      // an unrelated permission.
       final authorization =
           await googleUser.authorizationClient.authorizationForScopes(
-        const <String>[],
+        const <String>['email'],
       );
       final accessToken = authorization?.accessToken;
       if (accessToken == null || accessToken.isEmpty) {
