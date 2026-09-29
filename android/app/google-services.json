@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "734501171389-691rvhvvf5gp5bgtvdd5rleqhcg8rvor.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.sprout.app",
+            "certificate_hash": "64c94fce474ae16a09d70c46e48784d50905a92b"
+          }
+        },
+        {
           "client_id": "734501171389-7ph3r3qkea3aogt0m6ntg7i30mheafq8.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
@@ -59,6 +67,14 @@
           "android_info": {
             "package_name": "com.sprout.app",
             "certificate_hash": "f05934082fb78cce54a52aa14b42c718d0007360"
+          }
+        },
+        {
+          "client_id": "734501171389-uuo3p16vld7l2dspn2ktk01qob4rmtm0.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.sprout.app",
+            "certificate_hash": "55282c031014f8fa54513c5d70b7e6d883584d73"
           }
         },
         {
