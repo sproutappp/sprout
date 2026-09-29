@@ -41,7 +41,7 @@ class MemoriesRepository {
 
   static Future<Memory?> fetchById(String memoryId) async {
     if (_deletedMemoryIds.contains(memoryId)) return null;
-    final row = await _client.from('memories').select('id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, created_at, is_public').eq('id', memoryId).maybeSingle();
+    final row = await _client.from('memories').select('id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, latitude, longitude, created_at, is_public').eq('id', memoryId).maybeSingle();
     if (row == null) return null;
     final resolved = Map<String, dynamic>.from(row);
     final uploaderId = resolved['uploaded_by'] as String?;
@@ -68,7 +68,7 @@ class MemoriesRepository {
 
     final rows = await _client
         .from('memories')
-        .select('id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, created_at, is_public')
+        .select('id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, latitude, longitude, created_at, is_public')
         .eq('uploaded_by', userId)
         .order('created_at', ascending: false);
 
@@ -110,7 +110,7 @@ class MemoriesRepository {
   }
 
   static Future<List<Memory>> fetchPublicMemories() async {
-    final rows = await _client.from('memories').select('id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, created_at, is_public').eq('is_public', true).order('created_at', ascending: false);
+    final rows = await _client.from('memories').select('id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, latitude, longitude, created_at, is_public').eq('is_public', true).order('created_at', ascending: false);
     final memoryMaps = (rows as List).map((row) => Map<String, dynamic>.from(row as Map)).toList();
     if (memoryMaps.isEmpty) return [];
     final uploaderIds = memoryMaps.map((m) => m['uploaded_by'] as String?).whereType<String>().toSet().toList();
@@ -159,8 +159,50 @@ class MemoriesRepository {
   static Future<List<Memory>> fetchByUploader(String uploaderId) async {
     final currentUserId = _client.auth.currentUser?.id;
     if (currentUserId != null && currentUserId == uploaderId) return fetchAllForUser();
-    final rows = await _client.from('memories').select('id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, created_at, is_public').eq('uploaded_by', uploaderId).order('created_at', ascending: false);
+    final rows = await _client.from('memories').select('id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, latitude, longitude, created_at, is_public').eq('uploaded_by', uploaderId).order('created_at', ascending: false);
     return _withoutDeleted(await _toMemoriesWithSignedUrls(rows as List));
+  }
+
+  static Future<List<Memory>> fetchNearbyPublicMemories({
+    required double latitude,
+    required double longitude,
+  }) async {
+    final rows = await _client.rpc(
+      'fetch_nearby_public_memories',
+      params: {
+        'p_latitude': latitude,
+        'p_longitude': longitude,
+      },
+    );
+
+    final memoryMaps = (rows as List)
+        .map((row) => Map<String, dynamic>.from(row as Map))
+        .toList();
+    if (memoryMaps.isEmpty) return [];
+
+    final uploaderIds = memoryMaps
+        .map((m) => m['uploaded_by'] as String?)
+        .whereType<String>()
+        .toSet()
+        .toList();
+
+    if (uploaderIds.isNotEmpty) {
+      final profiles = await _client
+          .from('profiles')
+          .select('id, full_name, avatar_url')
+          .inFilter('id', uploaderIds);
+      final profilesById = <String, Map<String, dynamic>>{
+        for (final row in (profiles as List))
+          (row['id'] as String): Map<String, dynamic>.from(row as Map),
+      };
+      for (final memory in memoryMaps) {
+        final uploaderId = memory['uploaded_by'] as String?;
+        final profile = uploaderId == null ? null : profilesById[uploaderId];
+        if (profile != null) memory['profiles'] = profile;
+      }
+    }
+
+    return _withoutDeleted(await _toMemoriesWithSignedUrls(memoryMaps));
   }
 
   static Future<void> deleteMemory(String memoryId) async {
@@ -205,6 +247,8 @@ class MemoriesRepository {
     String? title,
     String? caption,
     String? location,
+    double? latitude,
+    double? longitude,
     bool isPublic = false,
     List<String> circleIds = const [],
   }) async {
@@ -244,6 +288,8 @@ class MemoriesRepository {
         'title': canonicalTitle?.isEmpty == true ? null : canonicalTitle,
         'caption': canonicalCaption?.isEmpty == true ? null : canonicalCaption,
         'location': location,
+        'latitude': latitude,
+        'longitude': longitude,
         'is_public': isPublic,
       });
 
@@ -268,7 +314,7 @@ class MemoriesRepository {
       rethrow;
     }
 
-    final row = await _client.from('memories').select('id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, created_at, is_public').eq('id', id).single();
+    final row = await _client.from('memories').select('id, circle_id, uploaded_by, image_url, media_urls, title, caption, location, latitude, longitude, created_at, is_public').eq('id', id).single();
     final resolved = await _toMemoriesWithSignedUrls([row]);
     final memory = resolved.first;
     _memoryCreatedController.add(memory.id);
