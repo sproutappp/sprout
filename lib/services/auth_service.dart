@@ -75,11 +75,9 @@ class AuthService {
       return;
     }
 
-    // Android first uses the native Credential Manager flow. If Google
-    // returns the ambiguous "canceled" result after account selection
-    // (which google_sign_in can use for configuration failures), or Supabase
-    // rejects the native ID token, immediately fall back to the proven
-    // Supabase OAuth flow instead of silently returning to the login screen.
+    // Android must complete Google sign-in natively. During launch
+    // diagnostics, do NOT fall back to browser OAuth because that can hide
+    // the real native configuration/token error.
     try {
       final googleSignIn = GoogleSignIn.instance;
 
@@ -125,18 +123,12 @@ class AuthService {
         );
       }
       return;
-    } on GoogleSignInException {
-      // Credential Manager may report a configuration failure as "canceled"
-      // after the user has selected an account. Do not treat that as a silent
-      // exit; fall through to the browser OAuth path.
-    } on AuthException {
-      // If Supabase rejects the native token (for example because the
-      // provider configuration is not accepted), use the OAuth path instead
-      // of leaving the user stranded on the login screen.
-    } catch (_) {
-      // Native Google is best-effort; OAuth remains the reliable fallback.
+    } on GoogleSignInException catch (e) {
+      throw AuthException('Native Google Sign-In failed: ' + e.code.toString() + ' — ' + (e.description ?? e.toString()));
+    } on AuthException catch (e) {
+      throw AuthException('Native Google/Supabase sign-in failed: ' + e.message);
+    } catch (e) {
+      throw AuthException('Native Google Sign-In failed: ' + e.toString());
     }
-
-    await launchSupabaseGoogleOAuth();
   }
 }
