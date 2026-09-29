@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -26,17 +28,22 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   List<Memory> _memories = [];
   Map<String, int> _likeCounts = {};
   Map<String, int> _commentCounts = {};
+  Timer? _relativeTimeTimer;
 
   @override
   void initState() {
     super.initState();
     DiscoverRefreshBus.signal.addListener(_onRefreshRequested);
+    _relativeTimeTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted && _memories.isNotEmpty) setState(() {});
+    });
     _load();
   }
 
   @override
   void dispose() {
     DiscoverRefreshBus.signal.removeListener(_onRefreshRequested);
+    _relativeTimeTimer?.cancel();
     super.dispose();
   }
 
@@ -93,9 +100,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   Future<void> _openMemory(Memory memory) async {
     final item = MemoryItem(
       id: memory.id,
-      title: memory.caption?.isNotEmpty == true
-          ? memory.caption!
-          : 'A shared memory',
+      title: memory.title,
       date:
           '${memory.createdAt.day}/${memory.createdAt.month}/${memory.createdAt.year}',
       imageUrl: memory.imageUrl,
@@ -278,19 +283,25 @@ class _PublicMemoryCard extends StatelessWidget {
 
   String _timeAgo() {
     final difference = DateTime.now().difference(memory.createdAt);
-    if (difference.inMinutes < 1) return 'Just now';
-    if (difference.inHours < 1) return '${difference.inMinutes}m ago';
-    if (difference.inDays < 1) return '${difference.inHours}h ago';
-    if (difference.inDays < 7) return '${difference.inDays}d ago';
+    if (difference.isNegative || difference.inMinutes < 1) return 'Just now';
+    if (difference.inHours < 1) return '${difference.inMinutes} min ago';
+    if (difference.inDays < 1) return '${difference.inHours} hr ago';
+    if (difference.inDays < 7) return '${difference.inDays} days ago';
     return '${memory.createdAt.day}/${memory.createdAt.month}/${memory.createdAt.year}';
+  }
+
+  String? _captionPreview() {
+    final caption = memory.caption?.trim() ?? '';
+    if (caption.isEmpty) return null;
+    final words = caption.split(RegExp(r'\s+'));
+    if (words.length <= 9) return caption;
+    return '${words.take(9).join(' ')}…';
   }
 
   @override
   Widget build(BuildContext context) {
-    final caption = memory.caption?.trim() ?? '';
-    final parts = caption.split(' — ');
-    final title = parts.first.trim().isEmpty ? 'A shared memory' : parts.first.trim();
-    final description = parts.length > 1 ? parts.sublist(1).join(' — ').trim() : '';
+    final title = memory.title.trim().isEmpty ? 'A shared memory' : memory.title.trim();
+    final description = _captionPreview();
     final contributor = memory.contributor;
 
     return GestureDetector(
@@ -390,17 +401,36 @@ class _PublicMemoryCard extends StatelessWidget {
                       color: AppTheme.textPrimary,
                     ),
                   ),
-                  if (description.isNotEmpty) ...[
+                  if (description != null) ...[
                     const SizedBox(height: 5),
-                    Text(
-                      description,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.manrope(
-                        fontSize: 11,
-                        height: 1.45,
-                        color: AppTheme.textMuted,
-                      ),
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          description,
+                          style: GoogleFonts.manrope(
+                            fontSize: 11,
+                            height: 1.45,
+                            color: AppTheme.textMuted,
+                          ),
+                        ),
+                        if ((memory.caption?.trim().split(RegExp(r'\s+')).length ?? 0) > 9)
+                          InkWell(
+                            onTap: onTap,
+                            borderRadius: BorderRadius.circular(6),
+                            child: Padding(
+                              padding: const EdgeInsets.only(left: 5, top: 2, bottom: 2),
+                              child: Text(
+                                'See more',
+                                style: GoogleFonts.manrope(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppTheme.primaryGreen,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ],
                   const SizedBox(height: 10),
