@@ -11,6 +11,8 @@ class Memory {
   final String title;
   final String? caption;
   final String? location;
+  final double? latitude;
+  final double? longitude;
   final DateTime createdAt;
   final Profile? contributor;
   final String? circleName;
@@ -25,6 +27,8 @@ class Memory {
     this.title = 'A memory',
     this.caption,
     this.location,
+    this.latitude,
+    this.longitude,
     required this.createdAt,
     this.contributor,
     this.circleName,
@@ -68,6 +72,8 @@ class Memory {
       title: title,
       caption: caption?.isEmpty == true ? null : caption,
       location: map['location'] as String?,
+      latitude: (map['latitude'] as num?)?.toDouble(),
+      longitude: (map['longitude'] as num?)?.toDouble(),
       createdAt: DateTime.parse(map['created_at'] as String),
       contributor: contributorMap != null ? Profile.fromMap(contributorMap) : null,
       circleName: circleMap != null ? circleMap['name'] as String? : null,
