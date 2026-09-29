@@ -37,6 +37,8 @@ class _CreateMemoryScreenV2State extends State<CreateMemoryScreenV2> {
   bool _loadingPeople = false;
   bool _saving = false;
   bool _locating = false;
+  double? _latitude;
+  double? _longitude;
   String? _error;
 
   @override
@@ -172,6 +174,12 @@ class _CreateMemoryScreenV2State extends State<CreateMemoryScreenV2> {
       final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium),
       );
+      if (mounted) {
+        setState(() {
+          _latitude = position.latitude;
+          _longitude = position.longitude;
+        });
+      }
       final places = await _geocoding.placemarkFromCoordinates(position.latitude, position.longitude);
       if (!mounted || places.isEmpty) return;
       final p = places.first;
@@ -208,6 +216,8 @@ class _CreateMemoryScreenV2State extends State<CreateMemoryScreenV2> {
         title: title.isEmpty ? null : title,
         caption: caption.isEmpty ? null : caption,
         location: _location.text.trim().isEmpty ? null : _location.text.trim(),
+        latitude: _latitude,
+        longitude: _longitude,
         isPublic: _public,
         circleIds: _public ? const [] : _circleIds.toList(),
       );
