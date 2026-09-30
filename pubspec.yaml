@@ -20,6 +20,7 @@ dependencies:
   web: ^1.1.1
   cached_network_image: ^3.3.1
   connectivity_plus: ^6.1.4
+  country_picker: ^2.0.28
   dio: ^5.4.0
   fluttertoast: ^8.2.4
   fl_chart: ^0.65.0
