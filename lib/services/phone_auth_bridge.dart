@@ -111,15 +111,18 @@ class PhoneAuthBridge {
     try {
       await AuthService.signUp(email: email, password: password, fullName: '');
     } on AuthException catch (e) {
-      // The Supabase account already exists (e.g. a race between two
-      // devices, or the Firestore write below failed on a previous
-      // attempt) but we have no way to recover a password we never
-      // stored. Surface this honestly rather than guessing.
-      final alreadyExists = e.message.toLowerCase().contains('already registered');
+      // Keep the actual Supabase Auth error visible during diagnostics.
+      // This lets us distinguish a provider/configuration failure from a
+      // duplicate-account race instead of replacing every error with a
+      // generic message.
+      final message = e.message.trim();
+      final alreadyExists =
+          message.toLowerCase().contains('already registered') ||
+          message.toLowerCase().contains('user already registered');
       throw StateError(
         alreadyExists
             ? "This phone number is already set up, but its saved sign-in wasn't found on this device. Please contact support."
-            : 'Could not finish setting up your account — try again.',
+            : 'Could not finish setting up your account: $message',
       );
     }
 
