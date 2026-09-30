@@ -24,6 +24,7 @@ class AuthService {
     required String password,
     required String fullName,
   }) {
+    // Phone and email signup both use the same database-side profile creation path.
     // The production database has a SECURITY DEFINER trigger on
     // auth.users that creates the matching public.profiles row. Do not
     // write to profiles again from the client: profiles RLS correctly
