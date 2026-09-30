@@ -40,6 +40,7 @@ class _PhoneAuthWidgetState extends State<PhoneAuthWidget> {
 
   bool _isSendingOtp = false; // guards against duplicate sendOtp calls
   bool _isVerifying = false;
+  bool _firebaseVerified = false;
 
   Timer? _resendTimer;
   int _resendSecondsLeft = 0;
@@ -214,9 +215,17 @@ class _PhoneAuthWidgetState extends State<PhoneAuthWidget> {
         verificationId: _verificationId!,
         smsCode: code,
       );
-      await PhoneAuthBridge.completeSignIn(_e164Phone!);
       if (!mounted) return;
-      widget.onVerified();
+      // Firebase verification is a one-time operation. From this point on,
+      // never ask Firebase to verify the same OTP again. If the Supabase
+      // bridge fails, the user can retry account setup without re-entering
+      // or re-requesting an OTP.
+      setState(() {
+        _firebaseVerified = true;
+        _isVerifying = false;
+        _errorMessage = null;
+      });
+      await _finishAccountSetup();
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -234,12 +243,36 @@ class _PhoneAuthWidgetState extends State<PhoneAuthWidget> {
     }
   }
 
+  Future<void> _finishAccountSetup() async {
+    if (!_firebaseVerified || _e164Phone == null || _isVerifying) return;
+
+    setState(() {
+      _isVerifying = true;
+      _errorMessage = null;
+    });
+
+    try {
+      await PhoneAuthBridge.completeSignIn(_e164Phone!);
+      if (!mounted) return;
+      widget.onVerified();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isVerifying = false;
+        final message = e is StateError ? e.message : e.toString();
+        _errorMessage =
+            'Phone verified. Account setup could not finish yet. $message';
+      });
+    }
+  }
+
   void _changeNumber() {
     _resendTimer?.cancel();
     setState(() {
       _stage = _PhoneAuthStage.entry;
       _otpController.clear();
       _verificationId = null;
+      _firebaseVerified = false;
       _errorMessage = null;
       _resendSecondsLeft = 0;
     });
@@ -373,7 +406,9 @@ class _PhoneAuthWidgetState extends State<PhoneAuthWidget> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Code sent to $_e164Phone',
+          _firebaseVerified
+              ? 'Phone number verified'
+              : 'Code sent to $_e164Phone',
           style: const TextStyle(
             fontFamily: 'Manrope',
             fontSize: 13,
@@ -385,6 +420,7 @@ class _PhoneAuthWidgetState extends State<PhoneAuthWidget> {
           _InlineError(message: _errorMessage!),
           const SizedBox(height: 12),
         ],
+        if (!_firebaseVerified) ...[
         TextField(
           controller: _otpController,
           keyboardType: TextInputType.number,
@@ -419,6 +455,7 @@ class _PhoneAuthWidgetState extends State<PhoneAuthWidget> {
           ),
         ),
         const SizedBox(height: 16),
+        if (!_firebaseVerified) ...[
         SizedBox(
           width: double.infinity,
           height: 52,
@@ -452,8 +489,44 @@ class _PhoneAuthWidgetState extends State<PhoneAuthWidget> {
                   ),
           ),
         ),
+        ],
+        if (_firebaseVerified) ...[
+          SizedBox(
+            width: double.infinity,
+            height: 52,
+            child: ElevatedButton(
+              onPressed: _isVerifying ? null : _finishAccountSetup,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryGreen,
+                disabledBackgroundColor: AppTheme.primaryGreen.withAlpha(102),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                elevation: 0,
+              ),
+              child: _isVerifying
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
+                      ),
+                    )
+                  : const Text(
+                      'Finish setup',
+                      style: TextStyle(
+                        fontFamily: 'Manrope',
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.black,
+                      ),
+                    ),
+            ),
+          ),
+        ],
         const SizedBox(height: 12),
-        Row(
+        if (!_firebaseVerified) Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             TextButton(
