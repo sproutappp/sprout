@@ -4,41 +4,32 @@ import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../core/supabase/supabase_service.dart';
 import 'auth_service.dart';
 import 'firebase_auth_service.dart';
 import 'profiles_repository.dart';
 
 /// Bridges a Firebase-verified phone number into a real Supabase identity.
 ///
-/// Why this exists (don't "simplify" this away without re-reading):
-/// Supabase's native Third-Party Auth mode would disable email/password
-/// and Google sign-in entirely on this client — confirmed directly
-/// against Supabase's own SupabaseClient docs: "When set, the auth
-/// [methods] cannot be used." Our schema also requires every user to
-/// have a row in Supabase's own auth.users table, which Third-Party
-/// Auth users never get. So instead of that mechanism, once Firebase
-/// verifies a phone number we create (or sign back into) a completely
-/// ordinary Supabase account for it — same as any other Supabase user,
-/// just keyed by a synthetic email with a random password the person
-/// never sees or types.
+/// Supabase native third-party Firebase auth is not used here because Sprout's
+/// existing data model relies on real Supabase auth.users rows and the app
+/// already supports native Supabase Google/email sessions. Phone users
+/// therefore get an ordinary Supabase account with an internal synthetic
+/// email and a random password that the user never sees.
 ///
-/// That password is stashed in Firestore, in a document only that exact
-/// Firebase UID can read — enforced by a Firestore security rule, not
-/// just client-side trust (see firestore.rules in the repo root). That's
-/// what lets a returning user get back into the *same* Supabase account
-/// after re-verifying their phone on a new device.
+/// The password is stored in a Firebase-UID-scoped Firestore document. If an
+/// old/stale password no longer matches the Supabase account, the verified
+/// Firebase ID token is sent to the server-side recover-phone-account Edge
+/// Function. That function verifies the Firebase token and rotates the
+/// Supabase password without exposing the Supabase service key to the app.
 class PhoneAuthBridge {
   PhoneAuthBridge._();
 
   static const _vaultCollection = 'phone_auth_vault';
+  static const _recoveryFunction = 'recover-phone-account';
 
   static String _syntheticEmailFor(String e164Phone) {
     final digits = e164Phone.replaceAll(RegExp(r'\D'), '');
-    // Supabase validates email syntax/TLDs during signUp, so an RFC 2606
-    // .invalid address is rejected even though it is intentionally
-    // non-deliverable. Use a valid address under Sprout's domain instead.
-    // This address is only an internal Supabase identity; users never see
-    // or use it for email.
     return 'phone+$digits@sproutapp.in';
   }
 
@@ -48,10 +39,62 @@ class PhoneAuthBridge {
     return base64UrlEncode(bytes);
   }
 
+  static Future<String> _recoverSupabaseCredential(String e164Phone) async {
+    final firebaseUser = FirebaseAuthService.currentUser;
+    if (firebaseUser == null) {
+      throw StateError(
+        'No verified Firebase user — call this only after verifyOtp succeeds.',
+      );
+    }
+
+    final firebaseIdToken = await firebaseUser.getIdToken(true);
+    if (firebaseIdToken == null || firebaseIdToken.isEmpty) {
+      throw StateError(
+        'Could not obtain the verified Firebase sign-in token. Please try again.',
+      );
+    }
+
+    try {
+      final response = await SupabaseService.client.functions.invoke(
+        _recoveryFunction,
+        headers: {
+          'Authorization': 'Bearer $firebaseIdToken',
+        },
+        body: {
+          'phone': e164Phone,
+        },
+      );
+
+      final data = response.data;
+      if (data is! Map) {
+        throw StateError('Phone account recovery returned an invalid response.');
+      }
+
+      final password = data['password'];
+      if (password is! String || password.isEmpty) {
+        final message = data['error'];
+        throw StateError(
+          message is String && message.isNotEmpty
+              ? message
+              : 'Could not recover the phone account.',
+        );
+      }
+
+      return password;
+    } on FunctionException catch (e) {
+      final context = e.details;
+      if (context is Map && context['error'] is String) {
+        throw StateError(context['error'] as String);
+      }
+      throw StateError('Could not recover the phone account: ${e.reasonPhrase}');
+    }
+  }
+
   /// Call this once Firebase has genuinely verified the phone number.
-  /// Establishes a real Supabase session for it: creates one on first
-  /// use for this phone number, or recovers the existing one on a
-  /// later device. Throws with a user-facing message on failure.
+  ///
+  /// First tries the existing Firebase-UID-scoped Supabase credential. If
+  /// that credential is stale, securely rotates the Supabase password on the
+  /// server and signs in with the new credential.
   static Future<void> completeSignIn(String e164Phone) async {
     final firebaseUser = FirebaseAuthService.currentUser;
     if (firebaseUser == null) {
@@ -69,30 +112,57 @@ class PhoneAuthBridge {
 
     if (existing.exists) {
       final password = existing.data()?['password'] as String?;
-      if (password == null) {
-        throw StateError(
-          "This phone number's saved sign-in couldn't be found. Please contact support.",
+      if (password == null || password.isEmpty) {
+        final recoveredPassword = await _recoverSupabaseCredential(e164Phone);
+        await AuthService.signIn(
+          email: email,
+          password: recoveredPassword,
         );
+        await vaultRef.set({
+          'password': recoveredPassword,
+          'phone': e164Phone,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+        return;
       }
-      await AuthService.signIn(email: email, password: password);
-      return;
+
+      try {
+        await AuthService.signIn(email: email, password: password);
+        return;
+      } on AuthException catch (e) {
+        final message = e.message.toLowerCase();
+        final credentialFailure =
+            message.contains('invalid login credentials') ||
+            message.contains('invalid credentials') ||
+            message.contains('email not confirmed');
+
+        if (!credentialFailure) {
+          rethrow;
+        }
+
+        // The Firebase OTP is already verified. Recover the existing
+        // Supabase identity server-side instead of creating a duplicate.
+        final recoveredPassword =
+            await _recoverSupabaseCredential(e164Phone);
+
+        await AuthService.signIn(
+          email: email,
+          password: recoveredPassword,
+        );
+
+        await vaultRef.set({
+          'password': recoveredPassword,
+          'phone': e164Phone,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+        return;
+      }
     }
 
-    // First time this phone number has completed the bridge.
+    // First time this phone has completed the bridge.
     //
-    // Best-effort duplicate guard: if this exact number is already
-    // *linked* (see ProfilesRepository.linkMobileNumber) to a real
-    // Google/email account, creating a brand-new synthetic-email account
-    // here would silently produce a second, disconnected profile for the
-    // same person. There's no safe way from a client to sign into an
-    // arbitrary existing Supabase account without its password (that
-    // would need a server-side function with the service role key,
-    // which is out of scope here) — so the honest, safe choice is to
-    // stop and point them at their original sign-in method rather than
-    // create a duplicate identity. This check is intentionally
-    // fail-open: if it errors for an unrelated reason, normal phone
-    // sign-up still proceeds rather than blocking everyone on a hiccup
-    // in an best-effort safety check.
+    // Best-effort duplicate guard: if this exact number is already linked to
+    // a real Google/email account, do not silently create a second profile.
     try {
       final alreadyLinkedElsewhere =
           await ProfilesRepository.isMobileNumberTaken(e164Phone);
@@ -106,7 +176,8 @@ class PhoneAuthBridge {
     } on StateError {
       rethrow;
     } catch (_) {
-      // Swallow — see comment above; this check is best-effort.
+      // This check is intentionally fail-open so a temporary issue with the
+      // duplicate guard does not block all new phone registrations.
     }
 
     final password = _generateSecurePassword();
@@ -117,33 +188,42 @@ class PhoneAuthBridge {
         fullName: '',
       );
 
-      // Some Supabase projects require email confirmation for signUp, which
-      // means signUp can successfully create the user but return no session.
-      // Phone authentication is already verified by Firebase, so the phone
-      // bridge must establish the Supabase session immediately; otherwise
-      // the app can navigate into the signed-in shell while every Supabase
-      // query still runs as anon and appears empty.
+      // If email confirmation is enabled, signUp may create the user but
+      // return no session. Firebase has already verified the phone, so sign
+      // in immediately with the same generated credential.
       if (response.session == null) {
         await AuthService.signIn(email: email, password: password);
       }
     } on AuthException catch (e) {
-      // Keep the actual Supabase Auth error visible during diagnostics.
-      // This lets us distinguish a provider/configuration failure from a
-      // duplicate-account race instead of replacing every error with a
-      // generic message.
       final message = e.message.trim();
       final alreadyExists =
           message.toLowerCase().contains('already registered') ||
           message.toLowerCase().contains('user already registered');
+
+      if (alreadyExists) {
+        // A stale/missing Firestore vault can happen after reinstalling or
+        // clearing local app data. Recover the existing Supabase identity
+        // instead of creating a duplicate.
+        final recoveredPassword =
+            await _recoverSupabaseCredential(e164Phone);
+        await AuthService.signIn(
+          email: email,
+          password: recoveredPassword,
+        );
+        await vaultRef.set({
+          'password': recoveredPassword,
+          'phone': e164Phone,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+        return;
+      }
+
       throw StateError(
-        alreadyExists
-            ? "This phone number is already set up, but its saved sign-in wasn't found on this device. Please contact support."
-            : 'Could not finish setting up your account: $message',
+        'Could not finish setting up your account: $message',
       );
     }
 
-    // Only stash the password once Supabase genuinely has the account —
-    // never write credentials for an account that might not exist.
+    // Only stash the password once Supabase genuinely has the account.
     await vaultRef.set({
       'password': password,
       'phone': e164Phone,
