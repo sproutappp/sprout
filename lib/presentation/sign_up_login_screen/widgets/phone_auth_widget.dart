@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:country_picker/country_picker.dart';
 import 'package:flutter/services.dart';
 
 import '../../../services/firebase_auth_service.dart';
@@ -35,6 +36,7 @@ class _PhoneAuthWidgetState extends State<PhoneAuthWidget> {
   String? _verificationId;
   String? _e164Phone;
   String? _errorMessage;
+  Country _selectedCountry = CountryParser.parseCountryCode('IN');
 
   bool _isSendingOtp = false; // guards against duplicate sendOtp calls
   bool _isVerifying = false;
@@ -51,13 +53,55 @@ class _PhoneAuthWidgetState extends State<PhoneAuthWidget> {
     super.dispose();
   }
 
-  /// India-only E.164 formatting for now: a fixed +91 prefix plus a
-  /// 10-digit mobile number. Good enough for the actual target market;
-  /// a full country picker would be over-building for what's needed today.
+  /// Builds an E.164 phone number from the selected country calling code
+  /// and the national number entered by the user.
   String? _toE164(String rawInput) {
     final digits = rawInput.replaceAll(RegExp(r'\D'), '');
-    if (digits.length != 10) return null;
-    return '+91$digits';
+    if (digits.isEmpty) return null;
+
+    final e164 = '+${_selectedCountry.phoneCode}$digits';
+    // E.164 numbers are at most 15 digits excluding the leading '+'.
+    if (e164.length < 5 || e164.length > 16) return null;
+    return e164;
+  }
+
+  void _selectCountry() {
+    showCountryPicker(
+      context: context,
+      showPhoneCode: true,
+      favorite: const ['IN', 'US', 'GB', 'AE', 'SG', 'AU', 'CA'],
+      countryListTheme: CountryListThemeData(
+        backgroundColor: AppTheme.backgroundDark,
+        textStyle: const TextStyle(
+          fontFamily: 'Manrope',
+          fontSize: 15,
+          color: AppTheme.textPrimary,
+        ),
+        searchTextStyle: const TextStyle(
+          fontFamily: 'Manrope',
+          fontSize: 15,
+          color: AppTheme.textPrimary,
+        ),
+        inputDecoration: InputDecoration(
+          hintText: 'Search country',
+          hintStyle: const TextStyle(color: AppTheme.textDisabled),
+          prefixIcon: const Icon(Icons.search, color: AppTheme.textMuted),
+          filled: true,
+          fillColor: AppTheme.surfaceVariantDark,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none,
+          ),
+        ),
+      ),
+      onSelect: (country) {
+        if (!mounted) return;
+        setState(() {
+          _selectedCountry = country;
+          _errorMessage = null;
+        });
+      },
+    );
   }
 
   void _startResendCooldown() {
@@ -80,7 +124,7 @@ class _PhoneAuthWidgetState extends State<PhoneAuthWidget> {
 
     final e164 = _toE164(_phoneController.text);
     if (e164 == null) {
-      setState(() => _errorMessage = 'Enter a valid 10-digit phone number.');
+      setState(() => _errorMessage = 'Enter a valid phone number for ${_selectedCountry.displayName}.');
       return;
     }
 
@@ -228,15 +272,35 @@ class _PhoneAuthWidgetState extends State<PhoneAuthWidget> {
           ),
           child: Row(
             children: [
-              const Padding(
-                padding: EdgeInsets.only(left: 16, right: 8),
-                child: Text(
-                  '🇮🇳 +91',
-                  style: TextStyle(
-                    fontFamily: 'Manrope',
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.textPrimary,
+              InkWell(
+                onTap: _selectCountry,
+                borderRadius: BorderRadius.circular(14),
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 14, right: 10),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _selectedCountry.flagEmoji,
+                        style: const TextStyle(fontSize: 20),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        '+${_selectedCountry.phoneCode}',
+                        style: const TextStyle(
+                          fontFamily: 'Manrope',
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      const Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        size: 18,
+                        color: AppTheme.textMuted,
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -245,7 +309,7 @@ class _PhoneAuthWidgetState extends State<PhoneAuthWidget> {
                 child: TextField(
                   controller: _phoneController,
                   keyboardType: TextInputType.phone,
-                  maxLength: 10,
+                  maxLength: 15,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   style: const TextStyle(
                     fontFamily: 'Manrope',
@@ -254,7 +318,7 @@ class _PhoneAuthWidgetState extends State<PhoneAuthWidget> {
                   ),
                   decoration: const InputDecoration(
                     counterText: '',
-                    hintText: '98765 43210',
+                    hintText: 'Phone number',
                     hintStyle: TextStyle(color: AppTheme.textDisabled),
                     border: InputBorder.none,
                     contentPadding: EdgeInsets.symmetric(
