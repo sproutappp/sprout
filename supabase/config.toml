@@ -11,3 +11,8 @@ verify_jwt = true
 
 [functions.delete-circle]
 verify_jwt = true
+
+# This endpoint authenticates callers with a Firebase ID token inside the
+# function because phone users do not have a Supabase session yet.
+[functions.recover-phone-account]
+verify_jwt = false
