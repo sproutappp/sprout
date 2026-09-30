@@ -111,7 +111,7 @@ export default {
       } else {
         const { data: taken, error: takenError } = await supabaseAdmin.rpc(
           'is_mobile_number_taken',
-          { p_phone: requestedPhone },
+          { phone: requestedPhone },
         );
         if (takenError) throw takenError;
 
