@@ -34,10 +34,12 @@ class PhoneAuthBridge {
 
   static String _syntheticEmailFor(String e164Phone) {
     final digits = e164Phone.replaceAll(RegExp(r'\D'), '');
-    // .invalid is an IETF-reserved TLD (RFC 2606) guaranteed to never
-    // resolve — the correct choice for an address that must never
-    // actually be deliverable.
-    return '$digits@phone.sprout.invalid';
+    // Supabase validates email syntax/TLDs during signUp, so an RFC 2606
+    // .invalid address is rejected even though it is intentionally
+    // non-deliverable. Use a valid address under Sprout's domain instead.
+    // This address is only an internal Supabase identity; users never see
+    // or use it for email.
+    return 'phone+$digits@sproutapp.in';
   }
 
   static String _generateSecurePassword() {
