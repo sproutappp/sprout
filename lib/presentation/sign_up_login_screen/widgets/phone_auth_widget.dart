@@ -453,6 +453,8 @@ class _PhoneAuthWidgetState extends State<PhoneAuthWidget> {
       ),
     );
   }
+}
+
 class _InlineError extends StatelessWidget {
   final String message;
   const _InlineError({required this.message});
