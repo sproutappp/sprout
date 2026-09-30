@@ -406,14 +406,8 @@ class _PhoneAuthWidgetState extends State<PhoneAuthWidget> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          _firebaseVerified
-              ? 'Phone number verified'
-              : 'Code sent to $_e164Phone',
-          style: const TextStyle(
-            fontFamily: 'Manrope',
-            fontSize: 13,
-            color: AppTheme.textMuted,
-          ),
+          _firebaseVerified ? 'Phone number verified' : 'Code sent to $_e164Phone',
+          style: const TextStyle(fontFamily: 'Manrope', fontSize: 13, color: AppTheme.textMuted),
         ),
         const SizedBox(height: 12),
         if (_errorMessage != null) ...[
@@ -421,153 +415,44 @@ class _PhoneAuthWidgetState extends State<PhoneAuthWidget> {
           const SizedBox(height: 12),
         ],
         if (!_firebaseVerified) ...[
-        TextField(
-          controller: _otpController,
-          keyboardType: TextInputType.number,
-          maxLength: 6,
-          textAlign: TextAlign.center,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          style: const TextStyle(
-            fontFamily: 'Manrope',
-            fontSize: 22,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 8,
-            color: AppTheme.textPrimary,
-          ),
-          decoration: InputDecoration(
-            counterText: '',
-            hintText: '••••••',
-            hintStyle: const TextStyle(color: AppTheme.textDisabled),
-            filled: true,
-            fillColor: AppTheme.surfaceVariantDark.withAlpha(153),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: const BorderSide(color: AppTheme.outline, width: 0.8),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: const BorderSide(color: AppTheme.outline, width: 0.8),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: const BorderSide(color: AppTheme.primaryGreen, width: 1.5),
+          TextField(
+            controller: _otpController, keyboardType: TextInputType.number, maxLength: 6, textAlign: TextAlign.center,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            style: const TextStyle(fontFamily: 'Manrope', fontSize: 22, fontWeight: FontWeight.w700, letterSpacing: 8, color: AppTheme.textPrimary),
+            decoration: InputDecoration(counterText: '', hintText: '••••••', hintStyle: const TextStyle(color: AppTheme.textDisabled), filled: true, fillColor: AppTheme.surfaceVariantDark.withAlpha(153),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: AppTheme.outline, width: 0.8)),
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: AppTheme.outline, width: 0.8)),
+              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: AppTheme.primaryGreen, width: 1.5)),
             ),
           ),
-        ),
-        const SizedBox(height: 16),
-        if (!_firebaseVerified) ...[
-        SizedBox(
-          width: double.infinity,
-          height: 52,
-          child: ElevatedButton(
-            onPressed: _isVerifying ? null : _verifyOtp,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primaryGreen,
-              disabledBackgroundColor: AppTheme.primaryGreen.withAlpha(102),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              elevation: 0,
-            ),
-            child: _isVerifying
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
-                    ),
-                  )
-                : const Text(
-                    'Verify',
-                    style: TextStyle(
-                      fontFamily: 'Manrope',
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.black,
-                    ),
-                  ),
-          ),
-        ),
+          const SizedBox(height: 16),
+          _buildActionButton(label: 'Verify', onPressed: _verifyOtp),
         ],
         if (_firebaseVerified) ...[
-          SizedBox(
-            width: double.infinity,
-            height: 52,
-            child: ElevatedButton(
-              onPressed: _isVerifying ? null : _finishAccountSetup,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primaryGreen,
-                disabledBackgroundColor: AppTheme.primaryGreen.withAlpha(102),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                elevation: 0,
-              ),
-              child: _isVerifying
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
-                      ),
-                    )
-                  : const Text(
-                      'Finish setup',
-                      style: TextStyle(
-                        fontFamily: 'Manrope',
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.black,
-                      ),
-                    ),
-            ),
-          ),
+          _buildActionButton(label: 'Finish setup', onPressed: _finishAccountSetup),
         ],
-        const SizedBox(height: 12),
-        if (!_firebaseVerified) Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            TextButton(
-              onPressed: _changeNumber,
-              style: TextButton.styleFrom(padding: EdgeInsets.zero),
-              child: const Text(
-                'Change number',
-                style: TextStyle(
-                  fontFamily: 'Manrope',
-                  fontSize: 13,
-                  color: AppTheme.textMuted,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            TextButton(
-              onPressed: (_resendSecondsLeft > 0 || _isSendingOtp)
-                  ? null
-                  : _sendOtp,
-              style: TextButton.styleFrom(padding: EdgeInsets.zero),
-              child: Text(
-                _resendSecondsLeft > 0
-                    ? 'Resend in ${_resendSecondsLeft}s'
-                    : 'Resend OTP',
-                style: TextStyle(
-                  fontFamily: 'Manrope',
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: _resendSecondsLeft > 0
-                      ? AppTheme.textDisabled
-                      : AppTheme.primaryGreen,
-                ),
-              ),
-            ),
-          ],
-        ),
+        if (!_firebaseVerified)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              TextButton(onPressed: _changeNumber, style: TextButton.styleFrom(padding: EdgeInsets.zero), child: const Text('Change number', style: TextStyle(fontFamily: 'Manrope', fontSize: 13, color: AppTheme.textMuted, fontWeight: FontWeight.w600))),
+              TextButton(onPressed: (_resendSecondsLeft > 0 || _isSendingOtp) ? null : _sendOtp, style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                child: Text(_resendSecondsLeft > 0 ? 'Resend in ${_resendSecondsLeft}s' : 'Resend OTP', style: TextStyle(fontFamily: 'Manrope', fontSize: 13, fontWeight: FontWeight.w600, color: _resendSecondsLeft > 0 ? AppTheme.textDisabled : AppTheme.primaryGreen))),
+            ],
+          ),
       ],
     );
   }
-}
 
+  Widget _buildActionButton({required String label, required VoidCallback onPressed}) {
+    return SizedBox(width: double.infinity, height: 52,
+      child: ElevatedButton(onPressed: _isVerifying ? null : onPressed,
+        style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryGreen, disabledBackgroundColor: AppTheme.primaryGreen.withAlpha(102), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), elevation: 0),
+        child: _isVerifying ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.black)))
+          : Text(label, style: const TextStyle(fontFamily: 'Manrope', fontSize: 15, fontWeight: FontWeight.w700, color: Colors.black)),
+      ),
+    );
+  }
 class _InlineError extends StatelessWidget {
   final String message;
   const _InlineError({required this.message});
