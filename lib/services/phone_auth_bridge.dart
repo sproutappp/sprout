@@ -111,7 +111,21 @@ class PhoneAuthBridge {
 
     final password = _generateSecurePassword();
     try {
-      await AuthService.signUp(email: email, password: password, fullName: '');
+      final response = await AuthService.signUp(
+        email: email,
+        password: password,
+        fullName: '',
+      );
+
+      // Some Supabase projects require email confirmation for signUp, which
+      // means signUp can successfully create the user but return no session.
+      // Phone authentication is already verified by Firebase, so the phone
+      // bridge must establish the Supabase session immediately; otherwise
+      // the app can navigate into the signed-in shell while every Supabase
+      // query still runs as anon and appears empty.
+      if (response.session == null) {
+        await AuthService.signIn(email: email, password: password);
+      }
     } on AuthException catch (e) {
       // Keep the actual Supabase Auth error visible during diagnostics.
       // This lets us distinguish a provider/configuration failure from a
