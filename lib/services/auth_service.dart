@@ -23,24 +23,17 @@ class AuthService {
     required String email,
     required String password,
     required String fullName,
-  }) async {
-    final response = await _auth.signUp(
+  }) {
+    // The production database has a SECURITY DEFINER trigger on
+    // auth.users that creates the matching public.profiles row. Do not
+    // write to profiles again from the client: profiles RLS correctly
+    // blocks that direct INSERT/UPSERT, while the database trigger is
+    // intentionally allowed to create the row.
+    return _auth.signUp(
       email: email,
       password: password,
       data: {'full_name': fullName},
     );
-
-    final user = response.user;
-    if (user != null) {
-      // Create the matching profiles row. Safe to call even if a
-      // DB trigger already does this — `upsert` just overwrites.
-      await SupabaseService.client.from('profiles').upsert({
-        'id': user.id,
-        'full_name': fullName,
-      });
-    }
-
-    return response;
   }
 
   static Future<AuthResponse> signIn({
