@@ -1,6 +1,3 @@
-Temporary build trigger; safe to remove after verification.
-Trigger circle member report UI patch build.
-Trigger temporary circle report workflow.
-Trigger circle report runner.
-Trigger patched circle report workflow.
-Retry circle member report patch.
+# Build Trigger
+
+Fresh release build trigger for the current main branch. OTP recovery code is already on main; this commit only forces CI to produce a fresh APK/AAB from the current tree.
