@@ -309,7 +309,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     // regardless of what (if anything) the edit screen pops with, so
     // Profile always reflects the latest saved state on return rather
     // than waiting for some later unrelated reload.
-    await context.push(AppRoutes.editProfileScreen);
+    await context.push(AppRoutes.editProfileScreen, extra: _profile);
     if (!mounted) return;
     await _load();
   }
