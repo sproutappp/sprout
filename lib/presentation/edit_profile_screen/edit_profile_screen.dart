@@ -86,8 +86,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           RegExp(r'^phone\+\d+@sproutapp\.in$')
               .hasMatch(authEmail.toLowerCase());
       final firebasePhone = FirebaseAuthService.currentUser?.phoneNumber;
-      final linkedMobile =
-          await ProfilesRepository.fetchLinkedMobileNumber();
+      String? linkedMobile;
+      try {
+        linkedMobile = await ProfilesRepository.fetchLinkedMobileNumber();
+      } catch (_) {
+        linkedMobile = null;
+      }
       final isPhonePrimary = isSyntheticPhoneEmail && firebasePhone != null;
       final hasRealEmail = authEmail != null && !isSyntheticPhoneEmail;
 
