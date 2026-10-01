@@ -59,6 +59,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     super.initState();
     SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.light);
     _nameController = TextEditingController();
+    _emailController = TextEditingController();
     _load();
   }
 
