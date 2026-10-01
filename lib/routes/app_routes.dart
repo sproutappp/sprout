@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/supabase/supabase_service.dart';
+import '../models/profile.dart';
 
 import '../presentation/home_screen/home_screen.dart';
 import '../presentation/memories_screen/memories_screen.dart';
