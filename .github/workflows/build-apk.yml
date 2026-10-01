@@ -70,8 +70,8 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
 
-      # Memory card constructor keys are fixed on main; this workflow commit
-      # intentionally only triggers a fresh APK build from that corrected tree.
+      # Phone auth now receives a real Supabase session directly from the
+      # verified Firebase-to-Supabase bridge; no client password sign-in.
       - name: Build release APK
         run: flutter build apk --release --dart-define-from-file=env.json
         env:
