@@ -81,7 +81,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       // real email and must not be shown in Profile.
       final authEmail = AuthService.currentUser?.email;
       final isSyntheticPhoneEmail = authEmail != null &&
-          RegExp(r'^phone\+\d+@sproutapp\.in
+          RegExp(r'^phone\+\d+@sproutapp\.in$')
               .hasMatch(authEmail.toLowerCase());
       final firebasePhone = FirebaseAuthService.currentUser?.phoneNumber;
       final linkedMobile =
