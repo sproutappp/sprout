@@ -210,8 +210,9 @@ export default {
           mobile_number: requestedPhone,
         });
       if (mobileMapError) throw mobileMapError;
+      if (!userId) throw new Error('Phone account has no Supabase user id');
 
-      const session = await issueSupabaseSession(email, password);
+      const session = await issueSupabaseSession(accountEmail, password);
 
       return json({
         success: true,
