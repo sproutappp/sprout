@@ -111,29 +111,65 @@ export default {
         return json({ error: 'Verified phone number does not match the requested account' }, 403);
       }
 
-      const email = syntheticEmail(requestedPhone);
+      const synthetic = syntheticEmail(requestedPhone);
 
-      let userId: string | null = null;
-      for (let page = 1; page <= 10 && !userId; page++) {
-        const { data, error } = await supabaseAdmin.auth.admin.listUsers({
-          page,
-          perPage: 1000,
-        });
-        if (error) throw error;
+      // First resolve the verified phone against the app's own account
+      // mapping. This is what keeps a Google-primary account and a
+      // phone-primary account as ONE Supabase user.
+      let matchedUserId: string | null = null;
+      let accountEmail = synthetic;
 
-        const match = data.users.find(
-          (user) => user.email?.toLowerCase() === email.toLowerCase(),
-        );
-        if (match) {
-          userId = match.id;
-          break;
+      const { data: linkedRow, error: linkedError } = await supabaseAdmin
+        .from('private_profile_info')
+        .select('id')
+        .eq('mobile_number', requestedPhone)
+        .maybeSingle();
+
+      if (linkedError) throw linkedError;
+
+      if (linkedRow?.id) {
+        const { data: linkedUser, error: linkedUserError } =
+          await supabaseAdmin.auth.admin.getUserById(linkedRow.id);
+        if (linkedUserError) throw linkedUserError;
+        if (linkedUser.user) {
+          matchedUserId = linkedUser.user.id;
+          accountEmail = linkedUser.user.email ?? synthetic;
         }
-        if (data.users.length < 1000) break;
+      }
+
+      // Backward compatibility for phone accounts created before the
+      // private_profile_info phone mapping was introduced.
+      if (!matchedUserId) {
+        for (let page = 1; page <= 10 && !matchedUserId; page++) {
+          const { data, error } = await supabaseAdmin.auth.admin.listUsers({
+            page,
+            perPage: 1000,
+          });
+          if (error) throw error;
+
+          const match = data.users.find(
+            (user) => user.email?.toLowerCase() === synthetic.toLowerCase(),
+          );
+          if (match) {
+            matchedUserId = match.id;
+            accountEmail = match.email ?? synthetic;
+            break;
+          }
+          if (data.users.length < 1000) break;
+        }
       }
 
       const password = generatePassword();
+      let userId = matchedUserId;
 
       if (userId) {
+        const { data: existingUser, error: existingUserError } =
+          await supabaseAdmin.auth.admin.getUserById(userId);
+        if (existingUserError) throw existingUserError;
+        if (!existingUser.user) throw new Error('Linked account no longer exists');
+
+        accountEmail = existingUser.user.email ?? synthetic;
+
         const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, {
           password,
           email_confirm: true,
@@ -148,19 +184,32 @@ export default {
 
         if (taken === true) {
           return json({
-            error: 'This mobile number is linked to another existing account. Sign in with that account first.',
+            error:
+              'This mobile number is linked to another existing account. Sign in with that account first.',
           }, 409);
         }
 
         const { data, error } = await supabaseAdmin.auth.admin.createUser({
-          email,
+          email: synthetic,
           password,
           email_confirm: true,
         });
         if (error) throw error;
         userId = data.user?.id ?? null;
         if (!userId) throw new Error('Supabase account creation returned no user');
+        accountEmail = synthetic;
       }
+
+      // Persist the verified phone against this SAME Supabase user so
+      // future phone OTP logins can resolve the account even if its email
+      // has since been changed to the user's real Gmail address.
+      const { error: mobileMapError } = await supabaseAdmin
+        .from('private_profile_info')
+        .upsert({
+          id: userId,
+          mobile_number: requestedPhone,
+        });
+      if (mobileMapError) throw mobileMapError;
 
       const session = await issueSupabaseSession(email, password);
 
