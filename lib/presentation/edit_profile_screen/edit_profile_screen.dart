@@ -18,7 +18,9 @@ import '../../widgets/current_user_avatar_widget.dart';
 // ── EditProfileScreen ─────────────────────────────────────────────────────────
 
 class EditProfileScreen extends StatefulWidget {
-  const EditProfileScreen({super.key});
+  final Profile? initialProfile;
+
+  const EditProfileScreen({super.key, this.initialProfile});
 
   @override
   State<EditProfileScreen> createState() => _EditProfileScreenState();
@@ -66,7 +68,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       _error = null;
     });
     try {
-      final profile = await ProfilesRepository.fetchCurrentUser();
+      final profile = initialProfile ?? await ProfilesRepository.fetchCurrentUser();
       if (!mounted) return;
       if (profile == null) {
         setState(() {
