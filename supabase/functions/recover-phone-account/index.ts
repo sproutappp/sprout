@@ -47,11 +47,42 @@ const secretKeys = JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') ?? '{}');
 const secretKey = secretKeys.default ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 if (!secretKey) throw new Error('Supabase server key is not configured');
 
+const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+const publicKey = Deno.env.get('SUPABASE_ANON_KEY') ?? secretKey;
+
 const supabaseAdmin = createClient(
-  Deno.env.get('SUPABASE_URL')!,
+  supabaseUrl,
   secretKey,
   { auth: { autoRefreshToken: false, persistSession: false } },
 );
+
+async function issueSupabaseSession(email: string, password: string) {
+  const response = await fetch(
+    `${supabaseUrl}/auth/v1/token?grant_type=password`,
+    {
+      method: 'POST',
+      headers: {
+        apikey: publicKey,
+        Authorization: `Bearer ${publicKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email, password }),
+    },
+  );
+
+  const data = await response.json();
+  if (!response.ok) {
+    const detail =
+      typeof data?.msg === 'string'
+        ? data.msg
+        : typeof data?.message === 'string'
+            ? data.message
+            : 'Supabase could not create a session';
+    throw new Error(detail);
+  }
+
+  return data;
+}
 
 export default {
   fetch: async (req: Request) => {
@@ -131,15 +162,21 @@ export default {
         if (!userId) throw new Error('Supabase account creation returned no user');
       }
 
+      const session = await issueSupabaseSession(email, password);
+
       return json({
         success: true,
         email,
-        password,
         userId,
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+        expires_in: session.expires_in,
+        token_type: session.token_type,
       });
     } catch (error) {
       console.error('recover-phone-account failed', error);
-      return json({ error: 'Could not recover the phone account' }, 500);
+      const message = error instanceof Error ? error.message : 'Could not recover the phone account';
+      return json({ error: message }, 500);
     }
   },
 };
