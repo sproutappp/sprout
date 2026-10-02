@@ -16,3 +16,7 @@ verify_jwt = true
 # function because phone users do not have a Supabase session yet.
 [functions.recover-phone-account]
 verify_jwt = false
+
+# Authenticates the existing phone session and verifies Google ownership inside the function.
+[functions.merge-phone-google-account]
+verify_jwt = false
