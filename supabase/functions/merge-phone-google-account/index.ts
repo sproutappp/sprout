@@ -123,20 +123,11 @@ export default {
       );
       if (mergeError) throw mergeError;
 
-      const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(sourceUser.id, false);
-      if (deleteError) {
-        console.error('Source Auth user cleanup failed after successful merge', deleteError);
-        return json({
-          success: true,
-          cleanup_pending: true,
-          target_user_id: targetUser.id,
-          merge: mergeResult,
-        });
-      }
-
+      // Application data and the verified mobile mapping are now on the
+      // canonical Google account. Auth-user cleanup is deferred deliberately.
       return json({
         success: true,
-        cleanup_pending: false,
+        cleanup_pending: true,
         target_user_id: targetUser.id,
         merge: mergeResult,
       });
