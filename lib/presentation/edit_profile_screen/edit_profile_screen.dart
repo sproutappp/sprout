@@ -69,7 +69,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       _error = null;
     });
     try {
-      final profile = initialProfile ?? await ProfilesRepository.fetchCurrentUser();
+      final profile = widget.initialProfile ?? await ProfilesRepository.fetchCurrentUser();
       if (!mounted) return;
       if (profile == null) {
         setState(() {
