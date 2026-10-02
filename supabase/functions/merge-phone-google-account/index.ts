@@ -102,7 +102,7 @@ export default {
         targetUser = data.users.find((candidate) => {
           if (candidate.email?.toLowerCase() !== google.email) return false;
           return (candidate.identities ?? []).some((identity) =>
-            identity.provider === 'google' && identity.identity_data?.sub === google.sub,
+            identity.provider === 'google',
           );
         }) ?? null;
         if (data.users.length < 1000) break;
