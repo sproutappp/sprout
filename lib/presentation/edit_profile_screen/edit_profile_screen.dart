@@ -1323,7 +1323,7 @@ class _PhotoOptionRow extends StatelessWidget {
             emailConfirmation =
                 'Confirmation email sent to $email. Confirm it to finish linking your Google login.';
           } on AuthException catch (e) {
-            // The profile fields have already been saved above. An email that
+            // Profile fields are saved before auth-email linking. An email that
             // already belongs to another Supabase account cannot be attached
             // with updateUser(); surface that clearly instead of reporting
             // the whole profile save as failed.
