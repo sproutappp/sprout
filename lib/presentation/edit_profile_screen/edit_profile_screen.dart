@@ -117,7 +117,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         _error = "Couldn't load your profile.";
         _isLoading = false;
       });
-    }  }
+    }
+  }
 
   @override
   void dispose() {
@@ -236,7 +237,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               return;
             }
 
-            setState(() => _isSaving = true);            await AccountMergeService.mergePhoneAccountIntoGoogle(
+            setState(() => _isSaving = true);
+            await AccountMergeService.mergePhoneAccountIntoGoogle(
               expectedEmail: email,
             );
 
@@ -355,7 +357,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   Future<void> _pickAndUploadAvatar(ImageSource source) async {
     Navigator.of(context).pop(); // close the bottom sheet first
     try {
-      final picked = await _imagePicker.pickImage(        source: source,
+      final picked = await _imagePicker.pickImage(
+        source: source,
         maxWidth: 1024,
         imageQuality: 85,
       );
@@ -474,7 +477,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         body: Center(
           child: CircularProgressIndicator(
             color: AppTheme.primaryGreen,
-            strokeWidth: 2,          ),
+            strokeWidth: 2,
+          ),
         ),
       );
     }
@@ -593,7 +597,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                         _avatarUrl != null
                                             ? CachedNetworkImage(
                                                 imageUrl: _avatarUrl!,
-                                                fit: BoxFit.cover,                                                placeholder: (_, __) => Container(
+                                                fit: BoxFit.cover,
+                                                placeholder: (_, __) => Container(
                                                   color: AppTheme.surfaceVariantDark,
                                                 ),
                                                 errorWidget: (_, __, ___) => Container(
@@ -713,3 +718,713 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         if (!_isPhonePrimary || _readOnlyEmail != null)
                           _ReadOnlyField(
                             value: _readOnlyEmail ?? 'No email on file',
+                          )
+                        else
+                          _ProfileTextField(
+                            controller: _emailController,
+                            hintText: 'Enter your email address',
+                            keyboardType: TextInputType.emailAddress,
+                          ),
+
+                        const SizedBox(height: 24),
+
+                        // Mobile: locked for a phone-primary account
+                        // (it's the verified sign-in identity itself).
+                        // For a Google/email-primary account it's
+                        // editable until one is linked (via real
+                        // Firebase verification), then locked too.
+                        _FieldLabel(label: 'Mobile Number'),
+                        const SizedBox(height: 8),
+                        if (_isPhonePrimary)
+                          _ReadOnlyField(
+                            value: _readOnlyMobile ?? 'No mobile number linked',
+                          )
+                        else if (_linkedMobileNumber != null)
+                          _ReadOnlyField(value: _linkedMobileNumber!)
+                        else
+                          _LinkableField(
+                            hint: 'Add a mobile number',
+                            onTap: _openLinkMobile,
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // Bottom padding for save button
+                SliverToBoxAdapter(
+                  child: SizedBox(height: bottomPadding + 100),
+                ),
+              ],
+            ),
+          ),
+
+          // ── Save Changes button (pinned bottom) ────────────────────────
+          Positioned(
+            left: 20,
+            right: 20,
+            bottom: bottomPadding + 24,
+            child: GestureDetector(
+              onTap: _isSaving ? null : _saveChanges,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                height: 54,
+                decoration: BoxDecoration(
+                  gradient: _isSaving ? null : AppTheme.primaryGradient,
+                  color: _isSaving ? AppTheme.surfaceVariantDark : null,
+                  borderRadius: BorderRadius.circular(18),
+                  boxShadow: _isSaving
+                      ? null
+                      : [
+                          BoxShadow(
+                            color: AppTheme.primaryGreen.withAlpha(90),
+                            blurRadius: 20,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
+                ),
+                child: Center(
+                  child: _isSaving
+                      ? SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              AppTheme.primaryGreen,
+                            ),
+                          ),
+                        )
+                      : Text(
+                          'Save Changes',
+                          style: GoogleFonts.manrope(
+                            color: Colors.black,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.2,
+                          ),
+                        ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Sub-widgets ───────────────────────────────────────────────────────────────
+
+class _FieldLabel extends StatelessWidget {
+  final String label;
+
+  const _FieldLabel({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      label,
+      style: GoogleFonts.manrope(
+        color: AppTheme.textSecondary,
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+        letterSpacing: 0.2,
+      ),
+    );
+  }
+}
+
+class _ProfileTextField extends StatelessWidget {
+  final TextEditingController controller;
+  final String hintText;
+  final int maxLines;
+  final TextInputType keyboardType;
+  final String? Function(String?)? validator;
+
+  const _ProfileTextField({
+    required this.controller,
+    required this.hintText,
+    this.maxLines = 1,
+    this.keyboardType = TextInputType.text,
+    this.validator,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TextFormField(
+      controller: controller,
+      maxLines: maxLines,
+      keyboardType: keyboardType,
+      validator: validator,
+      style: GoogleFonts.manrope(
+        color: AppTheme.textPrimary,
+        fontSize: 15,
+        fontWeight: FontWeight.w500,
+      ),
+      cursorColor: AppTheme.primaryGreen,
+      decoration: InputDecoration(
+        hintText: hintText,
+        hintStyle: GoogleFonts.manrope(
+          color: AppTheme.textDisabled,
+          fontSize: 14,
+        ),
+        filled: true,
+        fillColor: AppTheme.surfaceVariantDark,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: AppTheme.outline, width: 0.8),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: AppTheme.outline, width: 0.8),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(
+            color: AppTheme.primaryGreen,
+            width: 1.5,
+          ),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: AppTheme.error, width: 1.0),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: AppTheme.error, width: 1.5),
+        ),
+      ),
+    );
+  }
+}
+
+/// Tap-to-open date picker styled to match `_ProfileTextField`.
+class _DateOfBirthField extends StatelessWidget {
+  final DateTime? value;
+  final VoidCallback onTap;
+
+  const _DateOfBirthField({required this.value, required this.onTap});
+
+  String _format(DateTime d) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    return '${d.day} ${months[d.month - 1]} ${d.year}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceVariantDark,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppTheme.outline, width: 0.8),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                value != null ? _format(value!) : 'Add your date of birth',
+                style: GoogleFonts.manrope(
+                  color: value != null
+                      ? AppTheme.textPrimary
+                      : AppTheme.textDisabled,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            const Icon(
+              Icons.calendar_today_outlined,
+              size: 16,
+              color: AppTheme.textMuted,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Non-interactive display for account fields this screen can show but
+/// can't safely edit (email, mobile — see the comments where these are
+/// used above for why).
+class _ReadOnlyField extends StatelessWidget {
+  final String value;
+
+  const _ReadOnlyField({required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceVariantDark.withAlpha(140),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppTheme.outline, width: 0.8),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              value,
+              style: GoogleFonts.manrope(
+                color: AppTheme.textMuted,
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          const Icon(
+            Icons.lock_outline_rounded,
+            size: 15,
+            color: AppTheme.textMuted,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Tappable prompt for an account field that's currently unset but CAN
+/// be added (as opposed to `_ReadOnlyField`, which never can). Opens the
+/// relevant verification sheet on tap.
+class _LinkableField extends StatelessWidget {
+  final String hint;
+  final VoidCallback onTap;
+
+  const _LinkableField({required this.hint, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceVariantDark,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: AppTheme.primaryGreen.withAlpha(130),
+            width: 0.8,
+          ),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                hint,
+                style: GoogleFonts.manrope(
+                  color: AppTheme.primaryGreen,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const Icon(
+              Icons.add_circle_outline_rounded,
+              size: 18,
+              color: AppTheme.primaryGreen,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Links a new email to a phone-primary account via Supabase's native
+/// email-change flow (ProfilesRepository.linkEmail) — sends a
+/// confirmation link; the field only becomes "linked" once it's clicked.
+class _EmailLinkSheet extends StatefulWidget {
+  const _EmailLinkSheet();
+
+  @override
+  State<_EmailLinkSheet> createState() => _EmailLinkSheetState();
+}
+
+class _EmailLinkSheetState extends State<_EmailLinkSheet> {
+  final _emailController = TextEditingController();
+  bool _isSubmitting = false;
+  String? _error;
+  bool _sent = false;
+
+  Future<void> _submit() async {
+    final email = _emailController.text.trim();
+    if (!email.contains('@') || !email.contains('.')) {
+      setState(() => _error = 'Enter a valid email address.');
+      return;
+    }
+    setState(() {
+      _isSubmitting = true;
+      _error = null;
+    });
+    try {
+      await ProfilesRepository.linkEmail(email);
+      if (!mounted) return;
+      setState(() {
+        _isSubmitting = false;
+        _sent = true;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isSubmitting = false;
+        _error = "Couldn't send confirmation — try again.";
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _LinkSheetScaffold(
+      title: 'Add an email address',
+      child: _sent
+          ? Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Text(
+                "We've sent a confirmation link to "
+                "${_emailController.text.trim()}. It'll show here as "
+                'linked once confirmed.',
+                style: GoogleFonts.manrope(
+                  color: AppTheme.textSecondary,
+                  fontSize: 14,
+                ),
+              ),
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextField(
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  style: GoogleFonts.manrope(color: AppTheme.textPrimary),
+                  decoration: InputDecoration(
+                    hintText: 'you@example.com',
+                    hintStyle: GoogleFonts.manrope(color: AppTheme.textDisabled),
+                    filled: true,
+                    fillColor: AppTheme.surfaceVariantDark,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+                if (_error != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    _error!,
+                    style: GoogleFonts.manrope(color: AppTheme.error, fontSize: 12),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                _LinkSheetButton(
+                  label: 'Send confirmation link',
+                  isLoading: _isSubmitting,
+                  onTap: _submit,
+                ),
+              ],
+            ),
+    );
+  }
+}
+
+/// Links a new mobile number to a Google/email-primary account. Requires
+/// genuine Firebase OTP verification first (FirebaseAuthService) — only
+/// once that succeeds does this call ProfilesRepository.linkMobileNumber.
+/// Deliberately does NOT go through PhoneAuthBridge.completeSignIn: that
+/// would create/switch to a different Supabase session instead of
+/// linking the number to the one already signed in.
+class _MobileLinkSheet extends StatefulWidget {
+  const _MobileLinkSheet();
+
+  @override
+  State<_MobileLinkSheet> createState() => _MobileLinkSheetState();
+}
+
+class _MobileLinkSheetState extends State<_MobileLinkSheet> {
+  final _phoneController = TextEditingController();
+  final _codeController = TextEditingController();
+  String? _verificationId;
+  String? _e164Phone;
+  bool _isSubmitting = false;
+  String? _error;
+
+  Future<void> _sendCode() async {
+    var phone = _phoneController.text.trim();
+    if (!phone.startsWith('+') || phone.length < 8) {
+      setState(() => _error = 'Enter your number in international format, e.g. +919876543210.');
+      return;
+    }
+    setState(() {
+      _isSubmitting = true;
+      _error = null;
+    });
+
+    try {
+      final taken = await ProfilesRepository.isMobileNumberTaken(phone);
+      if (taken) {
+        setState(() {
+          _isSubmitting = false;
+          _error = 'This mobile number is already linked to an account.';
+        });
+        return;
+      }
+
+      await FirebaseAuthService.sendOtp(
+        phoneNumber: phone,
+        onCodeSent: (verificationId) {
+          if (!mounted) return;
+          setState(() {
+            _verificationId = verificationId;
+            _e164Phone = phone;
+            _isSubmitting = false;
+          });
+        },
+        onVerificationFailed: (e) {
+          if (!mounted) return;
+          setState(() {
+            _isSubmitting = false;
+            _error = e.message ?? "Couldn't send the code — try again.";
+          });
+        },
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isSubmitting = false;
+        _error = "Couldn't send the code — try again.";
+      });
+    }
+  }
+
+  Future<void> _verifyAndLink() async {
+    final code = _codeController.text.trim();
+    if (_verificationId == null || code.isEmpty || _e164Phone == null) return;
+
+    setState(() {
+      _isSubmitting = true;
+      _error = null;
+    });
+
+    try {
+      await FirebaseAuthService.verifyOtp(
+        verificationId: _verificationId!,
+        smsCode: code,
+      );
+      await ProfilesRepository.linkMobileNumber(_e164Phone!);
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } on StateError catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isSubmitting = false;
+        _error = e.message;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isSubmitting = false;
+        _error = 'Incorrect code — try again.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _LinkSheetScaffold(
+      title: 'Add a mobile number',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: _phoneController,
+            enabled: _verificationId == null,
+            keyboardType: TextInputType.phone,
+            style: GoogleFonts.manrope(color: AppTheme.textPrimary),
+            decoration: InputDecoration(
+              hintText: '+919876543210',
+              hintStyle: GoogleFonts.manrope(color: AppTheme.textDisabled),
+              filled: true,
+              fillColor: AppTheme.surfaceVariantDark,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+          if (_verificationId != null) ...[
+            const SizedBox(height: 12),
+            TextField(
+              controller: _codeController,
+              keyboardType: TextInputType.number,
+              style: GoogleFonts.manrope(color: AppTheme.textPrimary),
+              decoration: InputDecoration(
+                hintText: '6-digit code',
+                hintStyle: GoogleFonts.manrope(color: AppTheme.textDisabled),
+                filled: true,
+                fillColor: AppTheme.surfaceVariantDark,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+          ],
+          if (_error != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              _error!,
+              style: GoogleFonts.manrope(color: AppTheme.error, fontSize: 12),
+            ),
+          ],
+          const SizedBox(height: 16),
+          _LinkSheetButton(
+            label: _verificationId == null ? 'Send code' : 'Verify & link',
+            isLoading: _isSubmitting,
+            onTap: _verificationId == null ? _sendCode : _verifyAndLink,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LinkSheetScaffold extends StatelessWidget {
+  final String title;
+  final Widget child;
+
+  const _LinkSheetScaffold({required this.title, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+        decoration: const BoxDecoration(
+          color: AppTheme.surfaceDark,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: GoogleFonts.manrope(
+                color: AppTheme.textPrimary,
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 16),
+            child,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LinkSheetButton extends StatelessWidget {
+  final String label;
+  final bool isLoading;
+  final VoidCallback onTap;
+
+  const _LinkSheetButton({
+    required this.label,
+    required this.isLoading,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 50,
+      child: ElevatedButton(
+        onPressed: isLoading ? null : onTap,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppTheme.primaryGreen,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+        child: isLoading
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.black,
+                ),
+              )
+            : Text(
+                label,
+                style: GoogleFonts.manrope(
+                  color: Colors.black,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+      ),
+    );
+  }
+}
+
+class _PhotoOptionRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool isDestructive;
+
+  const _PhotoOptionRow({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.isDestructive = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isDestructive ? AppTheme.error : AppTheme.textPrimary;
+    final iconColor = isDestructive ? AppTheme.error : AppTheme.textSecondary;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 14),
+        child: Row(
+          children: [
+            Icon(icon, color: iconColor, size: 22),
+            const SizedBox(width: 14),
+            Text(
+              label,
+              style: GoogleFonts.manrope(
+                color: color,
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
