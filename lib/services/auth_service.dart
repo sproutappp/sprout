@@ -126,4 +126,48 @@ class AuthService {
       throw AuthException('Native Google Sign-In failed: ' + e.toString());
     }
   }
+  /// Gets a freshly authenticated native Google ID/access token without
+  /// changing the current Supabase session. Used only for verified account
+  /// merging when a phone-primary user proves ownership of an existing
+  /// Google account.
+  static Future<Map<String, String>> getGoogleTokensForAccountMerge() async {
+    if (defaultTargetPlatform != TargetPlatform.android) {
+      throw const AuthException('Google account linking is currently supported on Android.');
+    }
+
+    try {
+      final googleSignIn = GoogleSignIn.instance;
+      _googleInitialization ??= googleSignIn.initialize(
+        serverClientId:
+            '734501171389-8199tv2f24r3tt47clc462detk6avn00.apps.googleusercontent.com',
+      );
+      await _googleInitialization;
+
+      final googleUser = await googleSignIn.authenticate();
+      final idToken = googleUser.authentication.idToken;
+      if (idToken == null || idToken.isEmpty) {
+        throw const AuthException('Google sign-in did not return an ID token.');
+      }
+
+      final authorization =
+          await googleUser.authorizationClient.authorizationForScopes(
+        const <String>['email'],
+      );
+      final accessToken = authorization?.accessToken;
+      if (accessToken == null || accessToken.isEmpty) {
+        throw const AuthException('Google sign-in did not return an access token.');
+      }
+
+      return {'idToken': idToken, 'accessToken': accessToken};
+    } on GoogleSignInException catch (e) {
+      throw AuthException(
+        'Google verification failed: ' + e.code.toString() + ' — ' + (e.description ?? e.toString()),
+      );
+    } on AuthException {
+      rethrow;
+    } catch (e) {
+      throw AuthException('Google verification failed: ' + e.toString());
+    }
+  }
+
 }
