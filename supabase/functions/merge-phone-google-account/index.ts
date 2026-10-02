@@ -96,15 +96,37 @@ export default {
       }
 
       let targetUser = null;
+
+      // Do not rely on identities embedded in listUsers() results.
+      // First find the Auth user by the email that Google just verified,
+      // then fetch that exact user with getUserById() and inspect its
+      // identities. This is deterministic with Supabase Auth's admin API.
       for (let page = 1; page <= 10 && !targetUser; page++) {
-        const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 1000 });
+        const { data, error } = await supabaseAdmin.auth.admin.listUsers({
+          page,
+          perPage: 1000,
+        });
         if (error) throw error;
-        targetUser = data.users.find((candidate) => {
-          if (candidate.email?.toLowerCase() !== google.email) return false;
-          return (candidate.identities ?? []).some((identity) =>
-            identity.provider === 'google',
+
+        const emailMatches = data.users.filter(
+          (candidate) => candidate.email?.toLowerCase() === google.email,
+        );
+
+        for (const candidate of emailMatches) {
+          const { data: fetched, error: fetchError } =
+            await supabaseAdmin.auth.admin.getUserById(candidate.id);
+          if (fetchError) throw fetchError;
+
+          const hasGoogleIdentity = (fetched.user?.identities ?? []).some(
+            (identity) => identity.provider === 'google',
           );
-        }) ?? null;
+
+          if (hasGoogleIdentity) {
+            targetUser = fetched.user;
+            break;
+          }
+        }
+
         if (data.users.length < 1000) break;
       }
 
