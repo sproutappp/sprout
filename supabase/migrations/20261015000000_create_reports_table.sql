@@ -17,8 +17,8 @@ create table if not exists public.reports (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint reports_circle_fields_check check (
-    (report_type = 'circle' and circle_id is not null)
-    or (report_type = 'issue' and circle_id is null)
+    (report_type = 'issue' and circle_id is null)
+    or report_type = 'circle'
   )
 );
 
