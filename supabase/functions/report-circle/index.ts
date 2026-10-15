@@ -88,10 +88,34 @@ export default {
       ctx.userClaims?.email ||
       'Unknown user';
 
+    const { data: savedReport, error: saveError } = await ctx.supabaseAdmin
+      .from('reports')
+      .insert({
+        report_type: 'circle',
+        reporter_id: userId,
+        subject: 'Circle report: ' + circle.name,
+        message,
+        circle_id: circleId,
+        circle_name: circle.name,
+        status: 'new',
+        email_notification_status: 'pending',
+      })
+      .select('id')
+      .single();
+
+    if (saveError || !savedReport) {
+      console.error('report-circle database insert failed', saveError);
+      return json({ error: 'Unable to save report' }, 500);
+    }
+
     const resendApiKey = Deno.env.get('RESEND_API_KEY');
     if (!resendApiKey) {
       console.error('report-circle: RESEND_API_KEY is not configured');
-      return json({ error: 'Report email service is not configured' }, 503);
+      await ctx.supabaseAdmin
+        .from('reports')
+        .update({ email_notification_status: 'not_configured' })
+        .eq('id', savedReport.id);
+      return json({ success: true, report_id: savedReport.id, email_sent: false });
     }
 
     const from =
@@ -99,29 +123,52 @@ export default {
       'Sprout Reports <contact@sproutapp.in>';
 
     const emailText =
-      `${username} has reported the about the ${circle.name} ` +
-      `{"${message}"}`;
+      username + ' has reported the circle "' + circle.name + '".\n\n' +
+      'Report ID: ' + savedReport.id + '\n' +
+      'Circle ID: ' + circleId + '\n' +
+      'Message: ' + message;
 
-    const resendResponse = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${resendApiKey}`,
-      },
-      body: JSON.stringify({
-        from,
-        to: ['contact@sproutapp.in'],
-        subject: `Circle report: ${circle.name}`,
-        text: emailText,
-      }),
-    });
+    try {
+      const resendResponse = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + resendApiKey,
+        },
+        body: JSON.stringify({
+          from,
+          to: ['contact@sproutapp.in'],
+          subject: 'Circle report: ' + circle.name,
+          text: emailText,
+        }),
+      });
 
-    if (!resendResponse.ok) {
-      const errorBody = await resendResponse.text();
-      console.error('report-circle: email delivery failed', errorBody);
-      return json({ error: 'Unable to send report' }, 502);
+      if (!resendResponse.ok) {
+        const errorBody = await resendResponse.text();
+        console.error('report-circle: email delivery failed', errorBody);
+        await ctx.supabaseAdmin
+          .from('reports')
+          .update({ email_notification_status: 'failed' })
+          .eq('id', savedReport.id);
+        return json({ success: true, report_id: savedReport.id, email_sent: false });
+      }
+
+      await ctx.supabaseAdmin
+        .from('reports')
+        .update({
+          email_notification_status: 'sent',
+          email_sent_at: new Date().toISOString(),
+        })
+        .eq('id', savedReport.id);
+    } catch (error) {
+      console.error('report-circle: email request failed', error);
+      await ctx.supabaseAdmin
+        .from('reports')
+        .update({ email_notification_status: 'failed' })
+        .eq('id', savedReport.id);
+      return json({ success: true, report_id: savedReport.id, email_sent: false });
     }
 
-    return json({ success: true });
+    return json({ success: true, report_id: savedReport.id, email_sent: true });
   }),
 };
